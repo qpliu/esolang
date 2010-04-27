@@ -1,0 +1,45 @@
+Parenthesis Hell
+
+Parenthesis Hell is a Lisp-like language in which only the data types are the cons pair and nil.  As a Lisp-like language, code is data, so the code consists only of nested matched pairs of open and close parentheses.  Characters other than open or close parentheses are ignored.
+
+A Parenthesis Hell program is a Parenthesis Hell expression that is evaluated with the input as the argument.
+
+A Parenthesis Hell expression is either nil, written as (), or a cons pair, with the car specifying the function and the cdr specifying its argument.
+
+() evaluates to the argument.  A cons pair is evaluated by applying the function named by its car to its cdr.
+
+The root scope defines 7 functions:
+
+(): quote - evaluates to its unevaluated argument
+
+(()): letrec - creates a new scope with bindings from the list in the car of its argument, evaluates to the cdr of its argument evaluated in the new scope
+
+((())): car - evalutes to the car of its argument - evaluates to nil if its argument is nil
+
+(()()): cdr - evaluates to the cdr of its argument - evaluates to nil if its argument is nil
+
+((())()): cons - evaluates to the cons of the car of its argument and the cdr of its argument - evaluates to nil if its argument is nil
+
+(()()()): if - if the car of its argument is not nil, evalutes to the cadr of its argument, otherwise evaluates to the cddr of its argument - evaluates to nil if its argument is nil or if the cdr of its argument is nil
+
+(((()))): eval - obligatory in code-is-data languages
+
+A nil element in a letrec binding list is ignored.
+
+The car of an element in a letrec binding list is the name of the function being defined.  Within the letrec scope, it shadows all definitions of the same name in any enclosing scope, including the root scope.  The cdr of the binding list element is the body of the function, which, when called, is evaluated in the letrec scope, and () evaluates to the argument it was called with.
+
+It is an error to apply an undefined function.
+
+Examples
+
+Hello world (ASCII):
+ (()()(()()(()()()()((()()(()(()((()((()()()((()((()()()((()((((()()(()(
+ )()()()()(((()(((()((()((((()(((()()(()()((()((()()()((()()(()()()()(()
+ ()()()(()()()()(()(())))))))))))))))))))))))))))))))))))))))))))))))))
+
+cat:
+ ()
+
+quine:
+ ((())(((())()((())())(()())((())())(((())())(((())())(()())((())())(())(()))()
+ )(())))((())())(()())((())())(((())())(((())())(()())((())())(())(()))())(()))
