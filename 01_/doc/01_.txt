@@ -1,0 +1,52 @@
+01_
+
+The 01_ programming language features lazy evaluation and pattern matching.  The only datatype is the list of bits.  The only operations are function calls and list concatenation.
+
+Syntax
+
+The characters 0, 1, ., _, and = are special tokens.  Uninterrupted sequences of all other non-space characters are symbols.  A double equals (==) indicates that the rest of the line is a comment.
+
+A program in 01_ consists of 1 or more definitions.
+
+A definition consists of a symbol, followed by 0 or more patterns, followed by an equals (=) followed by 1 or more expressions, followed by a dot (.).
+
+A pattern consists of 0 or more bits (0 or 1), followed by either a symbol, a dot (.) or a nil (_), and corresponds to an argument.  A symbol that ends a pattern is a bound argument.  Optionally, if the final argument has 1 or more bits and ends with a dot (.), the dot may be omitted.
+
+An expression is either a bound argument (a single symbol), or a literal (0 or more bits followed by a nil (_)), or a function call.  A function call is a symbol followed an expression for each argument it takes.  The final nil (_) may be dropped from a literal expression with 1 or more bits unless it is followed by another literal expression.
+
+It is an error if there are definitions with differing numbers of arguments for a symbol.
+
+It is an error for an expression to end with a function call without all its arguments.
+
+Evaluation
+
+A function consists of one or more definition.  Evaluation of a function call starts by attempting to match its arguments with the patterns in each definition starting with the first.  If all the arguments match their respective patterns in a definition, the function evaluates to the concatenation of the expressions in the definition body.  It is a run-time error if none of the definitions are matched.
+
+Argument matching is done from left to right.  If an argument fails to match, the entire definition does not match and matching continues with the next definition.
+
+For an argument to match a pattern, its top bits must match the bits beginning the pattern.  If the pattern ends with a nil (_), the argument must end after the matching bits, otherwise argument does not match.  If the pattern ends with a dot (.), the pattern is wild and the remainder of the argument is ignored.  If the pattern ends with a symbol, the symbol is bound to the remainder of the argument in the body of the definition.
+
+Examples
+
+Hello world (ASCII):
+ hello=0100100001100101011011000110110001101111001000000
+ 1110111011011110111001001101100011001000010000100001010.
+
+fibonacci: the number of zeros before each one in the result follows the fibonacci sequence
+ fib = 101 + fib dropfirst fib.
+
+ dropfirst 1x = x.
+
+ + 0a  b = 0 + a b.
+ +  a 0b = 0 + a b.
+ + 1a 1b = 1 + a b.
+
+quine (ASCII): this should be a one-liner -- line breaks were inserted for readability
+ q=d p d0010111000001010.p0b=00110000p b.p1b=00110001p b.p_=_.d=01110001
+ 00111101011001000010000001110000001000000110010000110000001100000011000
+ 10011000000110001001100010011000100110000001100000011000000110000001100
+ 00001100010011000000110001001100000010111001110000001100000110001000111
+ 10100110000001100000011000100110001001100000011000000110000001100000111
+ 00000010000001100010001011100111000000110001011000100011110100110000001
+ 10000001100010011000100110000001100000011000000110001011100000010000001
+ 1000100010111001110000010111110011110101011111001011100110010000111101.

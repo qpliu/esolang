@@ -1,0 +1,5 @@
+interp in arg arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9 =
+    interpret-bitcode parse tokenize in
+                      arglist arg arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9.
+
+compile in = parse tokenize in 0000000. == pad to at least an even byte

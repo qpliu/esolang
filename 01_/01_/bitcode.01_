@@ -1,0 +1,208 @@
+== 01_ bitcode interpreter
+
+== format:
+== program = (name ones names functions)
+== names = (name name ...)
+== functions = (definitions definitions ...)
+== definitions = (definition definition ...)
+== definition = (patterns body)
+== patterns = (pattern ...)
+== pattern = bound-pattern | literal-pattern | wild-pattern
+== bound-pattern = 0 bits
+== literal-pattern = 1 0 bits
+== wild-pattern = 1 1 bits
+== bits = bit ...
+== bit = 0 | 1
+== ones = 1 ...
+== body = op op ...
+== op = push | concat
+== push = 0 value
+== concat = 1 value
+== value = literal | binding | funcall
+== binding = 0 ones
+== literal = 1 0 bits
+== funcall = 1 1 (bits ones)
+
+bitcode bitcode arg arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9 =
+    interpret-bitcode bitcode
+                      arglist arg arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9.
+
+interpret-bitcode bitcode args =
+    apply head tail tail bitcode == list of function names
+          head tail tail tail bitcode == list of functions
+          alist-lookup head bitcode == main function name
+                       head tail tail bitcode == list of function names
+                       head tail tail tail bitcode == list of functions
+          push-arguments head tail bitcode == main function arity
+                         args
+                         empty-stack.
+
+arglist arg arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9 =
+    list-encode arg  list-encode arg2 list-encode arg3
+    list-encode arg4 list-encode arg5 list-encode arg6
+    list-encode arg7 list-encode arg8 list-encode arg9.
+
+push-arguments _ . stack = stack.
+push-arguments 1count args stack =
+    push-arguments count
+                   tail args
+                   push head args
+                        stack.
+
+apply fnames functions function args =
+    match fnames functions args
+          head function
+          tail function.
+
+match fnames functions args _ defs = error _. == pattern match failed
+
+match fnames functions args def defs =
+    match2 fnames functions args defs
+           head head def == first pattern
+           tail head def == remaining patterns
+           tail def == body
+           empty-stack == bindings
+           args.
+
+match2 fnames functions saved-args defs
+       _ patterns body bindings args
+    = eval fnames functions bindings
+           head body
+           tail body
+           empty-stack.
+
+== binding
+match2 fnames functions saved-args defs
+       0pattern-bits patterns body bindings args =
+    if-match pattern-bits
+             top args
+             match2 fnames functions saved-args defs
+                    head patterns
+                    tail patterns
+                    body
+                    push drop-head pattern-bits
+                                   top args
+                         bindings
+                    pop args
+             match fnames functions saved-args
+                   head defs
+                   tail defs.
+
+== literal
+match2 fnames functions saved-args defs
+       10pattern-bits patterns body bindings args =
+    if-equal pattern-bits
+             top args
+             match2 fnames functions saved-args defs
+                    head patterns
+                    tail patterns
+                    body
+                    bindings
+                    pop args
+             match fnames functions saved-args
+                    head defs
+                    tail defs.
+
+== wild
+match2 fnames functions saved-args defs
+       11pattern-bits patterns body bindings args =
+    if-match pattern-bits
+             top args
+             match2 fnames functions saved-args defs
+                    head patterns
+                    tail patterns
+                    body
+                    bindings
+                    pop args
+             match fnames functions saved-args
+                    head defs
+                    tail defs.
+
+eval fnames functions bindings _ ops stack = _.
+
+== push bound expr
+eval fnames functions bindings
+     00index ops stack =
+    eval fnames functions bindings
+         head ops
+         tail ops
+         push get-binding index bindings
+              stack.
+
+== concat bound expr
+eval fnames functions bindings
+     10index ops 0. =
+    get-binding index bindings
+    eval fnames functions bindings
+         head ops
+         tail ops
+         empty-stack.
+
+get-binding _ bindings = top bindings.
+get-binding 1index bindings = get-binding index pop bindings.
+
+== push literal expr
+eval fnames functions bindings
+     010bits ops stack =
+    eval fnames functions bindings
+         head ops
+         tail ops
+         push bits stack.
+
+== concat literal expr
+eval fnames functions bindings
+     110bits ops 0. =
+    bits
+    eval fnames functions bindings
+         head ops
+         tail ops
+         empty-stack.
+
+== push funcall expr
+eval fnames functions bindings
+     011funcall ops stack =
+    eval fnames functions bindings
+         head ops
+         tail ops
+         push apply fnames functions
+                    alist-lookup head funcall
+                                 fnames functions
+                    pull-args head tail funcall
+                              stack empty-stack
+              pop-args head tail funcall
+                       stack.
+
+== concat funcall expr
+eval fnames functions bindings
+     111funcall ops stack =
+    apply fnames functions
+          alist-lookup head funcall
+                       fnames functions
+          pull-args head tail funcall
+                    stack empty-stack
+    eval fnames functions bindings
+         head ops
+         tail ops
+         pop-args head tail funcall
+                  stack.
+
+pull-args _ . args = args.
+pull-args 1count stack args =
+    pull-args count
+              pop stack
+              push top stack
+                   args.
+
+pop-args _ stack = stack.
+pop-args 1count stack =
+    pop-args count
+             pop stack.
+
+if-match 0x 0y true false = if-match x y true false.
+if-match 1x 1y true false = if-match x y true false.
+if-match _ . true . = true.
+if-match . . . false = false.
+
+drop-head 0x 0y = drop-head x y.
+drop-head 1x 1y = drop-head x y.
+drop-head _ y = y.

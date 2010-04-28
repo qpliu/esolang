@@ -1,0 +1,75 @@
+== 01_ tokenizer
+== token tokenized
+== 0     0
+== 1     1
+== _     00
+== .     01
+== =     10
+
+== input stream to list of tokens
+tokenize in = tokenize' in _.
+
+tokenize' _ . = _.
+
+== comment
+tokenize' 00111101 00111101in flag = end-symbol flag
+                                    drop-comment in.
+
+== 0
+tokenize' 00110000in flag = end-symbol flag
+                            100 tokenize' in _.
+
+== 1
+tokenize' 00110001in flag = end-symbol flag
+                            110 tokenize' in _.
+
+== _
+tokenize' 01011111in flag = end-symbol flag
+                            10100 tokenize' in _.
+
+== .
+tokenize' 00101110in flag = end-symbol flag
+                            10110 tokenize' in _.
+
+== =
+tokenize' 00111101in flag = end-symbol flag
+                            11100 tokenize' in _.
+
+== whitespace
+tokenize' 00100000in flag = end-symbol flag tokenize' in _. == SPC
+tokenize' 00001001in flag = end-symbol flag tokenize' in _. == TAB
+tokenize' 00001010in flag = end-symbol flag tokenize' in _. == LF
+tokenize' 00001101in flag = end-symbol flag tokenize' in _. == CR
+
+== symbol
+tokenize' in . = take-symbol 00000000 in.
+
+end-symbol _ = _.
+end-symbol . = 0.
+
+take-symbol _ in = tokenize' in 0.
+take-symbol 0bits 0in = 10 take-symbol bits in.
+take-symbol 0bits 1in = 11 take-symbol bits in.
+
+== comment
+drop-comment _ = _.
+drop-comment 00001010in = tokenize' in _.
+drop-comment in = drop-comment drop-bits 00000000 in.
+
+
+==
+test-tokenize in = test-tokenize-out tokenize in _.
+
+test-tokenize-out _ . = _.
+test-tokenize-out list flag = test-tokenize-out-one head list tail list flag.
+
+test-tokenize-out-one 0_  list . = 00110000 test-tokenize-out list _.
+test-tokenize-out-one 1_  list . = 00110001 test-tokenize-out list _.
+test-tokenize-out-one 00_ list . = 01011111 test-tokenize-out list _.
+test-tokenize-out-one 01_ list . = 00101110 test-tokenize-out list _.
+test-tokenize-out-one 10_ list . = 00111101 test-tokenize-out list _.
+
+test-tokenize-out-one one list flag = test-tokenize-out-sep flag one test-tokenize-out list 0.
+
+test-tokenize-out-sep _ = _.
+test-tokenize-out-sep . = 00100000.

@@ -1,0 +1,135 @@
+== library
+
+== force a pattern match failure
+error 0 = error _.
+
+concat a b = a b.
+
+== lists
+
+== first item in the list
+head 0. = _.
+head 11rest = 1 head rest.
+head 10rest = 0 head rest.
+head _ = _.
+
+== the list with the first item removed
+tail 0rest = rest.
+tail 11rest = tail rest.
+tail 10rest = tail rest.
+tail _ = _.
+
+list-encode _ = 0.
+list-encode 1x = 11 list-encode x.
+list-encode 0x = 10 list-encode x.
+
+== association lists
+
+== association list lookup
+alist-lookup key klist dlist =
+    if-equal key head klist
+             head dlist
+             alist-lookup key tail klist tail dlist.
+alist-lookup . _ . = _.
+
+== association list update
+alist-update key data klist dlist =
+    if-equal key head klist
+             concat list-encode data
+                    tail dlist
+             concat list-encode head dlist
+                    alist-update key data
+                                 tail klist
+                                 tail dlist.
+
+alist-append key data klist dlist =
+    if-equal key head klist
+             concat list-encode concat head dlist
+                                       list-encode data
+                    tail dlist
+             concat list-encode head dlist
+                    alist-append key data
+                                 tail klist
+                                 tail dlist.
+
+== stacks
+
+== new empty stack
+empty-stack = 0_.
+
+== number of items in the stack (in base 1)
+stack-count 0stack = _.
+stack-count 1stack = 1 stack-count stack.
+
+drop-stack-count 0stack = stack.
+drop-stack-count 1stack = drop-stack-count stack.
+
+== top of the stack
+top 0. = _. == stack underflow
+top stack = top' decrement-count stack-count stack drop-stack-count stack.
+
+top' count 0stack-data = _.
+top' count 10stack-data = 0 top' count drop-stack-bit count stack-data.
+top' count 11stack-data = 1 top' count drop-stack-bit count stack-data.
+
+decrement-count 1count = count.
+
+drop-stack-bit _ stack-data = stack-data.
+drop-stack-bit 1count  0stack-data = drop-stack-bit count stack-data.
+drop-stack-bit 1count 10stack-data = drop-stack-bit count stack-data.
+drop-stack-bit 1count 11stack-data = drop-stack-bit count stack-data.
+
+== returns stack with data pushed on top
+push data stack =
+    1 stack-count stack 0 push' data stack-count stack drop-stack-count stack.
+
+push' _ count stack-data =
+    0 take-stack-bit count stack-data
+    push' _ count drop-stack-bit count stack-data.
+push' 0data count stack-data =
+    10 take-stack-bit count stack-data
+    push' data count drop-stack-bit count stack-data.
+push' 1data count stack-data =
+    11 take-stack-bit count stack-data
+    push' data count drop-stack-bit count stack-data.
+
+take-stack-bit _ . = _.
+take-stack-bit 1count  0stack-data =  0 take-stack-bit count stack-data.
+take-stack-bit 1count 10stack-data = 10 take-stack-bit count stack-data.
+take-stack-bit 1count 11stack-data = 11 take-stack-bit count stack-data.
+
+== returns stack with the top item popped
+pop 0. = 0_. == stack underflow
+pop 10. = 0_. == 1 item optimization
+pop 1stack = stack-count stack 0 pop' stack-count stack drop-stack-count stack.
+
+pop' count 0stack-data =
+    take-stack-bit count stack-data
+    pop' count drop-stack-bit count stack-data.
+pop' count 10stack-data =
+    take-stack-bit count stack-data
+    pop' count drop-stack-bit count stack-data.
+pop' count 11stack-data =
+    take-stack-bit count stack-data
+    pop' count drop-stack-bit count stack-data.
+
+== conditional
+if-equal 0x 0y true false = if-equal x y true false.
+if-equal 1x 1y true false = if-equal x y true false.
+if-equal _ _ true . = true.
+if-equal . . . false = false.
+
+==
+take-bits _ . = _.
+take-bits . _ = _.
+take-bits 0bits 0data = 0 take-bits bits data.
+take-bits 1bits 0data = 0 take-bits bits data.
+take-bits 0bits 1data = 1 take-bits bits data.
+take-bits 1bits 1data = 1 take-bits bits data.
+
+drop-bits _ data = data.
+drop-bits . _ = _.
+drop-bits 0bits 0data = drop-bits bits data.
+drop-bits 1bits 0data = drop-bits bits data.
+drop-bits 0bits 1data = drop-bits bits data.
+drop-bits 1bits 1data = drop-bits bits data.

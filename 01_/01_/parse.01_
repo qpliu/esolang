@@ -1,0 +1,346 @@
+== parse a list of 01_ tokens into a list of function names
+
+parse-names tokens = parse-names' head tokens tail tokens _.
+
+parse-names' _ . list = list.
+parse-names' 0_  . . = error _. == expecting symbol
+parse-names' 1_  . . = error _. == expecting symbol
+parse-names' 00_ . . = error _. == expecting symbol
+parse-names' 01_ . . = error _. == expecting symbol
+parse-names' 10_ . . = error _. == expecting symbol
+parse-names' name tokens list =
+    parse-names' head parse-drop-def head tokens tail tokens
+                 tail parse-drop-def head tokens tail tokens
+                 add-unique name list.
+
+add-unique item _ = list-encode item.
+add-unique item list = list-encode head list
+                       if-equal item head list
+                                tail list
+                                add-unique item
+                                           tail list.
+
+parse-drop-def 10_ tokens = parse-drop-def-body head tokens tail tokens.
+parse-drop-def . tokens = parse-drop-def head tokens tail tokens.
+
+parse-drop-def-body 01_ tokens = tokens.
+parse-drop-def-body . tokens = parse-drop-def-body head tokens tail tokens.
+
+test-parse-names in = test-tokenize-out parse-names tokenize in _.
+
+== given a list of items, return a list of empty lists of equal length
+== this can be used to initialize association lists
+== keys cannot be nil
+alist-empty-values keys = alist-empty-values' head keys tail keys.
+
+alist-empty-values' _ . = _.
+alist-empty-values' . keys = 0 alist-empty-values' head keys tail keys.
+
+== collect arities from list of 01_ tokens
+parse-arities names tokens = parse-arities' names
+                                            alist-empty-values names
+                                            head tokens
+                                            tail tokens.
+
+parse-arities' names arities _ . = arities.
+parse-arities' names arities name tokens =
+    parse-arities-count-args names arities name _
+                             head tokens
+                             tail tokens
+                             _.
+
+parse-arities-count-args names arities name count _ tokens flag = error _.
+                == unexpected EOF
+
+parse-arities-count-args names arities name count 10_ tokens _ =
+    == got = without any bits
+    parse-arities' names
+                   alist-update name count names arities
+                   head parse-drop-def-body head tokens tail tokens
+                   tail parse-drop-def-body head tokens tail tokens.
+
+parse-arities-count-args names arities name count 10_ tokens . =
+    == got = with leading bits
+    parse-arities' names
+                   alist-update name
+                                concat 1 count
+                                names arities
+                   head parse-drop-def-body head tokens tail tokens
+                   tail parse-drop-def-body head tokens tail tokens.
+
+parse-arities-count-args names arities name count 0_ tokens . =
+    parse-arities-count-args names arities name count
+                             head tokens
+                             tail tokens
+                             0.
+
+parse-arities-count-args names arities name count 1_ tokens . =
+    parse-arities-count-args names arities name count
+                             head tokens
+                             tail tokens
+                             0.
+
+parse-arities-count-args names arities name count . tokens . =
+    parse-arities-count-args names arities name
+                             concat 1 count
+                             head tokens
+                             tail tokens
+                             _.
+
+test-parse-arities in = test-parse-arities' parse-names tokenize in
+                                            tokenize in.
+test-parse-arities' names tokens =
+    test-alist-out names parse-arities names tokens.
+
+test-alist-out _ . = _.
+test-alist-out klist dlist =
+    head klist
+    00111101
+    test-bits-out head dlist
+    00001010
+    test-alist-out tail klist tail dlist.
+
+test-bits-out _ = _.
+test-bits-out 0b = 00110000 test-bits-out b.
+test-bits-out 1b = 00110001 test-bits-out b.
+
+== parse
+parse tokens = parse' parse-names tokens tokens.
+parse' names tokens = parse'' names parse-arities names tokens tokens.
+parse'' names arities tokens =
+    list-encode head names
+    list-encode head arities
+    list-encode names
+    list-encode parse-functions names arities
+                                alist-empty-values names
+                                tokens.
+
+parse-functions names arities functions _ = functions.
+
+parse-functions names arities functions tokens =
+    parse-functions names arities
+                    alist-append head tokens
+                                 parse-def-args names arities _ _ _
+                                                head tail tokens
+                                                tail tail tokens
+                                 names
+                                 functions
+                    parse-drop-def head tokens tail tokens.
+
+parse-def-args names arities bindings bits patterns 10_ tokens = == =
+    if-equal bits _
+             list-encode patterns
+             list-encode concat patterns
+                                list-encode concat 10 bits == literal pattern
+    parse-def-body names arities bindings _ _ _ head tokens tail tokens.
+
+parse-def-args names arities bindings bits patterns 0_ tokens = == 0
+    parse-def-args names arities bindings
+                   concat bits 0
+                   patterns
+                   head tokens
+                   tail tokens.
+
+parse-def-args names arities bindings bits patterns 1_ tokens = == 1
+    parse-def-args names arities bindings
+                   concat bits 1
+                   patterns
+                   head tokens
+                   tail tokens.
+
+parse-def-args names arities bindings bits patterns 00_ tokens = == _
+    == literal pattern
+    parse-def-args names arities bindings
+                   _
+                   concat patterns
+                          list-encode concat 10 bits
+                   head tokens
+                   tail tokens.
+
+parse-def-args names arities bindings bits patterns 01_ tokens = == .
+    == wild pattern
+    parse-def-args names arities bindings
+                   _
+                   concat patterns
+                          list-encode concat 11 bits
+                   head tokens
+                   tail tokens.
+
+parse-def-args names arities bindings bits patterns arg tokens =
+    == bound pattern
+    parse-def-args names arities
+                   concat list-encode arg
+                          bindings
+                   _
+                   concat patterns
+                          list-encode concat 0 bits
+                   head tokens
+                   tail tokens.
+
+parse-def-body names arities bindings argcounts funcalls bits _ . = error _.
+
+parse-def-body names arities bindings argcounts funcalls bits 0_ tokens =
+        parse-def-body names arities bindings
+                       argcounts funcalls
+                       concat bits 0
+                       head tokens
+                       tail tokens.
+
+parse-def-body names arities bindings argcounts funcalls bits 1_ tokens =
+        parse-def-body names arities bindings
+                       argcounts funcalls
+                       concat bits 1
+                       head tokens
+                       tail tokens.
+
+parse-def-body names arities bindings argcounts funcalls _ 01_ . = _.
+    == . end of definition
+
+parse-def-body names arities bindings argcounts funcalls _ 00_ tokens =
+    == _ nil constant
+    list-encode if-equal argcounts _
+                         110_ == concat nil
+                         010  == push nil
+    check-argcounts argcounts funcalls
+                    head argcounts
+    parse-def-body names arities bindings
+                   decrement-argcounts argcounts head argcounts
+                   decrement-funcalls argcounts funcalls head argcounts
+                   _
+                   head tokens
+                   tail tokens.
+
+parse-def-body names arities bindings argcounts funcalls _ token tokens =
+    == symbol: either binding or funcall
+    parse-def-try-binding names arities bindings argcounts funcalls tokens
+                          token bindings _
+                          alist-lookup token names arities.
+
+parse-def-body names arities bindings argcounts funcalls _ token tokens =
+    == symbol: either binding or funcall
+    parse-def-try-binding names arities bindings argcounts funcalls
+                          tokens
+                          token bindings _
+                          alist-lookup token names arities.
+
+parse-def-body names arities bindings argcounts funcalls bits 00_ tokens =
+    == _ terminated constant
+    list-encode if-equal argcounts _
+                         concat 110 bits == concat nil
+                         concat 010 bits == push nil
+    check-argcounts argcounts funcalls
+                    head argcounts
+    parse-def-body names arities bindings
+                   decrement-argcounts argcounts head argcounts
+                   decrement-funcalls argcounts funcalls head argcounts
+                   _
+                   head tokens
+                   tail tokens.
+
+parse-def-body names arities bindings argcounts funcalls bits token tokens =
+    == end of constant
+    list-encode if-equal argcounts _
+                         concat 110 bits == concat nil
+                         concat 010 bits == push nil
+    check-argcounts argcounts funcalls
+                    head argcounts
+    parse-def-body names arities bindings
+                   decrement-argcounts argcounts head argcounts
+                   decrement-funcalls argcounts funcalls head argcounts
+                   _
+                   token
+                   tokens.
+
+parse-def-try-binding names arities bindings argcounts funcalls tokens
+                      name _ . _ =
+    == not in bindings, nullary funcall
+    list-encode if-equal _ argcounts
+                         concat 111 concat list-encode name 0
+                         concat 011 concat list-encode name 0
+    check-argcounts argcounts funcalls
+                    head argcounts
+    parse-def-body names arities bindings    
+                   decrement-argcounts argcounts head argcounts
+                   decrement-funcalls argcounts funcalls head argcounts
+                   _
+                   head tokens
+                   tail tokens.
+
+parse-def-try-binding names arities bindings argcounts funcalls tokens
+                      name _ . arity =
+    == not in bindings, push funcall
+    parse-def-body names arities bindings    
+                   concat list-encode arity
+                          argcounts
+                   concat list-encode concat list-encode name
+                                             list-encode arity
+                          funcalls
+                   _
+                   head tokens
+                   tail tokens.
+
+parse-def-try-binding names arities bindings argcounts funcalls tokens
+                      name bind-list bind-index arity =
+    if-equal name head bind-list
+             parse-def-emit-bound names arities bindings
+                                  argcounts funcalls tokens
+                                  bind-index
+             parse-def-try-binding names arities bindings
+                                   argcounts funcalls tokens
+                                   name
+                                   tail bind-list
+                                   concat 1 bind-index
+                                   arity.
+
+parse-def-emit-bound names arities bindings argcounts funcalls tokens
+                     bind-index =
+    list-encode if-equal _ argcounts
+                         concat 10 bind-index == concat
+                         concat 00 bind-index == push
+    check-argcounts argcounts funcalls
+                    head argcounts
+    parse-def-body names arities bindings    
+                   decrement-argcounts argcounts head argcounts
+                   decrement-funcalls argcounts funcalls head argcounts
+                   _
+                   head tokens
+                   tail tokens.
+
+end-constant argcounts _ = _.
+end-constant argcounts bits =
+    list-encode if-equal argcounts _
+                         concat 110 bits  == concat constant
+                         concat 010 bits. == push constant
+
+check-argcounts _ . . = _.
+check-argcounts argcounts funcalls _ =
+    list-encode concat if-equal _ tail argcounts
+                                111_ == concat funcall
+                                011  == push funcall
+                       head funcalls
+    check-argcounts tail argcounts tail funcalls
+                    head tail argcounts.
+check-argcounts argcounts funcalls 1_ =
+    list-encode concat if-equal _ tail argcounts
+                                111_ == concat funcall
+                                011  == push funcall
+                       head funcalls
+    check-argcounts tail argcounts tail funcalls
+                    head tail argcounts.
+check-argcounts . . . = _.
+
+decrement-argcounts _ . = _.
+decrement-argcounts argcounts _ =
+    decrement-argcounts tail argcounts head tail argcounts.
+decrement-argcounts argcounts 1_ =
+    decrement-argcounts tail argcounts head tail argcounts.
+decrement-argcounts argcounts 1argcount =
+    list-encode argcount
+    tail argcounts.
+
+decrement-funcalls _ . . = _.
+decrement-funcalls argcounts funcalls _ =
+    decrement-funcalls tail argcounts tail funcalls head tail argcounts.
+decrement-funcalls argcounts funcalls 1_ =
+    decrement-funcalls tail argcounts tail funcalls head tail argcounts.
+decrement-funcalls . funcalls . = funcalls.
