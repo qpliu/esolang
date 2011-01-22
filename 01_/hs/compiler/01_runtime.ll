@@ -47,7 +47,7 @@ define fastcc void @.deref(%.val* %val) {
     %refcount_old = load i32* %_refcount
     %refcount_new = sub i32 %refcount_old, 1
     store i32 %refcount_new, i32* %_refcount
-    %refcount_positive = icmp sge i32 %refcount_new, 0
+    %refcount_positive = icmp sgt i32 %refcount_new, 0
     br i1 %refcount_positive, label %alive, label %dead
   alive:
     ret void
@@ -335,6 +335,50 @@ define private fastcc void @.concatval.freeenv(%.concatenv* %env) {
     %env_for_free = bitcast %.concatenv* %env to i8*
     tail call fastcc void @.free(i8* %env_for_free)
     ret void
+}
+
+; output
+declare void @putchar(i32)
+
+define fastcc void @.print(%.val* %val) {
+    %_v = alloca %.val*
+    store %.val* %val, %.val** %_v
+    %_shift = alloca i32
+    %_byte = alloca i32
+    br label %next_byte
+  next_byte:
+    store i32 7, i32* %_shift
+    store i32 0, i32* %_byte
+    br label %next_bit
+  next_bit:
+    %v = load %.val** %_v
+    %eval = call fastcc { i1, %.val* } @.eval(%.val* %v)
+    %next = extractvalue { i1, %.val* } %eval, 1
+    %is_nil = icmp eq %.val* %next, null
+    br i1 %is_nil, label %done, label %continue
+  done:
+    call fastcc void @.deref(%.val* %v)
+    ret void
+  continue:
+    store %.val* %next, %.val** %_v
+    call fastcc %.val* @.addref(%.val* %next)
+    call fastcc void @.deref(%.val* %v)
+    %bit = extractvalue { i1, %.val* } %eval, 0
+    %bit1 = zext i1 %bit to i32
+    %shift = load i32* %_shift
+    %bit2 = shl i32 %bit1, %shift
+    %byte = load i32* %_byte
+    %new_byte = or i32 %byte, %bit2
+    %finished_byte = icmp eq i32 %shift, 0
+    br i1 %finished_byte, label %byte_done, label %continue_byte
+  byte_done:
+    call void @putchar(i32 %new_byte)
+    br label %next_byte
+  continue_byte:
+    store i32 %new_byte, i32* %_byte
+    %new_shift = sub i32 %shift, 1
+    store i32 %new_shift, i32* %_shift
+    br label %next_bit
 }
 
 ; debug memory
