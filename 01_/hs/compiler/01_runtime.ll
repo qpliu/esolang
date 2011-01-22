@@ -184,8 +184,77 @@ declare i8* @fopen(i8*,i8*)
 declare i32 @fgetc(i8*)
 declare i32 @fclose(i8*)
 
+; this can leak open files (files not completely read will never get closed)
+; but that is not a concern for 01_
+
+; struct fileenv {
+;     FILE *file;
+;     int byte;
+;     int shift;
+; }
+%.fileenv = type { i8*, i32, i32 }
+
 define fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 %shift) {
-    ret %.val* undef
+    %fileenv_size = ptrtoint %.fileenv* getelementptr (%.fileenv* null, i32 1) to i32
+    %fileenv_from_alloc = call fastcc i8* @.alloc(i32 %fileenv_size)
+    %fileenv = bitcast i8* %fileenv_from_alloc to %.fileenv*
+    %_file = getelementptr %.fileenv* %fileenv, i32 0, i32 0
+    store i8* %file, i8** %_file
+    %_byte = getelementptr %.fileenv* %fileenv, i32 0, i32 1
+    store i32 %byte, i32* %_byte
+    %_shift = getelementptr %.fileenv* %fileenv, i32 0, i32 2
+    store i32 %shift, i32* %_shift
+    %eval = bitcast { i1, %.val* } (%.fileenv*)* @.fileval.eval to { i1, %.val* } (i8*)*
+    %freeenv = bitcast void (%.fileenv*)* @.fileval.freeenv to void (i8*)*
+    %result = tail call fastcc %.val* @.newval({ i1, %.val* } (i8*)* %eval, void (i8*)* %freeenv, i8* %fileenv_from_alloc)
+    ret %.val* %result
+}
+
+define private fastcc { i1, %.val* } @.fileval.eval(%.fileenv* %env) {
+    %_file = getelementptr %.fileenv* %env, i32 0, i32 0
+    %file = load i8** %_file
+    %_shift = getelementptr %.fileenv* %env, i32 0, i32 2
+    %shift = load i32* %_shift
+    %need_to_read_new_byte = icmp eq i32 %shift, 7
+    br i1 %need_to_read_new_byte, label %read_new_byte, label %use_old_byte
+  read_new_byte:
+    %result = tail call { i1, %.val* } @.fileval.eval.getc(i8* %file)
+    ret { i1, %.val* } %result
+  use_old_byte:
+    %_byte = getelementptr %.fileenv* %env, i32 0, i32 1
+    %byte = load i32* %_byte
+    %shifted_byte = lshr i32 %byte, %shift
+    %bit = trunc i32 %shifted_byte to i1
+    %decremented_shift = sub i32 %shift, 1
+    %finished_old_byte = icmp eq i32 %shift, 0
+    %new_shift = select i1 %finished_old_byte, i32 7, i32 %decremented_shift
+    %next = call fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 %new_shift)
+    %result_1 = insertvalue { i1, %.val* } undef, i1 %bit, 0
+    %result_2 = insertvalue { i1, %.val* } %result_1, %.val* %next, 1
+    ret { i1, %.val* } %result_2
+}
+
+define private fastcc { i1, %.val* } @.fileval.eval.getc(i8* %file) {
+    %byte = call i32 @fgetc(i8* %file)
+    %eof = icmp eq i32 %byte, -1
+    br i1 %eof, label %fgetc_fail, label %fgetc_success
+  fgetc_fail:
+    call i32 @fclose(i8* %file)
+    %nil_value = insertvalue { i1, %.val* } undef, %.val* null, 1
+    ret { i1, %.val* } %nil_value
+  fgetc_success:
+    %shifted_byte = lshr i32 %byte, 7
+    %bit = trunc i32 %shifted_byte to i1
+    %next = call fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 6)
+    %result_1 = insertvalue { i1, %.val* } undef, i1 %bit, 0
+    %result_2 = insertvalue { i1, %.val* } %result_1, %.val* %next, 1
+    ret { i1, %.val* } %result_2
+}
+
+define private fastcc void @.fileval.freeenv(%.fileenv* %env) {
+    %env_for_free = bitcast %.fileenv* %env to i8*
+    tail call fastcc void @.free(i8* %env_for_free)
+    ret void
 }
 
 ; unopened files
@@ -202,27 +271,81 @@ define private fastcc { i1, %.val* } @.unopenedfileval.eval(i8* %filename) {
     %file_null = icmp eq i8* %file, null
     br i1 %file_null, label %fopen_fail, label %fopen_success
   fopen_fail:
-    br label %return_nil
-  return_nil:
     %nil_value = insertvalue { i1, %.val* } undef, %.val* null, 1
     ret { i1, %.val* } %nil_value
   fopen_success:
-    %byte = call i32 @fgetc(i8* %file)
-    %eof = icmp eq i32 %byte, -1
-    br i1 %eof, label %fgetc_fail, label %fgetc_success
-  fgetc_fail:
-    call i32 @fclose(i8* %file)
-    br label %return_nil
-  fgetc_success:
-    %shifted_byte = lshr i32 %byte, 7
-    %bit = trunc i32 %shifted_byte to i1
-    %next = call fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 6)
-    %result_1 = insertvalue { i1, %.val* } undef, i1 %bit, 0
-    %result_2 = insertvalue { i1, %.val* } %result_1, %.val* %next, 1
-    ret { i1, %.val* } %result_2
+    %result = tail call { i1, %.val* } @.fileval.eval.getc(i8* %file)
+    ret { i1, %.val* } %result
 }
 
 define private fastcc void @.unopenedfileval.freeenv(i8* %filename) {
     ; do nothing - %filename should come from argv
+    ret void
+}
+
+; concat
+
+; struct concatenv {
+;     struct val *first;
+;     struct val *second;
+; }
+%.concatenv = type { %.val*, %.val* }
+
+define fastcc %.val* @.concatval(%.val* %first, %.val* %second) {
+    call fastcc %.val* @.addref(%.val* %first)
+    call fastcc %.val* @.addref(%.val* %second)
+    %concatenv_size = ptrtoint %.concatenv* getelementptr (%.concatenv* null, i32 1) to i32
+    %concatenv_from_alloc = call fastcc i8* @.alloc(i32 %concatenv_size)
+    %concatenv = bitcast i8* %concatenv_from_alloc to %.concatenv*
+    %_first = getelementptr %.concatenv* %concatenv, i32 0, i32 0
+    store %.val* %first, %.val** %_first
+    %_second = getelementptr %.concatenv* %concatenv, i32 0, i32 1
+    store %.val* %second, %.val** %_second
+    %eval = bitcast { i1, %.val* } (%.concatenv*)* @.concatval.eval to { i1, %.val* } (i8*)*
+    %freeenv = bitcast void (%.concatenv*)* @.concatval.freeenv to void (i8*)*
+    %result = tail call fastcc %.val* @.newval({ i1, %.val* } (i8*)* %eval, void (i8*)* %freeenv, i8* %concatenv_from_alloc)
+    ret %.val* %result
+}
+
+define private fastcc { i1, %.val* } @.concatval.eval(%.concatenv* %env) {
+    %_first = getelementptr %.concatenv* %env, i32 0, i32 0
+    %first = load %.val** %_first
+    %_second = getelementptr %.concatenv* %env, i32 0, i32 1
+    %second = load %.val** %_second
+    %eval_first = call fastcc { i1, %.val* } @.eval(%.val* %first)
+    %first_next = extractvalue { i1, %.val* } %eval_first, 1
+    %first_is_nil = icmp eq %.val* %first_next, null
+    br i1 %first_is_nil, label %start_second, label %continue_first
+  start_second:
+    %eval_second = tail call fastcc { i1, %.val* } @.eval(%.val* %second)
+    ret { i1, %.val* } %eval_second
+  continue_first:
+    %next = call fastcc %.val* @.concatval(%.val* %first_next, %.val* %second)
+    %result = insertvalue { i1, %.val* } %eval_first, %.val* %next, 1
+    ret { i1, %.val* } %result
+}
+
+define private fastcc void @.concatval.freeenv(%.concatenv* %env) {
+    %_first = getelementptr %.concatenv* %env, i32 0, i32 0
+    %first = load %.val** %_first
+    call fastcc void @.deref(%.val* %first)
+    %_second = getelementptr %.concatenv* %env, i32 0, i32 1
+    %second = load %.val** %_second
+    call fastcc void @.deref(%.val* %second)
+    %env_for_free = bitcast %.concatenv* %env to i8*
+    tail call fastcc void @.free(i8* %env_for_free)
+    ret void
+}
+
+; debug memory
+
+declare void @printf(i8*,...)
+
+@.print_debug_memory_format = private constant [33 x i8] c"\0Aalloc_count=%d nil.refcount=%d\0A\00"
+
+define fastcc void @.print_debug_memory() {
+    %alloc_count = load i32* @.alloc_count
+    %nil_refcount = load i32* getelementptr (%.val* @.nil, i32 0, i32 0)
+    tail call void (i8*,...)* @printf(i8* getelementptr ([33 x i8]* @.print_debug_memory_format, i32 0, i32 0), i32 %alloc_count, i32 %nil_refcount)
     ret void
 }

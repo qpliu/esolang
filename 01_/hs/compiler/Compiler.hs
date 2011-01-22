@@ -9,17 +9,16 @@ import Parser
      Param(ParamBound,ParamLiteral,ParamWild),
      arity)
 
-compile :: String -> Map.Map String [Defn] -> String
-compile mainFunction fns =
+compile :: String -> Bool -> Map.Map String [Defn] -> String
+compile mainFunction debug fns =
     maybe (error ("No such function: " ++ mainFunction))
           (unlines . compile') (arity fns mainFunction)
   where
     compile' :: Int -> [String]
     compile' mainArity =
-          runtime
-       ++ compileConstants fns
+          compileConstants fns
        ++ compileFns fns
-       ++ compileMain mainFunction mainArity
+       ++ compileMain mainFunction mainArity debug
 
 constantName :: [Bool] -> String
 constantName bits = "@L" ++ map (\ b -> if b then '1' else '0') bits
@@ -52,5 +51,5 @@ compileFns fns = concatMap (uncurry compileFn) (Map.assocs fns)
 compileFn :: String -> [Defn] -> [String]
 compileFn name defns = []
 
-compileMain :: String -> Int -> [String]
-compileMain mainFunction mainArity = []
+compileMain :: String -> Int -> Bool -> [String]
+compileMain mainFunction mainArity debug = []
