@@ -50,10 +50,10 @@ getMainFunction filename =
         $ reverse $ takeWhile (not . (`elem` "/\\")) $ reverse filename
 
 interp :: String -> [[Bool]] -> Map String [Defn] -> [Bool]
-interp mainFunction params defns =
+interp mainFunction params fns =
     maybe (error ("No such function: " ++ mainFunction))
-          (apply defns mainFunction . flip take (params ++ repeat []))
-          (arity defns mainFunction)
+          (apply fns mainFunction . flip take (params ++ repeat []))
+          (arity fns mainFunction)
 
 textToBits :: String -> [Bool]
 textToBits text = foldl (++) [] (map charToBits text) where
@@ -69,9 +69,9 @@ bitsToStr bits =
         bitsToChar byte : bitsToStr rest
 
 apply :: Map String [Defn] -> String -> [[Bool]] -> [Bool]
-apply defns functionName args =
-    let (exprs,params) = findMatch functionName (defns ! functionName) args
-    in  concatMap (eval defns params) exprs
+apply fns functionName args =
+    let (exprs,params) = findMatch functionName (fns ! functionName) args
+    in  concatMap (eval fns params) exprs
 
 findMatch :: String -> [Defn] -> [[Bool]] -> ([Expr],[[Bool]])
 findMatch functionName [] _ = error ("No matching pattern: " ++ functionName)
@@ -99,7 +99,7 @@ matchArguments params args = fmap reverse (matchArgs params args [])
     matchBits (b:bits) (a:arg) = if b == a then matchBits bits arg else Nothing
 
 eval :: Map String [Defn] -> [[Bool]] -> Expr -> [Bool]
-eval defns params (ExprLiteral bits) = bits
-eval defns params (ExprParam index) = params !! index
-eval defns params (ExprFuncall name args) =
-    apply defns name (map (eval defns params) args)
+eval fns params (ExprLiteral bits) = bits
+eval fns params (ExprParam index) = params !! index
+eval fns params (ExprFuncall name args) =
+    apply fns name (map (eval fns params) args)

@@ -49,6 +49,6 @@ concatRight :: [Either a [b]] -> Either a [b]
 concatRight list = foldl (either (const . Left) (fmap . (++))) (Right []) list
 
 arity :: Map String [Defn] -> String -> Maybe Int
-arity defns name = fmap getArity (Data.Map.lookup name defns)
+arity fns name = fmap getArity (Data.Map.lookup name fns)
   where
     getArity (Defn params _:_) = length params
