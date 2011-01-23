@@ -224,7 +224,7 @@ define private fastcc { i1, %.val* } @.fileval.eval(%.fileenv* %env) {
     %need_to_read_new_byte = icmp eq i8 %shift, 7
     br i1 %need_to_read_new_byte, label %read_new_byte, label %use_old_byte
   read_new_byte:
-    %result = tail call { i1, %.val* } @.fileval.eval.read(i32 %fd)
+    %result = tail call fastcc { i1, %.val* } @.fileval.eval.read(i32 %fd)
     ret { i1, %.val* } %result
   use_old_byte:
     %_byte = getelementptr %.fileenv* %env, i32 0, i32 1
@@ -277,7 +277,7 @@ define private fastcc { i1, %.val* } @.unopenedfileval.eval(i8* %filename) {
     %fd_valid = icmp sge i32 %fd, 0
     br i1 %fd_valid, label %open_success, label %open_fail
   open_success:
-    %result = tail call { i1, %.val* } @.fileval.eval.read(i32 %fd)
+    %result = tail call fastcc { i1, %.val* } @.fileval.eval.read(i32 %fd)
     ret { i1, %.val* } %result
   open_fail:
     %nil_value = insertvalue { i1, %.val* } undef, %.val* null, 1
