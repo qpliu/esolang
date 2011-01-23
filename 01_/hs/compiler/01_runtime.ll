@@ -317,8 +317,15 @@ define private fastcc { i1, %.val* } @.concatval.eval(%.concatenv* %env) {
     %first_is_nil = icmp eq %.val* %first_next, null
     br i1 %first_is_nil, label %start_second, label %continue_first
   start_second:
-    %eval_second = tail call fastcc { i1, %.val* } @.eval(%.val* %second)
+    %eval_second = call fastcc { i1, %.val* } @.eval(%.val* %second)
+    %second_next = extractvalue { i1, %.val* } %eval_second, 1
+    %second_is_nil = icmp eq %.val* %second_next, null
+    br i1 %second_is_nil, label %return_second, label %addref_to_second_next
+  return_second:
     ret { i1, %.val* } %eval_second
+  addref_to_second_next:
+    call fastcc %.val* @.addref(%.val* %second_next)
+    br label %return_second
   continue_first:
     %next = call fastcc %.val* @.concatval(%.val* %first_next, %.val* %second)
     %result = insertvalue { i1, %.val* } %eval_first, %.val* %next, 1
