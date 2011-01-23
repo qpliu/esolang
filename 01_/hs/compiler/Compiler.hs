@@ -16,9 +16,28 @@ compile mainFunction debug fns =
   where
     compile' :: Int -> [String]
     compile' mainArity =
-          compileConstants fns
+          runtime
+       ++ compileConstants fns
        ++ compileFns fns
        ++ compileMain mainFunction mainArity debug
+
+runtime :: [String]
+runtime =
+    ["declare fastcc void @.free(i8*)",
+     "declare fastcc i8* @.alloc(i32)",
+     "%.val = type { i32, i1, %.val*, { i1, %.val* } (i8*)*, void (i8*)*, i8* }",
+     "@.nil = external global %.val",
+     "declare fastcc %.val* @.addref(%.val*)",
+     "declare fastcc void @.deref(%.val*)",
+     "declare fastcc %.val* @.newval({i1,%.val*} (i8*), void (i8*)*, i8*)",
+     "declare fastcc { i1, %.val* } @.eval(%.val*)",
+     "declare fastcc %.val* @.literalval([0 x i1]*, i32, i32)",
+     "declare fastcc %.val* @.fileval(i32 , i8, i8)",
+     "declare fastcc %.val* @.unopenedfileval(i8*)",
+     "declare fastcc %.val* @.concatval(%.val*,%.val*)",
+     "declare fastcc void @.print(%.val*)",
+     "declare fastcc void @.print_debug_memory()",
+     ""]
 
 constantName :: [Bool] -> String
 constantName bits = "@L" ++ map (\ b -> if b then '1' else '0') bits
