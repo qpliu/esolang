@@ -185,30 +185,31 @@ define private fastcc void @.literalval.freeenv(%.literalenv* %env) {
 
 ; files
 
-declare i8* @fopen(i8*,i8*)
-declare i32 @fgetc(i8*)
-declare i32 @fclose(i8*)
+declare i32 @open(i8*,i32)
+declare i32 @read(i32,i8*,i32)
+declare i32 @write(i32,i8*,i32)
+declare i32 @close(i32)
 
 ; this can leak open files (files not completely read will never get closed)
 ; but that is not a concern for 01_
 
 ; struct fileenv {
-;     FILE *file;
-;     int byte;
-;     int shift;
+;     int fd;
+;     char byte;
+;     char shift;
 ; }
-%.fileenv = type { i8*, i32, i32 }
+%.fileenv = type { i32, i8, i8 }
 
-define fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 %shift) {
+define fastcc %.val* @.fileval(i32 %fd, i8 %byte, i8 %shift) {
     %fileenv_size = ptrtoint %.fileenv* getelementptr (%.fileenv* null, i32 1) to i32
     %fileenv_from_alloc = call fastcc i8* @.alloc(i32 %fileenv_size)
     %fileenv = bitcast i8* %fileenv_from_alloc to %.fileenv*
-    %_file = getelementptr %.fileenv* %fileenv, i32 0, i32 0
-    store i8* %file, i8** %_file
+    %_fd = getelementptr %.fileenv* %fileenv, i32 0, i32 0
+    store i32 %fd, i32* %_fd
     %_byte = getelementptr %.fileenv* %fileenv, i32 0, i32 1
-    store i32 %byte, i32* %_byte
+    store i8 %byte, i8* %_byte
     %_shift = getelementptr %.fileenv* %fileenv, i32 0, i32 2
-    store i32 %shift, i32* %_shift
+    store i8 %shift, i8* %_shift
     %eval = bitcast { i1, %.val* } (%.fileenv*)* @.fileval.eval to { i1, %.val* } (i8*)*
     %freeenv = bitcast void (%.fileenv*)* @.fileval.freeenv to void (i8*)*
     %result = tail call fastcc %.val* @.newval({ i1, %.val* } (i8*)* %eval, void (i8*)* %freeenv, i8* %fileenv_from_alloc)
@@ -216,44 +217,46 @@ define fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 %shift) {
 }
 
 define private fastcc { i1, %.val* } @.fileval.eval(%.fileenv* %env) {
-    %_file = getelementptr %.fileenv* %env, i32 0, i32 0
-    %file = load i8** %_file
+    %_fd = getelementptr %.fileenv* %env, i32 0, i32 0
+    %fd = load i32* %_fd
     %_shift = getelementptr %.fileenv* %env, i32 0, i32 2
-    %shift = load i32* %_shift
-    %need_to_read_new_byte = icmp eq i32 %shift, 7
+    %shift = load i8* %_shift
+    %need_to_read_new_byte = icmp eq i8 %shift, 7
     br i1 %need_to_read_new_byte, label %read_new_byte, label %use_old_byte
   read_new_byte:
-    %result = tail call { i1, %.val* } @.fileval.eval.getc(i8* %file)
+    %result = tail call { i1, %.val* } @.fileval.eval.read(i32 %fd)
     ret { i1, %.val* } %result
   use_old_byte:
     %_byte = getelementptr %.fileenv* %env, i32 0, i32 1
-    %byte = load i32* %_byte
-    %shifted_byte = lshr i32 %byte, %shift
-    %bit = trunc i32 %shifted_byte to i1
-    %decremented_shift = sub i32 %shift, 1
-    %finished_old_byte = icmp eq i32 %shift, 0
-    %new_shift = select i1 %finished_old_byte, i32 7, i32 %decremented_shift
-    %next = call fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 %new_shift)
+    %byte = load i8* %_byte
+    %shifted_byte = lshr i8 %byte, %shift
+    %bit = trunc i8 %shifted_byte to i1
+    %decremented_shift = sub i8 %shift, 1
+    %finished_old_byte = icmp eq i8 %shift, 0
+    %new_shift = select i1 %finished_old_byte, i8 7, i8 %decremented_shift
+    %next = call fastcc %.val* @.fileval(i32 %fd, i8 %byte, i8 %new_shift)
     %result_1 = insertvalue { i1, %.val* } undef, i1 %bit, 0
     %result_2 = insertvalue { i1, %.val* } %result_1, %.val* %next, 1
     ret { i1, %.val* } %result_2
 }
 
-define private fastcc { i1, %.val* } @.fileval.eval.getc(i8* %file) {
-    %byte = call i32 @fgetc(i8* %file)
-    %eof = icmp eq i32 %byte, -1
-    br i1 %eof, label %fgetc_fail, label %fgetc_success
-  fgetc_fail:
-    call i32 @fclose(i8* %file)
-    %nil_value = insertvalue { i1, %.val* } undef, %.val* null, 1
-    ret { i1, %.val* } %nil_value
-  fgetc_success:
-    %shifted_byte = lshr i32 %byte, 7
-    %bit = trunc i32 %shifted_byte to i1
-    %next = call fastcc %.val* @.fileval(i8* %file, i32 %byte, i32 6)
+define private fastcc { i1, %.val* } @.fileval.eval.read(i32 %fd) {
+    %_byte = alloca i8
+    %count = call i32 @read(i32 %fd, i8* %_byte, i32 1)
+    %count_is_one = icmp eq i32 %count, 1
+    br i1 %count_is_one, label %read_success, label %read_fail
+  read_success:
+    %byte = load i8* %_byte
+    %shifted_byte = lshr i8 %byte, 7
+    %bit = trunc i8 %shifted_byte to i1
+    %next = call fastcc %.val* @.fileval(i32 %fd, i8 %byte, i8 6)
     %result_1 = insertvalue { i1, %.val* } undef, i1 %bit, 0
     %result_2 = insertvalue { i1, %.val* } %result_1, %.val* %next, 1
     ret { i1, %.val* } %result_2
+  read_fail:
+    call i32 @close(i32 %fd)
+    %nil_value = insertvalue { i1, %.val* } undef, %.val* null, 1
+    ret { i1, %.val* } %nil_value
 }
 
 define private fastcc void @.fileval.freeenv(%.fileenv* %env) {
@@ -269,18 +272,16 @@ define fastcc %.val* @.unopenedfileval(i8* %filename) {
     ret %.val* %result
 }
 
-@.unopenedfileval.r = private constant [2 x i8] c"r\00"
-
 define private fastcc { i1, %.val* } @.unopenedfileval.eval(i8* %filename) {
-    %file = call i8* @fopen(i8* %filename, i8* getelementptr ([2 x i8]* @.unopenedfileval.r, i32 0, i32 0))
-    %file_null = icmp eq i8* %file, null
-    br i1 %file_null, label %fopen_fail, label %fopen_success
-  fopen_fail:
+    %fd = call i32 @open(i8* %filename, i32 0)
+    %fd_valid = icmp sge i32 %fd, 0
+    br i1 %fd_valid, label %open_success, label %open_fail
+  open_success:
+    %result = tail call { i1, %.val* } @.fileval.eval.read(i32 %fd)
+    ret { i1, %.val* } %result
+  open_fail:
     %nil_value = insertvalue { i1, %.val* } undef, %.val* null, 1
     ret { i1, %.val* } %nil_value
-  fopen_success:
-    %result = tail call { i1, %.val* } @.fileval.eval.getc(i8* %file)
-    ret { i1, %.val* } %result
 }
 
 define private fastcc void @.unopenedfileval.freeenv(i8* %filename) {
