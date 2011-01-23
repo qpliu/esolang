@@ -67,6 +67,11 @@ define fastcc void @.freeval(%.val* %val) {
     %next = load %.val** %_next
     %val_for_free_1 = bitcast %.val* %val to i8*
     call fastcc void @.free(i8* %val_for_free_1)
+    %next_is_nil = icmp eq %.val* %next, null
+    br i1 %next_is_nil, label %done, label %deref_next
+  done:
+    ret void
+  deref_next:
     tail call fastcc void @.deref(%.val* %next)
     ret void
   unevaluated:
