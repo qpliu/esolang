@@ -32,10 +32,11 @@ runtime =
      "declare fastcc %.val* @.newval({i1,%.val*} (i8*), void (i8*)*, i8*)",
      "declare fastcc { i1, %.val* } @.eval(%.val*)",
      "declare fastcc %.val* @.literalval([0 x i1]*, i32, i32)",
-     "declare fastcc %.val* @.fileval(i32 , i8, i8)",
+     "declare fastcc %.val* @.fileval(i32, i8, i8)",
      "declare fastcc %.val* @.unopenedfileval(i8*)",
-     "declare fastcc %.val* @.concatval(%.val*,%.val*)",
+     "declare fastcc %.val* @.concatval(%.val*, %.val*)",
      "declare fastcc void @.print(%.val*)",
+     "declare fastcc %.val* @.getarg(i32, %.val*, i32, i8**)",
      "declare fastcc void @.print_debug_memory()",
      ""]
 
@@ -68,7 +69,64 @@ compileFns :: Map.Map String [Defn] -> [String]
 compileFns fns = concatMap (uncurry compileFn) (Map.assocs fns)
 
 compileFn :: String -> [Defn] -> [String]
-compileFn name defns = []
+compileFn name defns@(Defn defnParams _:_) = fnPromise ++ fnEval ++ fnFreeEnv
+  where
+    arity = length defnParams
+    fnPromise =
+        ["define fastcc %.val* " ++ fnName "" name ++ "("
+            ++ drop 1 (concatMap ((",%.val* %a" ++) . show) [1..arity])
+            ++ ") {"]
+        ++ (if arity == 0
+                then ["    ret %.val* undef"]
+                else fnPromiseBody)
+        ++ ["}"]
+    fnPromiseBody = []
+    fnEval =
+        ["define private fastcc { i1, %.val* } " ++ fnName ".eval" name
+             ++ "([" ++ show arity ++ " x %.val*]* %env) {"]
+        ++ ["    ret { i1, %.val* } null",
+            "}"]
+    fnFreeEnv =
+        ["define private fastcc void " ++ fnName ".freeenv" name
+             ++ "([" ++ show arity ++ " x %.val*]* %env) {",
+         ""]
+        ++ (if arity == 0
+                then []
+                else [
+                      ])
+        ++ ["    ret void",
+            "}"]
+
+fnName :: String -> String -> String
+fnName section name = "@\"01_" ++ foldr mangle "" name ++ section ++ "\""
+  where
+    mangle '"' str = "\\22" ++ str
+    mangle '\\' str = "\\5C" ++ str
+    mangle c str = c:str
+
+compileBody :: String -> Int -> Int -> [Expr] -> [String]
+compileBody name sequenceNumber nparams exprs = []
 
 compileMain :: String -> Int -> Bool -> [String]
-compileMain mainFunction mainArity debug = []
+compileMain mainFunction mainArity debug =
+    ["define void @main(i32 %argc, i8** %argv) {",
+     "    %stdin = call fastcc %.val* @.fileval(i32 0, i8 undef, i8 7)"]
+    ++ map getArg [1..mainArity]
+    ++ ["    %val = call fastcc %.val* "
+            ++ fnName "" mainFunction ++ "("
+            ++ drop 1 (concatMap argParam [1..mainArity]) ++ ")",
+        "    call fastcc void @.deref(%.val* %stdin)"]
+    ++ map derefArg [1..mainArity]
+    ++ ["    tail call fastcc void @.print(%.val* %val)"]
+    ++ (if debug
+            then ["    tail call fastcc void @.print_debug_memory()"]
+            else [])
+    ++ ["    ret void",
+        "}"]
+  where
+    getArg index =
+        "    %a" ++ show index ++ " = call fastcc %.val* @.getarg(i32 "
+            ++ show index ++ ", %.val* %stdin, i32 %argc, i8** %argv)"
+    derefArg index =
+        "    call fastcc void @.deref(%.val* %a" ++ show index ++ ")"
+    argParam index = ",%.val* %a" ++ show index
