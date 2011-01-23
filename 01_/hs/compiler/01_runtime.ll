@@ -394,6 +394,40 @@ define fastcc void @.print(%.val* %val) {
     br label %next_bit
 }
 
+; command line arguments
+
+define fastcc %.val* @.getarg(i32 %index, %.val* %stdin, i32 %argc, i8** %argv) {
+    %1 = icmp eq i32 %index, %argc
+    br i1 %1, label %return_stdin, label %test_for_nil
+  test_for_nil:
+    %2 = icmp ugt i32 %index, %argc
+    br i1 %2, label %return_nil, label %check_argv
+  check_argv:
+    %_arg = getelementptr i8** %argv, i32 %index
+    %arg = load i8** %_arg
+    %3 = icmp eq i8* %arg, null
+    br i1 %3, label %return_nil, label %check_arg_1
+  check_arg_1:
+    %_c0 = getelementptr i8* %arg, i32 0
+    %c0 = load i8* %_c0
+    %4 = icmp eq i8 45, %c0 ; -
+    br i1 %4, label %check_arg_2, label %return_fileval
+  check_arg_2:
+    %_c1 = getelementptr i8* %arg, i32 1
+    %c1 = load i8* %_c1
+    %5 = icmp eq i8 0, %c1 ; NUL
+    br i1 %5, label %return_stdin, label %return_fileval
+  return_fileval:
+    %fileval_result = tail call fastcc %.val* @.unopenedfileval(i8* %arg)
+    ret %.val* %fileval_result
+  return_stdin:
+    %stdin_result = tail call fastcc %.val* @.addref(%.val* %stdin)
+    ret %.val* %stdin_result
+  return_nil:
+    %nil_result = tail call fastcc %.val* @.addref(%.val* @.nil)
+    ret %.val* %nil_result
+}
+
 ; debug memory
 
 declare void @printf(i8*,...)
