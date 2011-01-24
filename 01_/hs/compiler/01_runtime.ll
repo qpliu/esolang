@@ -428,9 +428,19 @@ define fastcc %.val* @.getarg(i32 %index, %.val* %stdin, i32 %argc, i8** %argv) 
     ret %.val* %nil_result
 }
 
-; debug memory
-
 declare void @printf(i8*,...)
+
+declare void @exit(i32) noreturn
+
+@.match_failure_format = private constant [19 x i8] c"Match failure: %s\0A\00"
+
+define fastcc void @.match_failure(i8* %function_name) noreturn {
+    call void (i8*,...)* @printf(i8* getelementptr ([19 x i8]* @.match_failure_format, i32 0, i32 0), i8* %function_name)
+    call void @exit(i32 1)
+    unreachable
+}
+
+; debug memory
 
 @.print_debug_memory_format = private constant [33 x i8] c"\0Aalloc_count=%d nil.refcount=%d\0A\00"
 

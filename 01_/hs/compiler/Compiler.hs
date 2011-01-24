@@ -38,8 +38,8 @@ runtime =
      "declare fastcc %.val* @.concatval(%.val*, %.val*)",
      "declare fastcc void @.print(%.val*)",
      "declare fastcc %.val* @.getarg(i32, %.val*, i32, i8**)",
-     "declare fastcc void @.print_debug_memory()",
-     ""]
+     "declare fastcc void @.match_failure(i8*) noreturn",
+     "declare fastcc void @.print_debug_memory()"]
 
 constantName :: [Bool] -> String
 constantName bits = "@L" ++ map (\ b -> if b then '1' else '0') bits
@@ -64,13 +64,22 @@ compileConstants fns = map compileConstant constants
     exprConstants set (ExprParam _) = set
     exprConstants set (ExprFuncall _ exprs) = foldl exprConstants set exprs
 
+isParamBound :: Param -> Bool
+isParamBound (ParamBound _) = True
+isParamBound _ = False
+
 compileArities :: Map.Map String [Defn] -> [String]
 compileArities fns = concatMap compileArity arities
   where
     arities :: [Int]
     arities = Set.toList (Map.fold addArity Set.empty fns)
     addArity :: [Defn] -> Set.Set Int -> Set.Set Int
-    addArity (Defn defnParams _:_) set = Set.insert (length defnParams) set
+    addArity defns@(Defn defnParams _:_) set =
+        foldl addDefnArity (Set.insert (length defnParams) set) defns
+    addDefnArity :: Set.Set Int -> Defn -> Set.Set Int
+    addDefnArity set defn = Set.insert (defnArity defn) set
+    defnArity :: Defn -> Int
+    defnArity (Defn defnParams _) = length (filter isParamBound defnParams)
     compileArity :: Int -> [String]
     compileArity arity =
         ["define private %.val* @.funcall" ++ show arity
@@ -116,8 +125,14 @@ compileFns :: Map.Map String [Defn] -> [String]
 compileFns fns = concatMap (uncurry compileFn) (Map.assocs fns)
 
 compileFn :: String -> [Defn] -> [String]
-compileFn name defns@(Defn defnParams _:_) = fnPromise ++ fnEval ++ fnFreeEnv
+compileFn name defns@(Defn defnParams _:_) =
+    fnNameConstant ++ fnPromise ++ fnEval
+    ++ concat (zipWith (compileDefn name) [0..] defns)
   where
+    fnNameConstant =
+        [fnName ".name" name ++ " = private constant ["
+             ++ show (length name + 1) ++ " x i8] c\""
+             ++ mangleName name ++ "\\00\""]
     arity = length defnParams
     fnPromise =
         ["define fastcc %.val* " ++ fnName "" name ++ "("
@@ -133,23 +148,41 @@ compileFn name defns@(Defn defnParams _:_) = fnPromise ++ fnEval ++ fnFreeEnv
     fnEval =
         ["define private fastcc { i1, %.val* } " ++ fnName ".eval" name
              ++ "([" ++ show arity ++ " x %.val*]* %env) {"]
-        ++ ["    ret { i1, %.val* } undef",
+        ++ ["    ; match patterns"]
+        ++ ["    call fastcc void @.match_failure(i8* getelementptr (["
+                 ++ show (length name + 1) ++ " x i8]* "
+                 ++ fnName ".name" name ++ ", i32 0, i32 0))",
+            "    unreachable",
             "}"]
-    fnFreeEnv =
-        ["define private fastcc void " ++ fnName ".freeenv" name
+
+compileDefn :: String -> Int -> Defn -> [String]
+compileDefn name sequenceNumber (Defn defnParams defnExprs) =
+    defnPromise ++ defnEval
+  where
+    arity = length (filter isParamBound defnParams)
+    defnName = name ++ "_" ++ show sequenceNumber
+    defnPromise =
+        ["define private fastcc %.val* " ++ fnName "" defnName ++ "("
+             ++ drop 1 (concatMap ((",%.val* %a" ++) . show) [1..arity])
+             ++ ") {",
+         "    %val = tail call fastcc %.val* @.funcall" ++ show arity
+                ++ "val({i1,%.val*}([" ++ show arity ++ " x %.val*]*)* "
+                ++ fnName ".eval" defnName
+                ++ concatMap ((",%.val* %a" ++) . show) [1..arity]
+                ++ ")",
+         "    ret %.val* %val",
+         "}"]
+    defnEval =
+        ["define private fastcc { i1, %.val* } " ++ fnName ".eval" defnName
              ++ "([" ++ show arity ++ " x %.val*]* %env) {",
-         ""]
-        ++ (if arity == 0
-                then []
-                else [
-                      ])
-        ++ ["    ret void",
-            "}"]
-    compileBody :: String -> Int -> Int -> [Expr] -> [String]
-    compileBody name sequenceNumber nparams exprs = []
+         "    ret { i1, %.val* } undef",
+         "}"]
 
 fnName :: String -> String -> String
-fnName section name = "@\"01_" ++ foldr mangle "" name ++ section ++ "\""
+fnName section name = "@\"01_" ++ mangleName name ++ section ++ "\""
+
+mangleName :: String -> String
+mangleName name = foldr mangle "" name
   where
     mangle '"' str = "\\22" ++ str
     mangle '\\' str = "\\5C" ++ str
