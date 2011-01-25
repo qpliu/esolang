@@ -119,9 +119,6 @@ define fastcc { i1, %.val* } @.eval(%.val* %val) {
     %_env = getelementptr %.val* %val, i32 0, i32 5
     %env = load i8** %_env
     %result = call fastcc { i1, %.val* } %eval(i8* %env)
-    %_freeenv = getelementptr %.val* %val, i32 0, i32 4
-    %freeenv = load void (i8*)** %_freeenv
-    call fastcc void %freeenv(i8* %env)
     %new_bit = extractvalue { i1, %.val* } %result, 0
     store i1 %new_bit, i1* %_bit
     %new_next = extractvalue { i1, %.val* } %result, 1
@@ -168,6 +165,7 @@ define private fastcc { i1, %.val* } @.literalval.eval(%.literalenv* %env) {
     %length = load i32* %_length
     %_index = getelementptr %.literalenv* %env, i32 0, i32 2
     %index = load i32* %_index
+    call fastcc void @.literalval.freeenv(%.literalenv* %env)
     %_bit = getelementptr [0 x i1]* %bits, i32 0, i32 %index
     %bit = load i1* %_bit
     %next_index = add i32 %index, 1
@@ -224,11 +222,13 @@ define private fastcc { i1, %.val* } @.fileval.eval(%.fileenv* %env) {
     %need_to_read_new_byte = icmp eq i8 %shift, 7
     br i1 %need_to_read_new_byte, label %read_new_byte, label %use_old_byte
   read_new_byte:
+    call fastcc void @.fileval.freeenv(%.fileenv* %env)
     %result = tail call fastcc { i1, %.val* } @.fileval.eval.read(i32 %fd)
     ret { i1, %.val* } %result
   use_old_byte:
     %_byte = getelementptr %.fileenv* %env, i32 0, i32 1
     %byte = load i8* %_byte
+    call fastcc void @.fileval.freeenv(%.fileenv* %env)
     %shifted_byte = lshr i8 %byte, %shift
     %bit = trunc i8 %shifted_byte to i1
     %decremented_shift = sub i8 %shift, 1
@@ -328,12 +328,14 @@ define private fastcc { i1, %.val* } @.concatval.eval(%.concatenv* %env) {
     %second_is_nil = icmp eq %.val* %second_next, null
     br i1 %second_is_nil, label %return_second, label %addref_to_second_next
   return_second:
+    call fastcc void @.concatval.freeenv(%.concatenv* %env)
     ret { i1, %.val* } %eval_second
   addref_to_second_next:
     call fastcc %.val* @.addref(%.val* %second_next)
     br label %return_second
   continue_first:
     %next = call fastcc %.val* @.concatval(%.val* %first_next, %.val* %second)
+    call fastcc void @.concatval.freeenv(%.concatenv* %env)
     %result = insertvalue { i1, %.val* } %eval_first, %.val* %next, 1
     ret { i1, %.val* } %result
 }

@@ -162,6 +162,8 @@ compileFn name defns@(Defn defnParams _:_) =
         ++ ["    %v" ++ show index ++ " = call fastcc %.val* "
                 ++ fnName "" (defnName name index) ++ "("
                 ++ drop 1 (concatMap (((",%.val* %b" ++ show index ++ ".") ++) . show) (boundParamIndices defnParams)) ++ ")",
+            "    call fastcc void @.funcall" ++ show arity
+                ++ "val.freeenv([" ++ show arity ++ " x %.val*]* %env)",
             "    %r" ++ show index
                 ++ " = tail call fastcc { i1, %.val* } @.eval(%.val* %v"
                 ++ show index ++ ")",
