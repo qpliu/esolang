@@ -82,7 +82,7 @@ compileArities fns = concatMap compileArity arities
     defnArity (Defn defnParams _) = length (filter isParamBound defnParams)
     compileArity :: Int -> [String]
     compileArity arity =
-        ["define private %.val* @.funcall" ++ show arity
+        ["define private fastcc %.val* @.funcall" ++ show arity
              ++ "val({ i1, %.val* } ([" ++ show arity ++ " x %.val*]*)* %eval"
              ++ concatMap ((",%.val* %a" ++) . show) [1..arity]
              ++ ") {"]
@@ -92,7 +92,7 @@ compileArities fns = concatMap compileArity arities
             "    %val = tail call fastcc %.val* @.newval({i1,%.val*}(i8*)* %eval_for_newval, void (i8*)* %freeenv, i8* %env_from_alloc)",
             "    ret %.val* %val",
             "}",
-            "define private void @.funcall" ++ show arity
+            "define private fastcc void @.funcall" ++ show arity
                 ++ "val.freeenv([" ++ show arity ++ " x %.val*]* %env) {"]
         ++ concatMap (compileDerefEnvVal arity) [1..arity]
         ++ (if arity == 0
