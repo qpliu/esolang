@@ -249,9 +249,49 @@ compileDefn name index (Defn defnParams defnExprs) =
     defnEval =
         ["define private fastcc { i1, %.val* } "
              ++ fnName ".eval" (defnName name index)
-             ++ "([" ++ show arity ++ " x %.val*]* %env) {",
-         "    ret { i1, %.val* } undef",
-         "}"]
+             ++ "([" ++ show arity ++ " x %.val*]* %env) {"]
+        ++ compileExprs arity "e" 0 defnExprs
+        ++ ["    call fastcc %.val* @.addref(%.val* %e0)",
+            "    call fastcc void @.funcall" ++ show arity
+                ++ "val.freeenv([" ++ show arity ++ " x %.val*]* %env)",
+            "    %r = call fastcc { i1, %.val* } @.eval(%.val* %e0)",
+            "    call fastcc void @.deref(%.val* %e0)",
+            "    ret { i1, %.val* } %r",
+            "}"]
+
+compileExprs :: Int -> String -> Int -> [Expr] -> [String]
+compileExprs arity result index [] =
+    ["    %" ++ result ++ show index ++ " = bitcast %.val* @.nil to %.val*"]
+compileExprs arity result index [expr] =
+    compileExpr arity (result ++ show index) expr
+compileExprs arity result index (expr:exprs) =
+    compileExpr arity (result ++ show index ++ ".head") expr
+    ++ compileExprs arity result (index + 1) exprs
+    ++ ["    %" ++ result ++ show index
+            ++ " = tail call fastcc %.val* @.concatval(%.val* %"
+            ++ result ++ show index ++ ".head" ++ ",%.val* %"
+            ++ result ++ show (index + 1) ++ ")"]
+
+compileExpr :: Int -> String -> Expr -> [String]
+compileExpr arity result (ExprLiteral bits) =
+    ["    %" ++ result
+         ++ " = call fastcc %.val* @.literalval([0 x i1]* bitcast (["
+         ++ show (length bits) ++ " x i1]* " ++ constantName bits
+         ++ " to [0 x i1]*), i32 " ++ show (length bits) ++ ", i32 0)"]
+compileExpr arity result (ExprParam index) =
+    ["    %_" ++ result ++ " = getelementptr [" ++ show arity
+         ++ " x %.val*]* %env, i32 0, i32 " ++ show index,
+     "    %" ++ result ++ " = load %.val** %_" ++ result]
+compileExpr arity result (ExprFuncall name exprs) =
+    concat (zipWith (compileExpr arity)
+                    (map (((result ++ ".") ++) . show) [0..])
+                    exprs)
+    ++ ["    %" ++ result ++ " = call fastcc %.val* "
+            ++ fnName "" name ++ "("
+            ++ drop 1 (concatMap (((",%.val* %" ++ result ++ ".") ++) . show
+                                                                      . fst)
+                                 (zip [0..] exprs))
+            ++ ")"]
 
 fnName :: String -> String -> String
 fnName section name = "@\"01_" ++ mangleName name ++ section ++ "\""
