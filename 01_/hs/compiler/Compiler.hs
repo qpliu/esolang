@@ -147,39 +147,115 @@ compileFn name defns@(Defn defnParams _:_) =
          "}"]
     fnEval =
         ["define private fastcc { i1, %.val* } " ++ fnName ".eval" name
-             ++ "([" ++ show arity ++ " x %.val*]* %env) {"]
-        ++ ["    ; match patterns"]
-        ++ ["    call fastcc void @.match_failure(i8* getelementptr (["
+             ++ "([" ++ show arity ++ " x %.val*]* %env) {",
+         "    br label %p0"]
+        ++ concat (zipWith evalPatternMatch [0..] defns)
+        ++ ["  p" ++ show (length defns) ++ ":",
+            "    call fastcc void @.match_failure(i8* getelementptr (["
                  ++ show (length name + 1) ++ " x i8]* "
                  ++ fnName ".name" name ++ ", i32 0, i32 0))",
             "    unreachable",
             "}"]
+    evalPatternMatch index (Defn defnParams _) =
+        ["  p" ++ show index ++ ":"]
+        ++ concat (zipWith (evalMatchParam index) [0..] defnParams)
+        ++ ["    %v" ++ show index ++ " = call fastcc %.val* "
+                ++ fnName "" (defnName name index) ++ "("
+                ++ drop 1 (concatMap (((",%.val* %b" ++ show index ++ ".") ++) . show) (boundParamIndices defnParams)) ++ ")",
+            "    %r" ++ show index
+                ++ " = tail call fastcc { i1, %.val* } @.eval(%.val* %v"
+                ++ show index ++ ")",
+            "    ret { i1, %.val* } %r" ++ show index]
+    evalMatchParam index paramIndex (ParamBound bits) =
+        evalMatchParamBits index paramIndex bits
+        ++ ["    %b" ++ show index ++ "." ++ show paramIndex
+                ++ " = bitcast %.val* %"
+                ++ bitSymbol index paramIndex (length bits) ""
+                ++ " to %.val*"]
+    evalMatchParam index paramIndex (ParamLiteral bits) =
+        evalMatchParamBits index paramIndex bits
+        ++ ["    %" ++ bitSymbol index paramIndex (length bits) ".eval"
+                ++ " = call fastcc { i1, %.val* } @.eval(%.val* %"
+                ++ bitSymbol index paramIndex (length bits) ""
+                ++ ")",
+            "    %" ++ bitSymbol index paramIndex (length bits + 1) ""
+                ++ " = extractvalue { i1, %.val* } %"
+                ++ bitSymbol index paramIndex (length bits) ".eval" ++ ", 1",
+            "    %" ++ bitSymbol index paramIndex (length bits) ".is_nil"
+                ++ " = icmp eq %.val* null, %"
+                ++ bitSymbol index paramIndex (length bits + 1) "",
+            "    br i1 %" ++ bitSymbol index paramIndex (length bits) ".is_nil"
+                ++ ", label %"
+                ++ bitSymbol index paramIndex (length bits) ".match"
+                ++ ", label %p" ++ show (index + 1),
+            "  " ++ bitSymbol index paramIndex (length bits) ".match" ++ ":"]
+    evalMatchParam index paramIndex (ParamWild bits) =
+        evalMatchParamBits index paramIndex bits
+    evalMatchParamBits index paramIndex bits =
+        ["    %_" ++ bitSymbol index paramIndex 0 ""
+             ++ " = getelementptr [" ++ show arity
+             ++ " x %.val*]* %env, i32 0, i32 " ++ show paramIndex,
+         "    %" ++ bitSymbol index paramIndex 0 ""
+             ++ " = load %.val** %_" ++ bitSymbol index paramIndex 0 ""]
+        ++ concat (zipWith (evalMatchParamBit index paramIndex) [0..] bits)
+    evalMatchParamBit index paramIndex bitIndex bit =
+        ["    %" ++ bitSymbol index paramIndex bitIndex ".eval"
+             ++ " = call fastcc { i1, %.val* } @.eval(%.val* %"
+             ++ bitSymbol index paramIndex bitIndex ""
+             ++ ")",
+         "    %" ++ bitSymbol index paramIndex (bitIndex + 1) ""
+             ++ " = extractvalue { i1, %.val* } %"
+             ++ bitSymbol index paramIndex bitIndex ".eval" ++ ", 1",
+         "    %" ++ bitSymbol index paramIndex bitIndex ".is_nil"
+             ++ " = icmp eq %.val* null, %"
+             ++ bitSymbol index paramIndex (bitIndex + 1) "",
+         "    br i1 %" ++ bitSymbol index paramIndex bitIndex ".is_nil"
+             ++ ", label %p" ++ show (index + 1) ++ ", label %"
+             ++ bitSymbol index paramIndex bitIndex ".not_nil",
+         "  " ++ bitSymbol index paramIndex bitIndex ".not_nil:",
+         "    %" ++ bitSymbol index paramIndex bitIndex ".bit"
+             ++ " = extractvalue { i1, %.val* } %"
+             ++ bitSymbol index paramIndex bitIndex ".eval" ++ ", 0",
+         let matchLabel = bitSymbol index paramIndex bitIndex ".match"
+             notMatchLabel = "p" ++ show (index + 1)
+         in  "    br i1 %" ++ bitSymbol index paramIndex bitIndex ".bit"
+                 ++ ", label %" ++ (if bit then matchLabel else notMatchLabel)
+                 ++ ", label %" ++ (if bit then notMatchLabel else matchLabel),
+         "  " ++ bitSymbol index paramIndex bitIndex ".match:"]
+    bitSymbol index paramIndex bitIndex code =
+        "b" ++ show index ++ "." ++ show paramIndex
+             ++ "." ++ show bitIndex ++ code
+    boundParamIndices defnParams =
+        map snd (filter (isParamBound . fst) (zip defnParams [0..]))
 
 compileDefn :: String -> Int -> Defn -> [String]
-compileDefn name sequenceNumber (Defn defnParams defnExprs) =
+compileDefn name index (Defn defnParams defnExprs) =
     defnPromise ++ defnEval
   where
     arity = length (filter isParamBound defnParams)
-    defnName = name ++ "_" ++ show sequenceNumber
     defnPromise =
-        ["define private fastcc %.val* " ++ fnName "" defnName ++ "("
-             ++ drop 1 (concatMap ((",%.val* %a" ++) . show) [1..arity])
+        ["define private fastcc %.val* " ++ fnName "" (defnName name index)
+             ++ "(" ++ drop 1 (concatMap ((",%.val* %a" ++) . show) [1..arity])
              ++ ") {",
          "    %val = tail call fastcc %.val* @.funcall" ++ show arity
                 ++ "val({i1,%.val*}([" ++ show arity ++ " x %.val*]*)* "
-                ++ fnName ".eval" defnName
+                ++ fnName ".eval" (defnName name index)
                 ++ concatMap ((",%.val* %a" ++) . show) [1..arity]
                 ++ ")",
          "    ret %.val* %val",
          "}"]
     defnEval =
-        ["define private fastcc { i1, %.val* } " ++ fnName ".eval" defnName
+        ["define private fastcc { i1, %.val* } "
+             ++ fnName ".eval" (defnName name index)
              ++ "([" ++ show arity ++ " x %.val*]* %env) {",
          "    ret { i1, %.val* } undef",
          "}"]
 
 fnName :: String -> String -> String
 fnName section name = "@\"01_" ++ mangleName name ++ section ++ "\""
+
+defnName :: String -> Int -> String
+defnName name index = name ++ '_' : show index
 
 mangleName :: String -> String
 mangleName name = foldr mangle "" name
