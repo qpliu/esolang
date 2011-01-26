@@ -6,6 +6,7 @@ declare i8* @malloc(i32)
 declare void @free(i8*)
 
 define fastcc void @.free(i8* %ptr) {
+    ;call fastcc void @.print_debug_free(i8* %ptr)
     %alloc_count_old = load i32* @.alloc_count
     %alloc_count_new = sub i32 %alloc_count_old, 1
     store i32 %alloc_count_new, i32* @.alloc_count
@@ -18,6 +19,7 @@ define fastcc i8* @.alloc(i32 %size) {
     %alloc_count_new = add i32 %alloc_count_old, 1
     store i32 %alloc_count_new, i32* @.alloc_count
     %ptr = call i8* @malloc(i32 %size)
+    ;call fastcc void @.print_debug_allocate(i8* %ptr, i32 %size)
     ret i8* %ptr
 }
 
@@ -34,6 +36,7 @@ define fastcc i8* @.alloc(i32 %size) {
 @.nil = linkonce_odr global %.val { i32 1, i1 undef, %.val* null, { i1, %.val* } (i8*)* null, void (i8*)* undef, i8* undef }
 
 define fastcc %.val* @.addref(%.val* %val) {
+    ;call fastcc void @.print_debug_addref(%.val* %val)
     %_refcount = getelementptr %.val* %val, i32 0, i32 0
     %refcount_old = load i32* %_refcount
     %refcount_new = add i32 %refcount_old, 1
@@ -42,6 +45,7 @@ define fastcc %.val* @.addref(%.val* %val) {
 }
 
 define fastcc void @.deref(%.val* %val) {
+    ;call fastcc void @.print_debug_deref(%.val* %val)
     ; decrement reference count
     %_refcount = getelementptr %.val* %val, i32 0, i32 0
     %refcount_old = load i32* %_refcount
@@ -99,6 +103,7 @@ define fastcc %.val* @.newval({i1, %.val*} (i8*)* %eval, void (i8*)* %freeenv, i
     store void (i8*)* %freeenv, void (i8*)** %_freeenv
     %_env = getelementptr %.val* %val, i32 0, i32 5
     store i8* %env, i8** %_env
+    ;call fastcc void @.print_debug_newval(%.val* %val)
     ret %.val* %val
 }
 
@@ -125,6 +130,19 @@ define fastcc { i1, %.val* } @.eval(%.val* %val) {
     store %.val* %new_next, %.val** %_next
     store { i1, %.val* } (i8*)* null, { i1, %.val* } (i8*)** %_eval
     ret { i1, %.val* } %result
+}
+
+define fastcc { i1, %.val* } @.evalderef(%.val* %val) {
+    %eval = call fastcc { i1, %.val* } @.eval(%.val* %val)
+    %next = extractvalue { i1, %.val* } %eval, 1
+    %is_nil = icmp eq %.val* %next, null
+    br i1 %is_nil, label %deref_val, label %addref_next
+  addref_next:
+    call fastcc %.val* @.addref(%.val* %next)
+    br label %deref_val
+  deref_val:
+    call fastcc void @.deref(%.val* %val)
+    ret { i1, %.val* } %eval
 }
 
 ; literal values
@@ -367,17 +385,14 @@ define fastcc void @.print(%.val* %val) {
     br label %next_bit
   next_bit:
     %v = load %.val** %_v
-    %eval = call fastcc { i1, %.val* } @.eval(%.val* %v)
+    %eval = call fastcc { i1, %.val* } @.evalderef(%.val* %v)
     %next = extractvalue { i1, %.val* } %eval, 1
     %is_nil = icmp eq %.val* %next, null
     br i1 %is_nil, label %done, label %continue
   done:
-    call fastcc void @.deref(%.val* %v)
     ret void
   continue:
     store %.val* %next, %.val** %_v
-    call fastcc %.val* @.addref(%.val* %next)
-    call fastcc void @.deref(%.val* %v)
     %bit = extractvalue { i1, %.val* } %eval, 0
     %bit1 = zext i1 %bit to i32
     %shift = load i32* %_shift
@@ -450,5 +465,47 @@ define fastcc void @.print_debug_memory() {
     %alloc_count = load i32* @.alloc_count
     %nil_refcount = load i32* getelementptr (%.val* @.nil, i32 0, i32 0)
     tail call void (i8*,...)* @printf(i8* getelementptr ([33 x i8]* @.print_debug_memory_format, i32 0, i32 0), i32 %alloc_count, i32 %nil_refcount)
+    ret void
+}
+
+@.print_debug_allocate_format = private constant [17 x i8] c"[allocate:%d:%d]\00"
+@.print_debug_free_format = private constant [10 x i8] c"[free:%d]\00"
+@.print_debug_addref_format = private constant [15 x i8] c"[addref:%d:%d]\00"
+@.print_debug_deref_format = private constant [14 x i8] c"[deref:%d:%d]\00"
+@.print_debug_newval_format = private constant [15 x i8] c"[newval:%d:%d]\00"
+
+define fastcc void @.print_debug_allocate(i8* %ptr, i32 %size) {
+    %1 = ptrtoint i8* %ptr to i32
+    tail call void (i8*,...)* @printf(i8* getelementptr ([17 x i8]* @.print_debug_allocate_format, i32 0, i32 0), i32 %1, i32 %size)
+    ret void
+}
+
+define fastcc void @.print_debug_free(i8* %ptr) {
+    %1 = ptrtoint i8* %ptr to i32
+    tail call void (i8*,...)* @printf(i8* getelementptr ([10 x i8]* @.print_debug_free_format, i32 0, i32 0), i32 %1)
+    ret void
+}
+
+define fastcc void @.print_debug_addref(%.val* %val) {
+    %1 = ptrtoint %.val* %val to i32
+    %2 = getelementptr %.val* %val, i32 0, i32 0
+    %3 = load i32* %2
+    tail call void (i8*,...)* @printf(i8* getelementptr ([15 x i8]* @.print_debug_addref_format, i32 0, i32 0), i32 %1, i32 %3)
+    ret void
+}
+
+define fastcc void @.print_debug_deref(%.val* %val) {
+    %1 = ptrtoint %.val* %val to i32
+    %2 = getelementptr %.val* %val, i32 0, i32 0
+    %3 = load i32* %2
+    tail call void (i8*,...)* @printf(i8* getelementptr ([14 x i8]* @.print_debug_deref_format, i32 0, i32 0), i32 %1, i32 %3)
+    ret void
+}
+
+define fastcc void @.print_debug_newval(%.val* %val) {
+    %1 = ptrtoint %.val* %val to i32
+    %2 = getelementptr %.val* %val, i32 0, i32 0
+    %3 = load i32* %2
+    tail call void (i8*,...)* @printf(i8* getelementptr ([15 x i8]* @.print_debug_newval_format, i32 0, i32 0), i32 %1, i32 %3)
     ret void
 }

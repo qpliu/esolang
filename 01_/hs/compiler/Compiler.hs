@@ -32,6 +32,7 @@ runtime =
      "declare fastcc void @.deref(%.val*)",
      "declare fastcc %.val* @.newval({i1,%.val*} (i8*)*, void (i8*)*, i8*)",
      "declare fastcc { i1, %.val* } @.eval(%.val*)",
+     "declare fastcc { i1, %.val* } @.evalderef(%.val*)",
      "declare fastcc %.val* @.literalval([0 x i1]*, i32, i32)",
      "declare fastcc %.val* @.fileval(i32, i8, i8)",
      "declare fastcc %.val* @.unopenedfileval(i8*)",
@@ -165,7 +166,7 @@ compileFn name defns@(Defn defnParams _:_) =
             "    call fastcc void @.funcall" ++ show arity
                 ++ "val.freeenv([" ++ show arity ++ " x %.val*]* %env)",
             "    %r" ++ show index
-                ++ " = tail call fastcc { i1, %.val* } @.eval(%.val* %v"
+                ++ " = tail call fastcc { i1, %.val* } @.evalderef(%.val* %v"
                 ++ show index ++ ")",
             "    ret { i1, %.val* } %r" ++ show index]
     evalMatchParam index paramIndex (ParamBound bits) =
@@ -251,11 +252,9 @@ compileDefn name index (Defn defnParams defnExprs) =
              ++ fnName ".eval" (defnName name index)
              ++ "([" ++ show arity ++ " x %.val*]* %env) {"]
         ++ compileExprs arity "e" 0 defnExprs
-        ++ ["    call fastcc %.val* @.addref(%.val* %e0)",
-            "    call fastcc void @.funcall" ++ show arity
+        ++ ["    call fastcc void @.funcall" ++ show arity
                 ++ "val.freeenv([" ++ show arity ++ " x %.val*]* %env)",
-            "    %r = call fastcc { i1, %.val* } @.eval(%.val* %e0)",
-            "    call fastcc void @.deref(%.val* %e0)",
+            "    %r = tail call fastcc { i1, %.val* } @.evalderef(%.val* %e0)",
             "    ret { i1, %.val* } %r",
             "}"]
 
@@ -270,6 +269,10 @@ compileExprs arity result index (expr:exprs) =
     ++ ["    %" ++ result ++ show index
             ++ " = tail call fastcc %.val* @.concatval(%.val* %"
             ++ result ++ show index ++ ".head" ++ ",%.val* %"
+            ++ result ++ show (index + 1) ++ ")",
+        "    call fastcc void @.deref(%.val* %"
+            ++ result ++ show index ++ ".head)",
+        "    call fastcc void @.deref(%.val* %"
             ++ result ++ show (index + 1) ++ ")"]
 
 compileExpr :: Int -> String -> Expr -> [String]
@@ -281,7 +284,8 @@ compileExpr arity result (ExprLiteral bits) =
 compileExpr arity result (ExprParam index) =
     ["    %_" ++ result ++ " = getelementptr [" ++ show arity
          ++ " x %.val*]* %env, i32 0, i32 " ++ show index,
-     "    %" ++ result ++ " = load %.val** %_" ++ result]
+     "    %" ++ result ++ " = load %.val** %_" ++ result,
+     "    call fastcc %.val* @.addref(%.val* %" ++ result ++ ")"]
 compileExpr arity result (ExprFuncall name exprs) =
     concat (zipWith (compileExpr arity)
                     (map (((result ++ ".") ++) . show) [0..])
@@ -292,6 +296,8 @@ compileExpr arity result (ExprFuncall name exprs) =
                                                                       . fst)
                                  (zip [0..] exprs))
             ++ ")"]
+    ++ ["    call fastcc void @.deref(%.val* %" ++ result ++ "." ++ show i
+            ++ ")" | i <- map fst (zip [0..] exprs)]
 
 fnName :: String -> String -> String
 fnName section name = "@\"01_" ++ mangleName name ++ section ++ "\""
