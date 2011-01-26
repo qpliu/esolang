@@ -61,7 +61,7 @@ param = do
 lastParam :: Parser Param1
 lastParam = do
     position <- getPosition
-    fmap (Param1Literal position) (many1 bit)
+    fmap (Param1Wild position) (many1 bit)
 
 expr :: Parser Expr1
 expr = do
