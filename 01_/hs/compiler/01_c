@@ -1,0 +1,26 @@
+#!/bin/sh
+
+LLVM_HOME=/Users/qpliu/Documents/stuff/llvm-2.8/Release
+_01_HOME=/Users/qpliu/Documents/stuff/yrek/esolang/01_/hs/compiler
+_01_COMPILE="runghc $_01_HOME/compile.hs"
+
+if [ "$#" = 0 ]
+then
+    echo "Usage: $0 [-o OUTPUT-FILE] [-d] SOURCE-FILE ... [- MAIN-FUNCTION-NAME]" 1>&2
+    exit 1
+fi
+
+MINUS_O=
+MINUS_O_FILE=
+if [ "$1" = -o ]
+then
+    shift
+    MINUS_O=-o
+    MINUS_O_FILE="$1"
+    shift
+fi
+
+$_01_COMPILE "$@" | $LLVM_HOME/bin/llvm-link - $_01_HOME/01_runtime.ll \
+    | $LLVM_HOME/bin/llc > /tmp/$$.s
+cc $MINUS_O "$MINUS_O_FILE" /tmp/$$.s
+rm /tmp/$$.s
