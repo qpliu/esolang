@@ -5,7 +5,7 @@ import System.Environment(getArgs)
 
 import Flattener(Expr(Arg,Quote,CarFn,CdrFn,ConsFn,If,Call),flatten)
 import Parser(parse)
-import Reader(Value(Cons,Nil),readValue)
+import Reader(Value(Cons,Nil))
 
 main :: IO ()
 main = do
@@ -22,7 +22,7 @@ handleArgs (file:_) = runParameters (readFile file) getContents outputBits
 runParameters :: IO String -> IO String -> (Value -> IO ())
                            -> IO (Map.Map Int Expr,Expr,Value,Value -> IO ())
 runParameters getSource getInput outputValue = do
-    (fns,expr) <- fmap (flatten . parse . readValue) getSource
+    (fns,expr) <- fmap (flatten . parse . read) getSource
     input <- fmap (bitsToValue . stringToBits) getInput
     return (Map.map snd fns,expr,input,outputValue)
 
