@@ -39,15 +39,13 @@ constants fns expr =
     collectConstants (Call _ expr) map = collectConstants expr map
 
 compileConstant :: Map.Map Value Int -> (Value,Int) -> String
-compileConstant consts (Nil,index) =
-    "@C" ++ show index ++ " = global %val { i32 1, "
-         ++ "%val* null, %val* null, %eval (i8*)* null, "
-         ++ "void (i8*)* null, i8* null }"
+compileConstant consts (Nil,index) = ""
 compileConstant consts (Cons car cdr,index) =
     "@C" ++ show index ++ " = global %val { i32 1, "
          ++ "%val* @C" ++ show ((Map.!) consts car) ++ ", "
          ++ "%val* @C" ++ show ((Map.!) consts cdr) ++ ", "
          ++ "void (i8*)* null, i8* null }"
+         ++ " ; " ++ show (Cons car cdr)
 
 compileFn :: (Int -> String) -> Map.Map Value Int -> (Int,Expr) -> [String]
 compileFn names consts (index,expr) =
