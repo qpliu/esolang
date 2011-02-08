@@ -1,0 +1,57 @@
+#!/bin/sh
+
+LLVM_HOME=/Users/qpliu/Documents/stuff/llvm-2.8/Release
+PH_HOME=/Users/qpliu/Documents/stuff/yrek/esolang/01_/hs/compiler
+PH_COMPILE="runghc $PH_HOME/compile.hs"
+
+MINUS_O=
+MINUS_O_FILE=
+MAIN=main-
+while :
+do
+    if [ "$1" = -o ]
+    then
+        shift
+        MINUS_O=-o
+        MINUS_O_FILE="$1"
+        shift
+        continue
+    fi
+    if [ "$1" = -d ]
+    then
+        shift
+        if [ "$MAIN" = main- ]
+        then MAIN=main-d
+        else MAIN=main-d-v
+        fi
+        continue
+    fi
+    if [ "$1" = -v ]
+    then
+        shift
+        if [ "$MAIN" = main- ]
+        then MAIN=main-v
+        else MAIN=main-d-v
+        fi
+        continue
+    fi
+    break
+done
+
+if [ "$#" = 0 ]
+then
+    echo "Usage: $0 [-d] [-v] [-o OUTPUT-FILE] SOURCE-FILE"
+    exit 1
+fi
+
+cat >/tmp/$$.ll <<.
+define void @main() {
+    tail call fastcc void @"($MAIN)"()
+    ret void
+}
+.
+
+$PH_COMPILE "$@" | $LLVM_HOME/bin/llvm-link - $PH_HOME/runtime.ll /tmp/$$.ll \
+    | $LLVM_HOME/bin/llc > /tmp/$$.s
+cc $MINUS_O "$MINUS_O_FILE" /tmp/$$.s
+rm /tmp/$$.s /tmp/$$.ll

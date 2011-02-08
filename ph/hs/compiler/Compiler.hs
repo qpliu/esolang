@@ -10,10 +10,23 @@ compile (fns,expr) =
     let names index =
             "@\"" ++ show index ++ show (fst ((Map.!) fns index)) ++ "\""
         consts = constants fns expr
-    in  unlines (map (compileConstant consts) (Map.assocs consts)
+    in  unlines (runtime
+                 ++ map (compileConstant consts) (Map.assocs consts)
                  ++ concatMap (compileFn names consts)
                               (Map.assocs (Map.map snd fns))
                  ++ compileMain names consts expr)
+
+runtime :: [String]
+runtime =
+    ["%val = type { i32, %val*, %val*, %eval (i8*)*, void (i8*)*, i8* }",
+     "%eval = type { %val*, %val* }",
+     "declare fastcc %val* @"(addref)"(%val*)",
+     "declare fastcc void @"(deref)"(%val*)",
+     "declare fastcc %val* @"(car)"(%val*)",
+     "declare fastcc %val* @"(cdr)"(%val*)",
+     "declare fastcc %val* @"(cons)"(%val*,%val*)",
+     "declare fastcc %val* @"(if)"(%val*,%val*,%val*)",
+     "@C0 = external global %val"]
 
 constants :: Map.Map Int (Value,Expr) -> Expr -> Map.Map Value Int
 constants fns expr =
@@ -44,7 +57,7 @@ compileConstant consts (Cons car cdr,index) =
     "@C" ++ show index ++ " = global %val { i32 1, "
          ++ "%val* @C" ++ show ((Map.!) consts car) ++ ", "
          ++ "%val* @C" ++ show ((Map.!) consts cdr) ++ ", "
-         ++ "void (i8*)* null, i8* null }"
+         ++ "%eval (i8*)* null, void (i8*)* null, i8* null }"
          ++ " ; " ++ show (Cons car cdr)
 
 compileFn :: (Int -> String) -> Map.Map Value Int -> (Int,Expr) -> [String]
