@@ -1,7 +1,7 @@
 #!/bin/sh
 
 LLVM_HOME=/Users/qpliu/Documents/stuff/llvm-2.8/Release
-PH_HOME=/Users/qpliu/Documents/stuff/yrek/esolang/01_/hs/compiler
+PH_HOME=/Users/qpliu/Documents/stuff/yrek/esolang/ph/hs/compiler
 PH_COMPILE="runghc $PH_HOME/compile.hs"
 
 MINUS_O=
@@ -44,14 +44,17 @@ then
     exit 1
 fi
 
-cat >/tmp/$$.ll <<.
+$PH_COMPILE "$@" > /tmp/$$.ll
+
+cat >>/tmp/$$.ll <<.
+declare fastcc void @"($MAIN)"()
 define void @main() {
     tail call fastcc void @"($MAIN)"()
     ret void
 }
 .
 
-$PH_COMPILE "$@" | $LLVM_HOME/bin/llvm-link - $PH_HOME/runtime.ll /tmp/$$.ll \
+$LLVM_HOME/bin/llvm-link $PH_HOME/runtime.ll /tmp/$$.ll \
     | $LLVM_HOME/bin/llc > /tmp/$$.s
 cc $MINUS_O "$MINUS_O_FILE" /tmp/$$.s
 rm /tmp/$$.s /tmp/$$.ll

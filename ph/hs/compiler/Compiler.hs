@@ -20,12 +20,12 @@ runtime :: [String]
 runtime =
     ["%val = type { i32, %val*, %val*, %eval (i8*)*, void (i8*)*, i8* }",
      "%eval = type { %val*, %val* }",
-     "declare fastcc %val* @"(addref)"(%val*)",
-     "declare fastcc void @"(deref)"(%val*)",
-     "declare fastcc %val* @"(car)"(%val*)",
-     "declare fastcc %val* @"(cdr)"(%val*)",
-     "declare fastcc %val* @"(cons)"(%val*,%val*)",
-     "declare fastcc %val* @"(if)"(%val*,%val*,%val*)",
+     "declare fastcc %val* @\"(addref)\"(%val*)",
+     "declare fastcc void @\"(deref)\"(%val*)",
+     "declare fastcc %val* @\"(car)\"(%val*)",
+     "declare fastcc %val* @\"(cdr)\"(%val*)",
+     "declare fastcc %val* @\"(cons)\"(%val*,%val*)",
+     "declare fastcc %val* @\"(if)\"(%val*,%val*,%val*)",
      "@C0 = external global %val"]
 
 constants :: Map.Map Int (Value,Expr) -> Expr -> Map.Map Value Int
@@ -69,4 +69,58 @@ compileMain names consts expr = compileFunc names consts "@\"(main)\"" expr
 
 compileFunc :: (Int -> String) -> Map.Map Value Int -> String -> Expr
                                -> [String]
-compileFunc names consts name expr = undefined
+compileFunc names consts name expr =
+    let (result,exprCode) = compileExpr names consts 1 expr
+    in  ["define fastcc %val* " ++ name ++ "(%val* %val) {"]
+        ++ exprCode
+        ++ ["    call fastcc void @\"(deref)\"(%val* %val)",
+            "    ret %val* %" ++ show result,
+            "}"]
+
+compileExpr :: (Int -> String) -> Map.Map Value Int -> Int -> Expr
+                               -> (Int,[String])
+compileExpr names consts exprIndex Arg =
+    (exprIndex,["    %" ++ show exprIndex
+                ++ " = call fastcc %val* @\"(addref)\"(%val* %val)"])
+compileExpr names consts exprIndex (Quote value) =
+    (exprIndex,["    %" ++ show exprIndex
+                ++ " = call fastcc %val* @\"(addref)\"(%val* @C"
+                ++ show ((Map.!) consts value) ++ ")"])
+compileExpr names consts exprIndex (CarFn expr) =
+    let (argIndex,argCode) = compileExpr names consts exprIndex expr
+    in  (argIndex+1,argCode
+                    ++ ["    %" ++ show (argIndex+1)
+                        ++ " = call fastcc %val* @\"(car)\"(%val* %"
+                        ++ show argIndex ++ ")"])
+compileExpr names consts exprIndex (CdrFn expr) =
+    let (argIndex,argCode) = compileExpr names consts exprIndex expr
+    in  (argIndex+1,argCode
+                    ++ ["    %" ++ show (argIndex+1)
+                        ++ " = call fastcc %val* @\"(cdr)\"(%val* %"
+                        ++ show argIndex ++ ")"])
+compileExpr names consts exprIndex (ConsFn car cdr) =
+    let (carIndex,carCode) = compileExpr names consts exprIndex car
+        (cdrIndex,cdrCode) = compileExpr names consts (carIndex+1) cdr
+    in  (cdrIndex+1,carCode ++ cdrCode
+                    ++ ["    %" ++ show (cdrIndex+1)
+                        ++ " = call fastcc %val* @\"(cons)\"(%val* %"
+                        ++ show carIndex ++ ", %val* %"
+                        ++ show cdrIndex ++ ")"])
+compileExpr names consts exprIndex (If cond ifTrue ifFalse) =
+    let (condIndex,condCode) = compileExpr names consts exprIndex cond
+        (ifTrueIndex,ifTrueCode) =
+            compileExpr names consts (condIndex+1) ifTrue
+        (ifFalseIndex,ifFalseCode) =
+            compileExpr names consts (ifTrueIndex+1) ifFalse
+    in  (ifFalseIndex+1,condCode ++ ifTrueCode ++ ifFalseCode
+                        ++ ["    %" ++ show (ifFalseIndex+1)
+                            ++ " = call fastcc %val* @\"(if)\"(%val* %"
+                            ++ show condIndex ++ ", %val* %"
+                            ++ show ifTrueIndex ++ ", %val* %"
+                            ++ show ifFalseIndex ++ ")"])
+compileExpr names consts exprIndex (Call callIndex expr) =
+    let (argIndex,argCode) = compileExpr names consts exprIndex expr
+    in  (argIndex+1,argCode
+                    ++ ["    %" ++ show (argIndex+1)
+                        ++ " = call fastcc %val* " ++ names callIndex
+                        ++ "(%val* %" ++ show argIndex ++ ")"])

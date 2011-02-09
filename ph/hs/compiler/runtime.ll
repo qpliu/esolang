@@ -147,7 +147,6 @@ define fastcc %val* @"(new-val)"(%eval (i8*)* %eval, void (i8*)* %freeenv, i8* %
 }
 
 define fastcc %val* @"(car)"(%val* %val) {
-    call fastcc %val* @"(addref)"(%val* %val)
     %eval = bitcast %eval (%val*)* @"(car-eval)" to %eval (i8*)*
     %freeenv = bitcast void (%val*)* @"(deref)" to void (i8*)*
     %env = bitcast %val* %val to i8*
@@ -173,7 +172,6 @@ define fastcc %eval @"(car-eval)"(%val* %val) {
 }
 
 define fastcc %val* @"(cdr)"(%val* %val) {
-    call fastcc %val* @"(addref)"(%val* %val)
     %eval = bitcast %eval (%val*)* @"(cdr-eval)" to %eval (i8*)*
     %freeenv = bitcast void (%val*)* @"(deref)" to void (i8*)*
     %env = bitcast %val* %val to i8*
@@ -199,8 +197,6 @@ define fastcc %eval @"(cdr-eval)"(%val* %val) {
 }
 
 define fastcc %val* @"(cons)"(%val* %car, %val* %cdr) {
-    call fastcc %val* @"(addref)"(%val* %car)
-    call fastcc %val* @"(addref)"(%val* %cdr)
     %val_size = ptrtoint %val* getelementptr (%val* null, i32 1) to i32
     %val_i8 = call fastcc i8* @"(alloc)"(i32 %val_size)
     %val = bitcast i8* %val_i8 to %val*
@@ -222,13 +218,10 @@ define fastcc %val* @"(if)"(%val* %cond, %val* %if_true, %val* %if_false) {
     %env_i8 = call fastcc i8* @"(alloc)"(i32 %env_size)
     %env = bitcast i8* %env_i8 to [3 x %val*]*
     %_cond = getelementptr [3 x %val*]* %env, i32 0, i32 0
-    call fastcc %val* @"(addref)"(%val* %cond)
     store %val* %cond, %val** %_cond
     %_if_true = getelementptr [3 x %val*]* %env, i32 0, i32 1
-    call fastcc %val* @"(addref)"(%val* %if_true)
     store %val* %if_true, %val** %_if_true
     %_if_false = getelementptr [3 x %val*]* %env, i32 0, i32 2
-    call fastcc %val* @"(addref)"(%val* %if_false)
     store %val* %if_false, %val** %_if_false
     %result = tail call fastcc %val* @"(new-val)"(%eval (i8*)* %eval, void (i8*)* %freeenv, i8* %env_i8)
     ret %val* %result
@@ -300,6 +293,8 @@ define fastcc %val* @"(stdin-val)"(i8 %byte, i8 %bit) {
 }
 
 define fastcc %eval @"(stdin-eval)"([2 x i8]* %env) {
+    %_byte = getelementptr [2 x i8]* %env, i32 0, i32 0
+    %byte = load i8* %_byte
     %_bit = getelementptr [2 x i8]* %env, i32 0, i32 1
     %bit = load i8* %_bit
     %need_read_new_byte = icmp sle i8 %bit, 0
@@ -309,6 +304,7 @@ define fastcc %eval @"(stdin-eval)"([2 x i8]* %env) {
   read_new_byte:
     %_alloca_byte = alloca i8
     %count = call i32 @read(i32 0, i8* %_alloca_byte, i32 1)
+    %read_byte = load i8* %_alloca_byte
     %count_is_one = icmp eq i32 %count, 1
     br i1 %count_is_one, label %return_next_bit, label %read_fail
   read_fail:
@@ -316,25 +312,23 @@ define fastcc %eval @"(stdin-eval)"([2 x i8]* %env) {
     %nil_result = insertvalue %eval %nil_result_1, %val* null, 1
     ret %eval %nil_result
   continue_byte:
-    %_continue_byte = getelementptr [2 x i8]* %env, i32 0, i32 0
     %continue_bit = sub i8 %bit, 1
     br label %return_next_bit
   return_next_bit:
     %new_bit = phi i8 [ %continue_bit, %continue_byte ], [ 7, %read_new_byte ]
-    %_byte = phi i8* [ %_continue_byte, %continue_byte ], [ %_alloca_byte, %read_new_byte ]
-    %byte = load i8* %_byte
-    %next_val = call fastcc %val* @"(stdin-val)"(i8 %byte, i8 %new_bit)
+    %new_byte = phi i8 [ %byte, %continue_byte ], [ %read_byte, %read_new_byte ]
+    %next_val = call fastcc %val* @"(stdin-val)"(i8 %new_byte, i8 %new_bit)
     %nil_val = call fastcc %val* @"(addref)"(%val* @C0)
-    %shifted_byte = lshr i8 %byte, %new_bit
+    %shifted_byte = lshr i8 %new_byte, %new_bit
     %bit_value = trunc i8 %shifted_byte to i1
     br i1 %bit_value, label %bit_is_1, label %bit_is_0
   bit_is_1:
     %result1_1 = insertvalue %eval undef, %val* %next_val, 0
-    %result1 = insertvalue %eval undef, %val* %nil_val, 1
+    %result1 = insertvalue %eval %result1_1, %val* %nil_val, 1
     ret %eval %result1
   bit_is_0:
-    %result0_1 = insertvalue %eval undef, %val* %next_val, 1
-    %result0 = insertvalue %eval undef, %val* %nil_val, 0
+    %result0_1 = insertvalue %eval undef, %val* %nil_val, 0
+    %result0 = insertvalue %eval %result0_1, %val* %next_val, 1
     ret %eval %result0
 }
 
@@ -362,8 +356,7 @@ define fastcc void @"(print)"(%val* %initial_val) {
   on_car_is_nil:
     %_cdr = getelementptr %val* %val, i32 0, i32 2
     %cdr = load %val** %_cdr
-    %cdr_is_nil = call fastcc i1 @"(nil?)"(%val* %cdr)
-    br i1 %cdr_is_nil, label %on_val_is_nil, label %continue_loop
+    br label %continue_loop
   continue_loop:
     %next_byte = phi i8 [ %next_byte_one, %on_car_is_not_nil ], [ %byte, %on_car_is_nil ]
     %next_val = phi %val* [ %car, %on_car_is_not_nil ], [ %cdr, %on_car_is_nil ]
@@ -416,7 +409,6 @@ declare fastcc %val* @"(main)"(%val*)
 define fastcc void @"((main))"(void (%val*)* %print, void ()* %print_debug) {
     %stdin = call fastcc %val* @"(stdin)"()
     %result = call fastcc %val* @"(main)"(%val* %stdin)
-    call fastcc void @"(deref)"(%val* %stdin)
     call fastcc void %print(%val* %result)
     %print_debug_null = icmp eq void ()* %print_debug, null
     br i1 %print_debug_null, label %no_debug, label %debug
@@ -444,5 +436,11 @@ define fastcc void @"(main-v)"() {
 
 define fastcc void @"(main-d-v)"() {
     tail call fastcc void @"((main))"(void (%val*)* @"(print-val)", void ()* @"(print-debug-memory)")
+    ret void
+}
+
+@debug_fmt = private constant [8 x i8] c"[%d:%d]\00"
+define fastcc void @debug(i32 %i, i32 %j) {
+    tail call void (i8*,...)* @printf(i8* getelementptr ([8 x i8]* @debug_fmt, i32 0, i32 0), i32 %i, i32 %j)
     ret void
 }
