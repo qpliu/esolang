@@ -1,6 +1,9 @@
 package main
 
 import (
+	"./ast"
+	"./bitlist"
+	"./tokenize"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,11 +17,13 @@ type args struct {
 
 func fnName(filename string) string {
 	filename = filepath.Base(filename)
-	end := 0
-	for end < len(filename) && filename[end] != '.' {
-		end++
+	for i, c := range filename {
+		switch c {
+		case '.', '_', '0', '1', '=':
+			return filename[:i]
+		}
 	}
-	return filename[:end]
+	return filename
 }
 
 func parseArgs(arglist []string) args {
@@ -37,36 +42,37 @@ func main() {
 		return
 	}
 	args := parseArgs(os.Args[1:])
-	defs, err := Parse(Tokenize(args.srcFiles))
+	defs, err := ast.Parse(tokenize.Tokenize(args.srcFiles))
 	if err != nil {
-		fmt.Println(err.Error())
-	} else {
-		stdinArg := NewReaderBitlist(os.Stdin)
-		var defaultArg Bitlist = stdinArg
-		deflist := defs[args.fnName]
-		if deflist == nil {
-			panic(fmt.Sprintf("%s not defined", args.fnName))
-		}
-		fnArgs := []Bitlist{}
-		for i := 0; i < len(deflist[0].Parameters); i++ {
-			if i >= len(args.argFiles) {
-				fnArgs = append(fnArgs, defaultArg)
-			} else if args.argFiles[i] == "-" {
-				fnArgs = append(fnArgs, stdinArg)
-			} else {
-				file, err := os.Open(args.argFiles[i])
-				if err != nil {
-					panic(err.Error())
-				}
-				defer file.Close()
-				fnArgs = append(fnArgs, NewReaderBitlist(file))
-			}
-			defaultArg = NilBitlist
-		}
-		value := EvalFn(deflist, fnArgs)
-		if value == nil {
-			panic(fmt.Sprintf("No matching def for %s", args.fnName))
-		}
-		WriteBits(os.Stdout, value)
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
+	stdinArg := bitlist.NewReaderBitlist(os.Stdin)
+	defaultArg := stdinArg
+	deflist := defs[args.fnName]
+	if deflist == nil {
+		panic(fmt.Sprintf("%s not defined", args.fnName))
+	}
+	argCount := len(deflist[0].Parameters)
+	fnArgs := make([]bitlist.Bitlist, 0, argCount)
+	for i := 0; i < argCount; i++ {
+		if i >= len(args.argFiles) {
+			fnArgs = append(fnArgs, defaultArg)
+		} else if args.argFiles[i] == "-" {
+			fnArgs = append(fnArgs, stdinArg)
+		} else {
+			file, err := os.Open(args.argFiles[i])
+			if err != nil {
+				panic(err.Error())
+			}
+			defer file.Close()
+			fnArgs = append(fnArgs, bitlist.NewReaderBitlist(file))
+		}
+		defaultArg = bitlist.NilBitlist
+	}
+	value := ast.EvalFn(deflist, fnArgs)
+	if value == nil {
+		panic(fmt.Sprintf("No matching def for %s", args.fnName))
+	}
+	bitlist.WriteBits(os.Stdout, value)
 }

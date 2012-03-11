@@ -1,18 +1,20 @@
-package main
+package ast
 
 import (
+	"../bitlist"
+	"../tokenize"
 	"errors"
 	"fmt"
 )
 
 type def1 struct {
-	name       Token
-	parameters []Token
-	body       []Token
+	name       tokenize.Token
+	parameters []tokenize.Token
+	body       []tokenize.Token
 }
 
-func parse1(tokens <-chan Token) (map[string][]*def1, error) {
-	var name Token
+func parse1(tokens <-chan tokenize.Token) (map[string][]*def1, error) {
+	var name tokenize.Token
 	inDef := false
 	inBody := false
 	defs := make(map[string][]*def1)
@@ -60,9 +62,9 @@ func parse1(tokens <-chan Token) (map[string][]*def1, error) {
 }
 
 type def2 struct {
-	name       Token
+	name       tokenize.Token
 	parameters []Parameter
-	body       []Token
+	body       []tokenize.Token
 }
 
 func parse2(def1s map[string][]*def1) (map[string][]*def2, error) {
@@ -74,10 +76,7 @@ func parse2(def1s map[string][]*def1) (map[string][]*def2, error) {
 			if err != nil {
 				return def2s, err
 			}
-			def2item := new(def2)
-			def2item.name = def1item.name
-			def2item.parameters = parameters
-			def2item.body = def1item.body
+			def2item := &def2{def1item.name, parameters, def1item.body}
 			def2list = append(def2list, def2item)
 			if len(def2item.parameters) != len(def2list[0].parameters) {
 				return def2s, errors.New(fmt.Sprintf("%s %d-ary def does not match %d-ary def at %s",
@@ -92,7 +91,7 @@ func parse2(def1s map[string][]*def1) (map[string][]*def2, error) {
 	return def2s, nil
 }
 
-func parseBits(token Token) *LiteralBitlist {
+func parseBits(token tokenize.Token) bitlist.Bitlist {
 	if !token.IsLiteral() {
 		return nil
 	}
@@ -104,10 +103,10 @@ func parseBits(token Token) *LiteralBitlist {
 	for i := range bits {
 		bits[i] = token.Token[i] == '1'
 	}
-	return NewLiteralBitlist(bits)
+	return bitlist.NewLiteralBitlist(bits)
 }
 
-func parseParameters(tokens []Token) ([]Parameter, error) {
+func parseParameters(tokens []tokenize.Token) ([]Parameter, error) {
 	parameters := []Parameter{}
 	if tokens == nil {
 		return parameters, nil
@@ -116,16 +115,16 @@ func parseParameters(tokens []Token) ([]Parameter, error) {
 	for _, token := range tokens {
 		switch {
 		case token.IsTerminatedLiteral():
-			parameters = append(parameters, Parameter{token, parseBits(token), false, Token{}, false})
+			parameters = append(parameters, Parameter{MatchToken: token, Match: parseBits(token), Bound: false, Wild: false})
 			pendingMatch = false
 		case token.IsLiteral():
-			parameters = append(parameters, Parameter{token, parseBits(token), false, Token{}, false})
+			parameters = append(parameters, Parameter{MatchToken: token, Match: parseBits(token)})
 			pendingMatch = true
 		default:
 			if pendingMatch {
 				pendingMatch = false
 			} else {
-				parameters = append(parameters, Parameter{Token{}, nil, false, Token{}, false})
+				parameters = append(parameters, Parameter{})
 			}
 			parameter := &parameters[len(parameters)-1]
 			switch {
@@ -140,7 +139,6 @@ func parseParameters(tokens []Token) ([]Parameter, error) {
 				parameter.Wild = false
 			case token.Token == ".":
 				parameter.Bound = false
-				parameter.Bind = Token{}
 				parameter.Wild = true
 			default:
 				return parameters, errors.New(fmt.Sprintf("%s unexpected token", token.Location()))
@@ -150,7 +148,6 @@ func parseParameters(tokens []Token) ([]Parameter, error) {
 	if pendingMatch {
 		parameter := &parameters[len(parameters)-1]
 		parameter.Bound = false
-		parameter.Bind = Token{}
 		parameter.Wild = true
 	}
 	return parameters, nil
@@ -187,9 +184,9 @@ func parseDef(arities map[string]int, def2item *def2) (*Def, error) {
 	return &Def{def2item.name, def2item.parameters, body}, err
 }
 
-func parseBody(name Token, bound []string, arities map[string]int, tokens []Token) (Expr, error) {
+func parseBody(name tokenize.Token, bound []string, arities map[string]int, tokens []tokenize.Token) (Expr, error) {
 	if len(tokens) == 0 || (len(tokens) == 1 && tokens[0].Token == ".") {
-		return NewLiteralExpr(NilBitlist), nil
+		return &literalExpr{bitlist.NilBitlist}, nil
 	}
 	expr, tokens, err := parseExpr(name, bound, arities, tokens)
 	if err != nil {
@@ -199,21 +196,21 @@ func parseBody(name Token, bound []string, arities map[string]int, tokens []Toke
 		return expr, nil
 	}
 	rest, err := parseBody(name, bound, arities, tokens)
-	return NewConcatExpr(expr, rest), err
+	return &concatExpr{first: expr, last: rest}, err
 }
 
-func parseExpr(name Token, bound []string, arities map[string]int, tokens []Token) (Expr, []Token, error) {
+func parseExpr(name tokenize.Token, bound []string, arities map[string]int, tokens []tokenize.Token) (Expr, []tokenize.Token, error) {
 	switch {
 	case len(tokens) == 0:
 		return nil, tokens, errors.New(fmt.Sprintf("%s unexpected end of def %s", name.Location(), name.Token))
 	case tokens[0].Token == "." || tokens[0].Token == "=":
 		return nil, tokens[1:], errors.New(fmt.Sprintf("%s unexpected end of def %s", tokens[0].Location(), name.Token))
 	case tokens[0].IsLiteral():
-		return NewLiteralExpr(parseBits(tokens[0])), tokens[1:], nil
+		return &literalExpr{parseBits(tokens[0])}, tokens[1:], nil
 	}
 	for index, parameter := range bound {
 		if parameter == tokens[0].Token {
-			return NewBoundExpr(tokens[0], index), tokens[1:], nil
+			return &boundExpr{name: tokens[0], index: index}, tokens[1:], nil
 		}
 	}
 	arity, defined := arities[tokens[0].Token]
@@ -230,10 +227,23 @@ func parseExpr(name Token, bound []string, arities map[string]int, tokens []Toke
 		}
 		argExprs = append(argExprs, argExpr)
 	}
-	return NewFuncallExpr(tokens[0], argExprs), argTokens, nil
+	return &funcallExpr{name: tokens[0], argExprs: argExprs}, argTokens, nil
 }
 
-func Parse(tokens <-chan Token) (map[string][]*Def, error) {
+func initFuncalls(expr Expr, defs map[string][]*Def) {
+	switch e := expr.(type) {
+	case *concatExpr:
+		initFuncalls(e.first, defs)
+		initFuncalls(e.last, defs)
+	case *funcallExpr:
+		e.defs = defs[e.name.Token]
+		for _, argExpr := range e.argExprs {
+			initFuncalls(argExpr, defs)
+		}
+	}
+}
+
+func Parse(tokens <-chan tokenize.Token) (map[string][]*Def, error) {
 	def1s, err := parse1(tokens)
 	if err != nil {
 		return nil, err
@@ -248,9 +258,7 @@ func Parse(tokens <-chan Token) (map[string][]*Def, error) {
 	}
 	for _, deflist := range defs {
 		for _, def := range deflist {
-			if def.Body != nil {
-				def.Body.InitFuncalls(defs)
-			}
+			initFuncalls(def.Body, defs)
 		}
 	}
 	return defs, nil

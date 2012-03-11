@@ -1,69 +1,50 @@
-package main
+package ast
 
 import (
+	"../bitlist"
+	"../tokenize"
 	"bytes"
 	"fmt"
 )
 
 type Parameter struct {
-	MatchToken Token
-	Match      Bitlist
+	MatchToken tokenize.Token
+	Match      bitlist.Bitlist
 	Bound      bool
-	Bind       Token
+	Bind       tokenize.Token
 	Wild       bool
 }
 
 type Def struct {
-	Name       Token
+	Name       tokenize.Token
 	Parameters []Parameter
 	Body       Expr
 }
 
 type Expr interface {
-	InitFuncalls(defs map[string][]*Def)
-	Eval(bindings []Bitlist) Bitlist
+	Eval(bindings []bitlist.Bitlist) bitlist.Bitlist
 }
 
-type LiteralExpr struct {
-	bits *LiteralBitlist
+type literalExpr struct {
+	bits bitlist.Bitlist
 }
 
-func NewLiteralExpr(bits *LiteralBitlist) *LiteralExpr {
-	result := new(LiteralExpr)
-	result.bits = bits
-	return result
-}
-
-func (expr *LiteralExpr) InitFuncalls(defs map[string][]*Def) {
-}
-
-func (expr *LiteralExpr) Eval(bindings []Bitlist) Bitlist {
+func (expr *literalExpr) Eval(bindings []bitlist.Bitlist) bitlist.Bitlist {
 	return expr.bits
 }
 
-type ConcatExpr struct {
+type concatExpr struct {
 	first, last Expr
 }
 
-func NewConcatExpr(first, last Expr) *ConcatExpr {
-	result := new(ConcatExpr)
-	result.first, result.last = first, last
-	return result
-}
-
-func (expr *ConcatExpr) InitFuncalls(defs map[string][]*Def) {
-	expr.first.InitFuncalls(defs)
-	expr.last.InitFuncalls(defs)
-}
-
-func (expr *ConcatExpr) Eval(bindings []Bitlist) Bitlist {
-	return &concatBitlist{bindings, expr, nil, nil, nil}
+func (expr *concatExpr) Eval(bindings []bitlist.Bitlist) bitlist.Bitlist {
+	return &concatBitlist{bindings: bindings, expr: expr}
 }
 
 type concatBitlist struct {
-	bindings    []Bitlist
-	expr        *ConcatExpr
-	first, last Bitlist
+	bindings    []bitlist.Bitlist
+	expr        *concatExpr
+	first, last bitlist.Bitlist
 	next        *concatBitlist
 }
 
@@ -92,71 +73,47 @@ func (concat *concatBitlist) Bit() bool {
 	return concat.first.Bit()
 }
 
-func (concat *concatBitlist) Next() Bitlist {
+func (concat *concatBitlist) Next() bitlist.Bitlist {
 	concat.force()
 	if concat.first.Nil() {
 		return concat.last.Next()
 	}
 	if concat.next == nil {
-		concat.next = &concatBitlist{concat.bindings, concat.expr, concat.first.Next(), concat.last, nil}
+		concat.next = &concatBitlist{bindings: concat.bindings, expr: concat.expr, first: concat.first.Next()}
 	}
 	return concat.next
 }
 
-type BoundExpr struct {
-	name  Token
+type boundExpr struct {
+	name  tokenize.Token
 	index int
 }
 
-func NewBoundExpr(name Token, index int) *BoundExpr {
-	result := new(BoundExpr)
-	result.name = name
-	result.index = index
-	return result
-}
-
-func (expr *BoundExpr) InitFuncalls(defs map[string][]*Def) {
-}
-
-func (expr *BoundExpr) Eval(bindings []Bitlist) Bitlist {
+func (expr *boundExpr) Eval(bindings []bitlist.Bitlist) bitlist.Bitlist {
 	return bindings[expr.index]
 }
 
-type FuncallExpr struct {
-	name     Token
+type funcallExpr struct {
+	name     tokenize.Token
 	defs     []*Def
 	argExprs []Expr
 }
 
-func NewFuncallExpr(name Token, argExprs []Expr) *FuncallExpr {
-	result := new(FuncallExpr)
-	result.name = name
-	result.argExprs = argExprs
-	return result
-}
-
-func (expr *FuncallExpr) InitFuncalls(defs map[string][]*Def) {
-	expr.defs = defs[expr.name.Token]
-	for _, argExpr := range expr.argExprs {
-		argExpr.InitFuncalls(defs)
-	}
-}
-
-func (expr *FuncallExpr) Eval(bindings []Bitlist) Bitlist {
-	return &funcallBitlist{bindings, expr, nil}
+func (expr *funcallExpr) Eval(bindings []bitlist.Bitlist) bitlist.Bitlist {
+	return &funcallBitlist{bindings: bindings, expr: expr}
 }
 
 type funcallBitlist struct {
-	bindings []Bitlist
-	expr     *FuncallExpr
-	result   Bitlist
+	bindings []bitlist.Bitlist
+	expr     *funcallExpr
+	result   bitlist.Bitlist
 }
 
 func (funcall *funcallBitlist) force() {
 	if funcall.result != nil {
 		return
 	}
-	args := make([]Bitlist, 0, len(funcall.expr.argExprs))
+	args := make([]bitlist.Bitlist, 0, len(funcall.expr.argExprs))
 	for _, argExpr := range funcall.expr.argExprs {
 		args = append(args, argExpr.Eval(funcall.bindings))
 	}
@@ -176,12 +133,12 @@ func (funcall *funcallBitlist) Bit() bool {
 	return funcall.result.Bit()
 }
 
-func (funcall *funcallBitlist) Next() Bitlist {
+func (funcall *funcallBitlist) Next() bitlist.Bitlist {
 	funcall.force()
 	return funcall.result.Next()
 }
 
-func EvalFn(deflist []*Def, args []Bitlist) Bitlist {
+func EvalFn(deflist []*Def, args []bitlist.Bitlist) bitlist.Bitlist {
 	for _, def := range deflist {
 		if result := matchEval(def, args); result != nil {
 			return result
@@ -190,8 +147,8 @@ func EvalFn(deflist []*Def, args []Bitlist) Bitlist {
 	return nil
 }
 
-func matchEval(def *Def, args []Bitlist) Bitlist {
-	bindings := []Bitlist{}
+func matchEval(def *Def, args []bitlist.Bitlist) bitlist.Bitlist {
+	bindings := []bitlist.Bitlist{}
 	for i, arg := range args {
 		match := def.Parameters[i].Match
 		if match != nil {
@@ -212,7 +169,7 @@ func matchEval(def *Def, args []Bitlist) Bitlist {
 	return def.Body.Eval(bindings)
 }
 
-func unparseBits(bits Bitlist, buf *bytes.Buffer) {
+func unparseBits(bits bitlist.Bitlist, buf *bytes.Buffer) {
 	for !bits.Nil() {
 		if bits.Bit() {
 			buf.WriteRune('1')
@@ -241,21 +198,21 @@ func unparseParameters(parameters []Parameter, buf *bytes.Buffer) {
 }
 
 func unparseExpr(expr Expr, buf *bytes.Buffer) {
-	switch expr.(type) {
-	case *LiteralExpr:
+	switch e := expr.(type) {
+	case *literalExpr:
 		buf.WriteRune(' ')
-		unparseBits(expr.(*LiteralExpr).bits, buf)
+		unparseBits(e.bits, buf)
 		buf.WriteRune('_')
-	case *ConcatExpr:
-		unparseExpr(expr.(*ConcatExpr).first, buf)
-		unparseExpr(expr.(*ConcatExpr).last, buf)
-	case *BoundExpr:
+	case *concatExpr:
+		unparseExpr(e.first, buf)
+		unparseExpr(e.last, buf)
+	case *boundExpr:
 		buf.WriteRune(' ')
-		buf.WriteString(expr.(*BoundExpr).name.Token)
-	case *FuncallExpr:
+		buf.WriteString(e.name.Token)
+	case *funcallExpr:
 		buf.WriteRune(' ')
-		buf.WriteString(expr.(*FuncallExpr).name.Token)
-		for _, argExpr := range expr.(*FuncallExpr).argExprs {
+		buf.WriteString(e.name.Token)
+		for _, argExpr := range e.argExprs {
 			unparseExpr(argExpr, buf)
 		}
 	}

@@ -1,4 +1,4 @@
-package main
+package bitlist
 
 import (
 	"io"
@@ -10,62 +10,57 @@ type Bitlist interface {
 	Next() Bitlist
 }
 
-var NilBitlist = NewLiteralBitlist([]bool{})
+var NilBitlist = &literalBitlist{}
 
-type LiteralBitlist struct {
+type literalBitlist struct {
 	bits []bool
-	next *LiteralBitlist
+	next *literalBitlist
 }
 
-func NewLiteralBitlist(bits []bool) *LiteralBitlist {
-	result := new(LiteralBitlist)
-	result.bits = bits
-	return result
+func NewLiteralBitlist(bits []bool) Bitlist {
+	return &literalBitlist{bits: bits}
 }
 
-func (l *LiteralBitlist) Nil() bool {
+func (l *literalBitlist) Nil() bool {
 	return len(l.bits) == 0
 }
 
-func (l *LiteralBitlist) Bit() bool {
+func (l *literalBitlist) Bit() bool {
 	if len(l.bits) == 0 {
 		panic("nil.Bit()")
 	}
 	return l.bits[0]
 }
 
-func (l *LiteralBitlist) Next() Bitlist {
+func (l *literalBitlist) Next() Bitlist {
 	if len(l.bits) == 0 {
 		panic("nil.Next()")
 	}
 	if l.next == nil {
-		l.next = NewLiteralBitlist(l.bits[1:])
+		l.next = &literalBitlist{bits: l.bits[1:]}
 	}
 	return l.next
 }
 
-type ReaderBitlist struct {
-	index, byte uint
-	reader      io.Reader
-	next        *ReaderBitlist
+type readerBitlist struct {
+	index  uint8
+	buf    [1]uint8
+	reader io.Reader
+	next   *readerBitlist
 }
 
-func NewReaderBitlist(reader io.Reader) *ReaderBitlist {
-	result := new(ReaderBitlist)
-	result.reader = reader
-	return result
+func NewReaderBitlist(reader io.Reader) Bitlist {
+	return &readerBitlist{reader: reader}
 }
 
-func (r *ReaderBitlist) force() {
+func (r *readerBitlist) force() {
 	if r.index == 0 {
-		buf := []byte{0}
-		switch n, err := r.reader.Read(buf); err {
+		switch n, err := r.reader.Read(r.buf[:]); err {
 		case nil, io.EOF:
 			if n == 0 {
 				r.index = 255
 			} else {
 				r.index = 128
-				r.byte = uint(buf[0])
 			}
 		default:
 			panic(err.Error())
@@ -73,29 +68,26 @@ func (r *ReaderBitlist) force() {
 	}
 }
 
-func (r *ReaderBitlist) Nil() bool {
+func (r *readerBitlist) Nil() bool {
 	r.force()
 	return r.index == 255
 }
 
-func (r *ReaderBitlist) Bit() bool {
+func (r *readerBitlist) Bit() bool {
 	r.force()
 	if r.index == 255 {
 		panic("nil.Bit()")
 	}
-	return r.byte&r.index != 0
+	return r.buf[0]&r.index != 0
 }
 
-func (r *ReaderBitlist) Next() Bitlist {
+func (r *readerBitlist) Next() Bitlist {
 	r.force()
 	if r.index == 255 {
 		panic("nil.Next()")
 	}
 	if r.next == nil {
-		r.next = new(ReaderBitlist)
-		r.next.index = r.index >> 1
-		r.next.byte = r.byte
-		r.next.reader = r.reader
+		r.next = &readerBitlist{index: r.index >> 1, buf: r.buf, reader: r.reader}
 	}
 	return r.next
 }
