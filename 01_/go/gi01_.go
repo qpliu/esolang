@@ -38,7 +38,12 @@ func parseArgs(arglist []string) args {
 }
 
 func main() {
-	if len(os.Args) == 0 {
+	if len(os.Args) < 2 {
+		progName := "gi01_"
+		if len(os.Args) > 0 {
+			progName = os.Args[0]
+		}
+		fmt.Fprintf(os.Stderr, "Usage: %s FILENAME ... [- FUNCTION [FILENAME ...]]\n", progName)
 		return
 	}
 	args := parseArgs(os.Args[1:])
@@ -51,7 +56,8 @@ func main() {
 	defaultArg := stdinArg
 	deflist := defs[args.fnName]
 	if deflist == nil {
-		panic(fmt.Sprintf("%s not defined", args.fnName))
+		fmt.Fprintf(os.Stderr, "%s not defined\n", args.fnName)
+		os.Exit(1)
 	}
 	argCount := len(deflist[0].Parameters)
 	fnArgs := make([]bitlist.Bitlist, 0, argCount)
