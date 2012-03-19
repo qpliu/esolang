@@ -57,6 +57,7 @@ func (concat *concatBitlist) force() {
 	}
 	if concat.last == nil {
 		concat.last = concat.expr.last.Eval(concat.bindings)
+		concat.bindings = nil
 	}
 }
 
@@ -80,6 +81,7 @@ func (concat *concatBitlist) Next() bitlist.Bitlist {
 	}
 	if concat.next == nil {
 		concat.next = &concatBitlist{bindings: concat.bindings, expr: concat.expr, first: concat.first.Next()}
+		concat.bindings = nil
 	}
 	return concat.next
 }
@@ -121,6 +123,7 @@ func (funcall *funcallBitlist) force() {
 	if funcall.result == nil {
 		panic(fmt.Sprintf("%s no matching def for %s", funcall.expr.name.Location(), funcall.expr.name.Token))
 	}
+	funcall.bindings = nil
 }
 
 func (funcall *funcallBitlist) Nil() bool {

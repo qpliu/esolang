@@ -37,6 +37,35 @@ func parseArgs(arglist []string) args {
 	return args{arglist[:dash], arglist[dash+1], arglist[dash+2:]}
 }
 
+func makeArgs(argCount int, argFiles []string) []bitlist.Bitlist {
+	fnArgs := make([]bitlist.Bitlist, 0, argCount)
+	stdinArg := bitlist.NewReaderBitlist(os.Stdin)
+	for i := 0; i < argCount; i++ {
+		switch {
+		case i >= len(argFiles) && i > 0:
+			fnArgs = append(fnArgs, bitlist.NilBitlist)
+		case i >= len(argFiles) || argFiles[i] == "-":
+			fnArgs = append(fnArgs, stdinArg)
+		default:
+			file, err := os.Open(argFiles[i])
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+			fnArgs = append(fnArgs, bitlist.NewReaderBitlist(file))
+		}
+	}
+	return fnArgs
+}
+
+func eval(fnName string, deflist []*ast.Def, args []bitlist.Bitlist) bitlist.Bitlist {
+	value := ast.EvalFn(deflist, args)
+	if value == nil {
+		panic(fmt.Sprintf("No matching def for %s", fnName))
+	}
+	return value
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		progName := "gi01_"
@@ -52,33 +81,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
-	stdinArg := bitlist.NewReaderBitlist(os.Stdin)
-	defaultArg := stdinArg
 	deflist := defs[args.fnName]
 	if deflist == nil {
 		fmt.Fprintf(os.Stderr, "%s not defined\n", args.fnName)
 		os.Exit(1)
 	}
-	argCount := len(deflist[0].Parameters)
-	fnArgs := make([]bitlist.Bitlist, 0, argCount)
-	for i := 0; i < argCount; i++ {
-		if i >= len(args.argFiles) {
-			fnArgs = append(fnArgs, defaultArg)
-		} else if args.argFiles[i] == "-" {
-			fnArgs = append(fnArgs, stdinArg)
-		} else {
-			file, err := os.Open(args.argFiles[i])
-			if err != nil {
-				panic(err.Error())
-			}
-			defer file.Close()
-			fnArgs = append(fnArgs, bitlist.NewReaderBitlist(file))
-		}
-		defaultArg = bitlist.NilBitlist
-	}
-	value := ast.EvalFn(deflist, fnArgs)
-	if value == nil {
-		panic(fmt.Sprintf("No matching def for %s", args.fnName))
-	}
-	bitlist.WriteBits(os.Stdout, value)
+	bitlist.WriteBits(os.Stdout, eval(args.fnName, deflist, makeArgs(len(deflist[0].Parameters), args.argFiles)))
 }
