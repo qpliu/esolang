@@ -1,0 +1,120 @@
+The " (shiftprime) programming language
+
+In the " programming languages, numbers are represented as a product of primes:
+
+  x = product p_i^n_i,
+
+where p_i is is the ith prime and n_i is the number of factors of p_i in x.
+
+Also, p_0 = 1, so n_0 is a hidden component of nonzero numbers.  For zero, n_0 = 0.  For literals, n_0 = 0 except for x = 1, where n_0 = 1.
+
+When comparing numbers, n_0 is ignored except to check for zero.
+
+Syntax
+
+  PROGRAM = { DEFINITION } .
+  DEFINITION = identifier { identifier } "=" { GUARDED-EXPRESSION "," } EXPRESSION "." .
+  GUARDED-EXPRESSION = EXPRESSION "," GUARD { "," GUARD } .
+  GUARD = EXPRESSION "=" EXPRESSION .
+  EXPRESSION = number | FUNCALL | "/" EXPRESSION | "%" EXPRESSION | "(" EXPRESSION "," EXPRESSION ")" .
+  FUNCALL = identifier { EXPRESSION } .
+
+Operators
+
+The operators are /, %, and (,).
+
+Let
+
+  x = product p_i^n_i
+
+then
+
+  / x = product p_(i-1)^n_i
+
+where each prime factor is replaced by the previous prime, and the hidden factors of 1 are discarded.  The old factors of 2 become the new hidden factors of 1.
+
+  % x = n_0
+
+which is the number of hidden factors of 1.
+
+  (m, x) = p_0^m product p_(i+1)^n_i
+
+where each prime factor is replaced by the next prime, and m is the new number of hidden factors of 1.  The old hidden factors of 1 become the new factors of 2.
+
+Examples
+
+  == return 1 for even arguments, 0 for odd arguments
+  even? x = 1, x = 0, 0, %/x = 0, 1.
+
+  == return 1 for primes, 0 otherwise
+  prime? x = 0, x = 0, 0, x = 1, prime?' /x.
+  prime?' x = 1, x = 1, %x = 1, 0, x = 1, prime?' /x, %x = 0, 0.
+
+  == return 1 for perfect squares, 0 otherwise
+  square? x = 1, x = 0, 1, x = 1, square?' /x.
+  square?' x = 1, x = 0, square?' /x, even? %x = 1, 0.
+
+  == return a big number
+  googol = (0,(100,(0,(100,0)))).
+
+  == Given increment and decrement algorithms (an exercise left to the
+  == reader), more calculations are possible
+  increment x = 1, x=0, 2, x=1, 3, x=2, 4, x=3, 5, x=4, ....
+  decrement x = 0, x=0, 0, x=1, 1, x=2, 2, x=3, 3, x=4, ....
+
+  double x = 0, x = 0, (0,(increment %/x,//x)).
+
+  square x = 0, x = 0, (double %x, square /x).
+
+  + x y = x, y = 0, y, x = 0, + increment x decrement y.
+
+  * x y = 0, x = 0, 0, y = 0, *' x y.
+  *' x y = 0, x = 0, y = 0, (+ %x %y,* /x /y).
+
+Minimal Variant
+
+The only literal numeric constants are 0 and 1.  Other numbers can be derived.
+
+  2 = (0,1).
+  3 = (0,2).
+  4 = (0,(2,0)).
+  5 = (0,3).
+  6 = (0,(1,1)).
+  7 = (0,5).
+  8 = (0,(3,0)).
+  9 = (0,4).
+  10 = (0,(1,2)).
+  11 = (0,7).
+  12 = (0,(2,1)).
+  13 = (0,11).
+  14 = (0,(1,3)).
+  15 = (0,(0,(1,1))).
+  16 = (0,(4,0)).
+  17 = (0,13).
+  18 = (0,(1,(2,0))).
+  19 = (0,17).
+  20 = (0,(2,2)).
+  21 = (0,(0,(1,2))).
+  == etc
+
+Turing Machine
+
+A tape can be represented by two values:
+
+  a b
+
+Read from tape:
+
+  %b
+
+Write x to tape:
+
+  a (x,/b)
+
+Shift head left:
+
+  /a (%a,b)
+
+Shift head right:
+
+  (%b,a) /b
