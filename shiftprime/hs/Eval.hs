@@ -1,4 +1,4 @@
-module Eval(eval,fromVal,toVal) where
+module Eval(eval,evalFuncall,fromVal,toVal) where
 
 import Data.Either(partitionEithers)
 
