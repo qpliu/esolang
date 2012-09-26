@@ -12,12 +12,28 @@ When comparing numbers, n_0 is ignored except to check for zero.
 
 Syntax
 
-  PROGRAM = { DEFINITION } .
+The characters "=", ".", ",", "/", "%", "(", and ")" are special tokens.  Sequences of other non-space characters are either numbers or identifiers.  A double equals, "==", introduces a comment that continues to the end of the line.
+
+A number is either 0 or a non-zero digit followed by 0 or more digits.  All other sequences non-token and non-space characters are identifiers, including numbers with leading zeros, such as "00" and "01".
+
+The grammar is
+
+  PROGRAM = DEFINITION { DEFINITION } .
   DEFINITION = identifier { identifier } "=" { GUARDED-EXPRESSION "," } EXPRESSION "." .
   GUARDED-EXPRESSION = EXPRESSION "," GUARD { "," GUARD } .
   GUARD = EXPRESSION "=" EXPRESSION .
-  EXPRESSION = number | FUNCALL | "/" EXPRESSION | "%" EXPRESSION | "(" EXPRESSION "," EXPRESSION ")" .
+  EXPRESSION = number | identifier | FUNCALL | "/" EXPRESSION | "%" EXPRESSION | "(" EXPRESSION "," EXPRESSION ")" .
   FUNCALL = identifier { EXPRESSION } .
+
+A program consists of one or more definitions.
+
+A definition consists of an identifier, which is the name of the function being defined, followed by zero or more identifiers, which are the function parameters, followed by an equals ("=") followed by zero or more guarded expressions, each terminated with a comma (","), followed by an expression, and ending with a period (".").
+
+A guarded expression is an expression followed by one or more guards, each separated by a comma (",").
+
+A guard is an expression followed by an equals ("="), followed by another expression.
+
+An expression is either a literal number, or an identifier naming function parameter, or an identifier naming a function to be called followed by expressions corresponding to the function's parameters, or one of the three operators and their arguments.
 
 Operators
 
@@ -41,6 +57,12 @@ which is the number of hidden factors of 1.
 
 where each prime factor is replaced by the next prime, and m is the new number of hidden factors of 1.  The old hidden factors of 1 become the new factors of 2.
 
+Evaluation
+
+When a function is called, the guards of the guarded expressions, if any, are checked from left to right.  The first guarded expression for which all the guards succeed, if any, is evaluated to give the result of the function.  If none of the guardeds succeed, the result of the function is the evaluation of the final expression.
+
+A guard succeeds if the evaluation of its left expression is equal to the evaluation of its right expression.
+
 Examples
 
   == return 1 for even arguments, 0 for odd arguments
@@ -59,8 +81,8 @@ Examples
 
   == Given increment and decrement algorithms (an exercise left to the
   == reader), more calculations are possible
-  increment x = 1, x=0, 2, x=1, 3, x=2, 4, x=3, 5, x=4, ....
-  decrement x = 0, x=0, 0, x=1, 1, x=2, 2, x=3, 3, x=4, ....
+  increment x = 1, x=0, 2, x=1, 3, x=2, 4, x=3, 5, x=4, ...
+  decrement x = 0, x=0, 0, x=1, 1, x=2, 2, x=3, 3, x=4, ...
 
   double x = 0, x = 0, (0,(increment %/x,//x)).
 
@@ -70,6 +92,38 @@ Examples
 
   * x y = 0, x = 0, 0, y = 0, *' x y.
   *' x y = 0, x = 0, y = 0, (+ %x %y,* /x /y).
+
+I/O
+
+An stream of bytes can be considered a little-endian base-256 number.  In order to represent trailing zeros, 256^(number of bytes) is added.
+
+  == cat
+  cat input = input.
+
+  == hello world
+  hello = 21085025638826920548516022216008.
+
+Turing Machine
+
+A tape can be represented by two values:
+
+  a b
+
+Read from tape:
+
+  %b
+
+Write x to tape:
+
+  a (x,/b)
+
+Shift head left:
+
+  /a (%a,b)
+
+Shift head right:
+
+  (%b,a) /b
 
 Minimal Variant
 
@@ -96,25 +150,3 @@ The only literal numeric constants are 0 and 1.  Other numbers can be derived.
   20 = (0,(2,2)).
   21 = (0,(0,(1,2))).
   == etc
-
-Turing Machine
-
-A tape can be represented by two values:
-
-  a b
-
-Read from tape:
-
-  %b
-
-Write x to tape:
-
-  a (x,/b)
-
-Shift head left:
-
-  /a (%a,b)
-
-Shift head right:
-
-  (%b,a) /b
