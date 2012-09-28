@@ -10,6 +10,10 @@ import Tokenize(Location(Location))
 primes :: [Integer]
 primes = 2:[x | x <- [3,5..], and [x `mod` y /= 0 | y <- takeWhile (\ y -> y*y <= x) primes]]
 
+-- FIXME: One problem with this representation is that factors of 1 in the
+-- nonzero number of factors of primes is lost.
+-- %%((2,0),0) is 1, but should be 2.
+
 toVal :: Integer -> [Integer]
 toVal 0 = []
 toVal 1 = [1]
