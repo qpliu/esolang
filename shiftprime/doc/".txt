@@ -57,6 +57,8 @@ which is the number of hidden factors of 1.
 
 where each prime factor is replaced by the next prime, and m is the new number of hidden factors of 1.  The old hidden factors of 1 become the new factors of 2.
 
+Essentially, all values are stacks (of stacks) with the pop, top, and push operators, and a particular way to compare for equality.
+
 Evaluation
 
 When a function is called, the guards of the guarded expressions, if any, are checked from left to right.  The first guarded expression for which all the guards succeed, if any, is evaluated to give the result of the function.  If none of the guardeds succeed, the result of the function is the evaluation of the final expression.
