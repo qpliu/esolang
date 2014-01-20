@@ -1,4 +1,4 @@
-use lazylist::{LazyList,LazyListIterator};
+use self::lazylist::{LazyList,LazyListIterator};
 
 mod lazylist;
 
@@ -12,7 +12,7 @@ pub struct Bytes {
 
 impl Bits {
     pub fn from_vec(vec: &[bool]) -> Bits {
-        Bits { list: LazyList::new(~vec.to_owned().move_iter()) }
+        Bits::from_iter(~vec.to_owned().move_iter())
     }
 
     pub fn from_reader(reader: ~Reader) -> Bits {
@@ -40,6 +40,10 @@ impl Bits {
             }
         }
         Bits { list: LazyList::new(~Iter { reader: reader, bit: 0, byte: 0 }) }
+    }
+
+    pub fn from_iter(iter: ~Iterator<bool>) -> Bits {
+        Bits { list: LazyList::new(iter) }
     }
 
     pub fn nil() -> Bits {
