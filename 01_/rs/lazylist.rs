@@ -7,34 +7,34 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::util;
 
-pub struct LazyList<T> {
-    priv list: Rc<RefCell<ListElement<T>>>,
+pub struct LazyList<'a,T> {
+    priv list: Rc<RefCell<ListElement<'a,T>>>,
 }
 
-pub struct LazyListIterator<T> {
-    priv list: LazyList<T>,
+pub struct LazyListIterator<'a,T> {
+    priv list: LazyList<'a,T>,
 }
 
-enum ListElement<T> {
-    Unevaluated(~Iterator<T>),
-    Concat(LazyList<T>,LazyList<T>),
-    Cons(T,LazyList<T>),
+enum ListElement<'a,T> {
+    Unevaluated(&'a mut Iterator<T>),
+    Concat(LazyList<'a,T>,LazyList<'a,T>),
+    Cons(T,LazyList<'a,T>),
     Nil,
 }
 
-impl<T:Pod> LazyList<T> {
-    pub fn new(iter: ~Iterator<T>) -> LazyList<T> {
+impl<'a,T:Pod> LazyList<'a,T> {
+    pub fn new(iter: &'a mut Iterator<T>) -> LazyList<'a,T> {
         LazyList { list: Rc::new(RefCell::new(Unevaluated(iter))) }
     }
 
-    pub fn eval(&self) -> Option<(T,LazyList<T>)> {
-        self.list.borrow().with_mut(|element: &mut ListElement<T>| -> Option<(T,LazyList<T>)> {
-            enum MatchResult<T> {
-                Ready(Option<(T,LazyList<T>)>),
+    pub fn eval(&self) -> Option<(T,LazyList<'a,T>)> {
+        self.list.borrow().with_mut(|element: &mut ListElement<'a,T>| -> Option<(T,LazyList<'a,T>)> {
+            enum MatchResult<'a,T> {
+                Ready(Option<(T,LazyList<'a,T>)>),
                 EndList,
                 ContinueIter(T),
-                ContinueConcat(T,LazyList<T>,LazyList<T>),
-                EndConcat(T,LazyList<T>),
+                ContinueConcat(T,LazyList<'a,T>,LazyList<'a,T>),
+                EndConcat(T,LazyList<'a,T>),
             }
             let result = match *element {
                 Nil => Ready(None),
@@ -80,30 +80,30 @@ impl<T:Pod> LazyList<T> {
         })
     }
 
-    pub fn iter(&self) -> LazyListIterator<T> {
+    pub fn iter(&self) -> LazyListIterator<'a,T> {
         LazyListIterator { list: self.clone() }
     }
 }
 
-impl<T> LazyList<T> {
-    pub fn nil() -> LazyList<T> {
+impl<'a,T> LazyList<'a,T> {
+    pub fn nil() -> LazyList<'a,T> {
         LazyList { list: Rc::new(RefCell::new(Nil)) }
     }
 }
 
-impl<T> Clone for LazyList<T> {
-    fn clone(&self) -> LazyList<T> {
+impl<'a,T> Clone for LazyList<'a,T> {
+    fn clone(&self) -> LazyList<'a,T> {
         LazyList { list: self.list.clone() }
     }
 }
 
-impl<T:Pod> Add<LazyList<T>,LazyList<T>> for LazyList<T> {
-    fn add(&self, other: &LazyList<T>) -> LazyList<T> {
+impl<'a,T:Pod> Add<LazyList<'a,T>,LazyList<'a,T>> for LazyList<'a,T> {
+    fn add(&self, other: &LazyList<'a,T>) -> LazyList<'a,T> {
         LazyList { list: Rc::new(RefCell::new(Concat(self.clone(), other.clone()))) }
     }
 }
 
-impl<T:Pod> Iterator<T> for LazyListIterator<T> {
+impl<'a,T:Pod> Iterator<T> for LazyListIterator<'a,T> {
     fn next(&mut self) -> Option<T> {
         match self.list.eval() {
             None => None,
@@ -121,7 +121,9 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let l = LazyList::new(~[1, 2, 3].to_owned().move_iter());
+        let o = [1, 2, 3];
+        let mut iter = o.iter().map(|&i| i);
+        let l = LazyList::new(&mut iter);
         assert!([1, 2, 3] == l.iter().to_owned_vec());
     }
 
@@ -133,7 +135,9 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let l = LazyList::new(~[1, 2, 3].to_owned().move_iter());
+        let o = [1, 2, 3];
+        let mut iter = o.iter().map(|&i| i);
+        let l = LazyList::new(&mut iter);
         assert!([1, 2, 3, 1, 2, 3] == (l + l).iter().to_owned_vec());
     }
 }

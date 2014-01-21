@@ -1,5 +1,3 @@
-use std::os;
-
 mod ast;
 mod bits;
 mod error;
@@ -11,6 +9,7 @@ mod token;
 
 #[cfg(not(test))]
 fn main() {
+    use std::os;
     let args = os::args();
     fail!();
 }

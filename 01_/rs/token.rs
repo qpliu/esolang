@@ -66,6 +66,10 @@ impl Token {
         match *self { Ident(_,_) => true, _ => false }
     }
 
+    pub fn ident(&self) -> Option<Symbol> {
+        match *self { Ident(ref symbol,_) => Some(symbol.clone()), _ => None }
+    }
+
     pub fn location<'a>(&'a self) -> &'a Location {
         match *self {
             Zero(ref location) => location,
