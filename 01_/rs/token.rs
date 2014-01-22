@@ -25,9 +25,13 @@ pub struct TokenIterator {
     priv symbols: Symbols,
 }
 
+pub struct MultiTokenIterator {
+    priv iters: ~[TokenIterator],
+}
+
 impl Token {
-    pub fn tokenize(file_name: &str, symbols: Symbols) -> TokenIterator {
-        Token::tokenize_buffer(file_name, ~BufferedReader::new(File::open(&Path::new(file_name.to_owned()))), symbols.clone())
+    pub fn tokenize(file_names: &[&str], symbols: Symbols) -> MultiTokenIterator {
+        MultiTokenIterator { iters: file_names.map(|&file_name| Token::tokenize_buffer(file_name, ~BufferedReader::new(File::open(&Path::new(file_name.to_owned()))), symbols.clone())) }
     }
 
     pub fn tokenize_buffer(file_name: &str, buffer: ~Buffer, symbols: Symbols) -> TokenIterator {
@@ -166,6 +170,18 @@ impl TokenIterator {
     }
 }
 
+impl Iterator<Token> for MultiTokenIterator {
+    fn next(&mut self) -> Option<Token> {
+        while !self.iters.is_empty() {
+            match self.iters[0].next() {
+                None => { self.iters.shift(); }
+                item => { return item; }
+            }
+        }
+        return None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Token;
@@ -196,7 +212,7 @@ mod tests {
         use std::io::File;
         let path = os::tmpdir().join(format!("test{}", unsafe { libc::getpid() }));
         File::create(&path).write(bytes!("id x=x."));
-        let tokens : ~[Token] = Token::tokenize(path.as_str().unwrap().to_owned(), Symbols::new()).collect();
+        let tokens : ~[Token] = Token::tokenize([path.as_str().unwrap()], Symbols::new()).collect();
         fs::unlink(&path);
         assert!(["id", "x", "=", "x", "."].map(|s| s.to_owned()) == tokens.map(|t| t.to_str()));
     }

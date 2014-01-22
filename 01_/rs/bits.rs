@@ -1,13 +1,13 @@
-use self::lazylist::{LazyList,LazyListIterator};
+pub use self::lazylist::{LazyList,LazyListIterator};
 
 mod lazylist;
 
-pub struct Bits<'a> {
-    priv list: LazyList<'a,bool>,
+pub struct Bits {
+    priv list: LazyList<bool>,
 }
 
-pub struct Bytes<'a> {
-    priv iter: LazyListIterator<'a,bool>,
+pub struct Bytes {
+    priv iter: LazyListIterator<bool>,
 }
 
 pub struct ReaderBitIterator {
@@ -16,20 +16,27 @@ pub struct ReaderBitIterator {
     priv byte: u8,
 }
 
-impl<'a> Bits<'a> {
-    pub fn new(iter: &'a mut Iterator<bool>) -> Bits<'a> {
+impl Bits {
+    pub fn new(iter: ~Iterator:<bool>) -> Bits {
         Bits { list: LazyList::new(iter) }
     }
 
-    pub fn nil() -> Bits<'a> {
+    pub fn nil() -> Bits {
         Bits { list: LazyList::nil() }
     }
 
-    pub fn iter(&self) -> LazyListIterator<'a,bool> {
+    pub fn eval(&self) -> Option<(bool,Bits)> {
+        match self.list.eval() {
+            None => None,
+            Some((bit,tail)) => Some((bit,Bits { list:tail })),
+        }
+    }
+
+    pub fn iter(&self) -> LazyListIterator<bool> {
         self.list.iter()
     }
 
-    pub fn bytes(&self) -> Bytes<'a> {
+    pub fn bytes(&self) -> Bytes {
         Bytes { iter: self.list.iter() }
     }
 
@@ -40,19 +47,19 @@ impl<'a> Bits<'a> {
     }
 }
 
-impl<'a> Clone for Bits<'a> {
-    fn clone(&self) -> Bits<'a> {
+impl Clone for Bits {
+    fn clone(&self) -> Bits {
         Bits { list: self.list.clone() }
     }
 }
 
-impl<'a> Add<Bits<'a>,Bits<'a>> for Bits<'a> {
-    fn add(&self, other: &Bits<'a>) -> Bits<'a> {
+impl Add<Bits,Bits> for Bits {
+    fn add(&self, other: &Bits) -> Bits {
         Bits { list: self.list + other.list }
     }
 }
 
-impl<'a> ToStr for Bits<'a> {
+impl ToStr for Bits {
     fn to_str(&self) -> ~str {
         let mut str = ~"";
         for b in self.iter() {
@@ -62,7 +69,7 @@ impl<'a> ToStr for Bits<'a> {
     }
 }
 
-impl<'a> Iterator<u8> for Bytes<'a> {
+impl Iterator<u8> for Bytes {
     fn next(&mut self) -> Option<u8> {
         let mut byte = 0;
         for bit in range(0, 8) {
@@ -111,20 +118,27 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let src = [false, true];
-        let mut iter = src.iter().map(|&b| b);
-        let bits = Bits::new(&mut iter);
+        let bits = Bits::new(~(~[false, true]).move_iter());
         assert!([false, true] == bits.iter().to_owned_vec());
         assert!("01" == bits.to_str());
+    }
+
+    #[test]
+    fn test_eval() {
+        let bits = Bits::new(~(~[true, false]).move_iter());
+        let (head1,tail1) = bits.eval().unwrap();
+        assert!(head1);
+        let (head2,tail2) = tail1.eval().unwrap();
+        assert!(!head2);
+        assert!(tail2.eval().is_none());
     }
 
     #[test]
     fn test_bytes() {
         use std::str;
 
-        let src = [false, true, false, true, false, true, false, true];
-        let mut iter = src.iter().map(|&b| b);
-        let bits = Bits::new(&mut iter);
+        let src = ~[false, true, false, true, false, true, false, true];
+        let bits = Bits::new(~src.move_iter());
         assert!([85] == bits.bytes().to_owned_vec());
         assert!("UU" == str::from_utf8_owned((bits+bits).bytes().to_owned_vec()));
     }
@@ -133,8 +147,7 @@ mod tests {
     fn test_reader_iterator() {
         use std::io::mem::MemReader;
         
-        let mut iter = ReaderBitIterator::new(~MemReader::new(~[170u8,0,255]));
-        let bits = Bits::new(&mut iter);
+        let bits = Bits::new(~ReaderBitIterator::new(~MemReader::new(~[170u8,0,255])));
         assert!("101010100000000011111111" == bits.to_str());
     }
 
@@ -147,9 +160,7 @@ mod tests {
     #[test]
     fn test_write() {
         use std::io::mem::MemWriter;
-        let src = [false, true];
-        let mut iter = src.iter().map(|&b| b);
-        let bits = Bits::new(&mut iter);
+        let bits = Bits::new(~(~[false, true]).move_iter());
         let mut writer = MemWriter::new();
         (bits+bits+bits+bits).write(&mut writer);
         assert!([85] == writer.unwrap());

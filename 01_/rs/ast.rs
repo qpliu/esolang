@@ -1,5 +1,7 @@
 use std::hashmap::HashMap;
+use std::io::Buffer;
 
+use bits::Bits;
 use error::Error;
 use location::Location;
 use parse1::{Def1,Parse1,Param1,Param1Ident,Param1Nil,Param1Dot};
@@ -36,14 +38,28 @@ pub enum Binding {
 }
 
 pub enum Expr {
-    ExprLiteral(Location,~[bool]),
+    ExprLiteral(Location,Bits),
     ExprArg(Location,uint),
     ExprFuncall(Location,DefIndex,~[Expr]),
     ExprConcat(Location,~Expr,~Expr),
 }
 
 impl Ast {
-    pub fn parse(parse1: &Parse1) -> Result<Ast,~[Error]> {
+    pub fn parse(files: &[&str]) -> Result<Ast,~[Error]> {
+        match Parse1::parse(&mut Token::tokenize(files, Symbols::new())) {
+            Err(errors) => Err(errors),
+            Ok(ref parse1) => Ast::parse_parse1(parse1),
+        }
+    }
+
+    pub fn parse_buffer(file_name: &str, buffer: ~Buffer) -> Result<Ast,~[Error]> {
+        match Parse1::parse(&mut Token::tokenize_buffer(file_name, buffer, Symbols::new())) {
+            Err(errors) => Err(errors),
+            Ok(ref parse1) => Ast::parse_parse1(parse1),
+        }
+    }
+
+    fn parse_parse1(parse1: &Parse1) -> Result<Ast,~[Error]> {
         let name_list = parse1.names();
         let mut names = HashMap::new();
         let mut defs = ~[];
@@ -128,7 +144,7 @@ impl Def {
             match_bindings.push(MatchBinding::new(param));
         }
         if def1.body.is_empty() {
-            Ok(Def { match_bindings: match_bindings, expr: ExprLiteral(def1.eq_location+def1.dot_location,~[]) })
+            Ok(Def { match_bindings: match_bindings, expr: ExprLiteral(def1.eq_location+def1.dot_location,Bits::nil()) })
         } else {
             match Expr::parse(def1.body, 0, &bindings, names) {
                 Err(error) => Err(error),
@@ -219,12 +235,12 @@ impl Expr {
                 bits.push(true);
             } else if tokens[i].is_nil() {
                 location = location + *tokens[i].location();
-                return (i+1,ExprLiteral(location,bits));
+                return (i+1,ExprLiteral(location,Bits::new(~bits.move_iter())));
             } else {
-                return (i,ExprLiteral(location,bits));
+                return (i,ExprLiteral(location,Bits::new(~bits.move_iter())));
             }
         }
-        (tokens.len(),ExprLiteral(location,bits))
+        (tokens.len(),ExprLiteral(location,Bits::new(~bits.move_iter())))
     }
 
     pub fn location(&self) -> Location {
@@ -241,13 +257,10 @@ impl Expr {
 mod tests {
     use ast::{Ast,Bind,Dot,Nil,ExprLiteral,ExprArg,ExprFuncall,ExprConcat};
     use error::Error;
-    use parse1::Parse1;
-    use symbol::Symbols;
-    use token::Token;
 
     fn parse(src: &str) -> Result<Ast,~[Error]> {
         use std::io::mem::MemReader;
-        Ast::parse(&Parse1::parse(&mut Token::tokenize_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), Symbols::new())).unwrap())
+        Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()))
     }
 
     #[test]
@@ -277,7 +290,8 @@ mod tests {
         assert!(defs.arity() == 0);
         assert!(defs.defs.len() == 1);
         match defs.defs[0].expr {
-            ExprConcat(_,~ExprLiteral(_,[true]),~ExprFuncall(_,ref index,ref args)) => {
+            ExprConcat(_,~ExprLiteral(_,ref literal),~ExprFuncall(_,ref index,ref args)) => {
+                assert!("1" == literal.to_str());
                 assert!(*index == ast.lookup_index_by_str("ones").unwrap());
                 assert!(args.is_empty());
             },
@@ -287,7 +301,8 @@ mod tests {
         assert!(defs.arity() == 0);
         assert!(defs.defs.len() == 1);
         match defs.defs[0].expr {
-            ExprConcat(_,~ExprLiteral(_,[false]),~ExprFuncall(_,ref index,ref args)) => {
+            ExprConcat(_,~ExprLiteral(_,ref literal),~ExprFuncall(_,ref index,ref args)) => {
+                assert!("0" == literal.to_str());
                 assert!(*index == ast.lookup_index_by_str("zeros").unwrap());
                 assert!(args.is_empty());
             },
@@ -303,7 +318,7 @@ mod tests {
         assert!([false] == defs.defs[0].match_bindings[1].bits);
         assert!(defs.defs[0].match_bindings[1].binding == Dot);
         match defs.defs[0].expr {
-            ExprLiteral(_,ref bits) => { assert!([] == *bits); },
+            ExprLiteral(_,ref bits) => { assert!("" == bits.to_str()); },
             _ => { fail!("defs.defs[0].expr"); },
         }
         assert!([] == defs.defs[1].match_bindings[0].bits);
@@ -323,8 +338,26 @@ mod tests {
         assert!([] == defs.defs[0].match_bindings[0].bits);
         assert!(defs.defs[0].match_bindings[0].binding == Dot);
         match defs.defs[0].expr {
-            ExprLiteral(_,ref bits) => { assert!([] == *bits); },
+            ExprLiteral(_,ref bits) => { assert!("" == bits.to_str()); },
             _ => { fail!("defs.defs[0].expr"); },
         }
+    }
+
+    #[test]
+    fn test_parse_files() {
+        use std::io::fs;
+        use std::libc;
+        use std::os;
+        use std::io::File;
+        let path = os::tmpdir().join(format!("test{}", unsafe { libc::getpid() }));
+        File::create(&path).write(bytes!("x=x.y z=z."));
+        let ast = Ast::parse([path.as_str().unwrap()]).unwrap();
+        fs::unlink(&path);
+        let defs = ast.lookup_by_str("x").unwrap();
+        assert!(defs.arity() == 0);
+        assert!(defs.defs.len() == 1);
+        let defs = ast.lookup_by_str("y").unwrap();
+        assert!(defs.arity() == 1);
+        assert!(defs.defs.len() == 1);
     }
 }
