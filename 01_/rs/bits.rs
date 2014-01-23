@@ -1,3 +1,5 @@
+use std::io::File;
+
 pub use self::lazylist::{LazyList,LazyListIterator};
 
 mod lazylist;
@@ -10,7 +12,7 @@ pub struct Bytes {
     priv iter: LazyListIterator<bool>,
 }
 
-pub struct ReaderBitIterator {
+struct ReaderBitIterator {
     priv reader: ~Reader,
     priv bit: u8,
     priv byte: u8,
@@ -19,6 +21,14 @@ pub struct ReaderBitIterator {
 impl Bits {
     pub fn new(iter: ~Iterator:<bool>) -> Bits {
         Bits { list: LazyList::new(iter) }
+    }
+
+    pub fn from_reader(reader: ~Reader) -> Bits {
+        Bits::new(~ReaderBitIterator::new(reader))
+    }
+
+    pub fn from_file(path: &Path) -> Bits {
+        Bits::from_reader(~File::open(path))
     }
 
     pub fn nil() -> Bits {
@@ -114,13 +124,26 @@ impl Iterator<bool> for ReaderBitIterator {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bits,ReaderBitIterator};
+    use super::{Bits};
 
     #[test]
     fn test_new() {
         let bits = Bits::new(~(~[false, true]).move_iter());
         assert!([false, true] == bits.iter().to_owned_vec());
         assert!("01" == bits.to_str());
+    }
+
+    #[test]
+    fn test_from_file() {
+        use std::io::fs;
+        use std::libc;
+        use std::os;
+        use std::io::File;
+        let path = os::tmpdir().join(format!("testbits{}", unsafe { libc::getpid() }));
+        File::create(&path).write(bytes!("01_"));
+        let bits = Bits::from_file(&path);
+        assert!("001100000011000101011111" == bits.to_str());
+        fs::unlink(&path);
     }
 
     #[test]
@@ -147,7 +170,7 @@ mod tests {
     fn test_reader_iterator() {
         use std::io::mem::MemReader;
         
-        let bits = Bits::new(~ReaderBitIterator::new(~MemReader::new(~[170u8,0,255])));
+        let bits = Bits::from_reader(~MemReader::new(~[170u8,0,255]));
         assert!("101010100000000011111111" == bits.to_str());
     }
 

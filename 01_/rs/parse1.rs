@@ -156,6 +156,7 @@ impl Def1 {
         }
     }
 
+    #[cfg(test)]
     pub fn location(&self) -> Location {
         self.ident_location + self.dot_location
     }
@@ -207,6 +208,7 @@ impl Param1 {
         }
     }
 
+    #[cfg(test)]
     fn is_dot(&self) -> bool {
         match self.param_type {
             Param1Dot(_) => true,
@@ -214,6 +216,7 @@ impl Param1 {
         }
     }
 
+    #[cfg(test)]
     fn is_nil(&self) -> bool {
         match self.param_type {
             Param1Nil(_) => true,
@@ -221,6 +224,7 @@ impl Param1 {
         }
     }
 
+    #[cfg(test)]
     fn is_ident(&self) -> bool {
         match self.param_type {
             Param1Ident(_,_) => true,
@@ -228,6 +232,7 @@ impl Param1 {
         }
     }
 
+    #[cfg(test)]
     fn ident(&self) -> Option<Symbol> {
         match self.param_type {
             Param1Ident(ref symbol,_) => Some(symbol.clone()),

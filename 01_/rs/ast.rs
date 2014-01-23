@@ -1,5 +1,4 @@
 use std::hashmap::HashMap;
-use std::io::Buffer;
 
 use bits::Bits;
 use error::Error;
@@ -45,13 +44,14 @@ pub enum Expr {
 }
 
 impl Ast {
-    pub fn parse(files: &[&str]) -> Result<Ast,~[Error]> {
-        match Parse1::parse(&mut Token::tokenize(files, Symbols::new())) {
+    pub fn parse(file_names: &[Path]) -> Result<Ast,~[Error]> {
+        match Parse1::parse(&mut Token::tokenize(file_names, Symbols::new())) {
             Err(errors) => Err(errors),
             Ok(ref parse1) => Ast::parse_parse1(parse1),
         }
     }
 
+    #[cfg(test)]
     pub fn parse_buffer(file_name: &str, buffer: ~Buffer) -> Result<Ast,~[Error]> {
         match Parse1::parse(&mut Token::tokenize_buffer(file_name, buffer, Symbols::new())) {
             Err(errors) => Err(errors),
@@ -97,6 +97,7 @@ impl<'a> Ast {
         self.lookup_by_index(index.index)
     }
 
+    #[cfg(test)]
     pub fn lookup_by_name(&'a self, name: &Symbol) -> Option<Defs<'a>> {
         match self.names.find(name) {
             None => None,
@@ -104,6 +105,7 @@ impl<'a> Ast {
         }
     }
 
+    #[cfg(test)]
     pub fn lookup_by_str(&'a self, name: &str) -> Option<Defs<'a>> {
         self.lookup_by_name(&Symbols::new().intern_str(name))
     }
@@ -351,7 +353,7 @@ mod tests {
         use std::io::File;
         let path = os::tmpdir().join(format!("test{}", unsafe { libc::getpid() }));
         File::create(&path).write(bytes!("x=x.y z=z."));
-        let ast = Ast::parse([path.as_str().unwrap()]).unwrap();
+        let ast = Ast::parse([path.clone()]).unwrap();
         fs::unlink(&path);
         let defs = ast.lookup_by_str("x").unwrap();
         assert!(defs.arity() == 0);
