@@ -124,7 +124,7 @@ impl Iterator<bool> for ReaderBitIterator {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bits};
+    use super::Bits;
 
     #[test]
     fn test_new() {
