@@ -8,75 +8,76 @@ use std::rc::Rc;
 use std::util;
 
 pub struct LazyList<T> {
-    priv list: Rc<RefCell<ListElement<T>>>,
+    priv list: Rc<RefCell<Element<T>>>,
 }
 
 pub struct LazyListIterator<T> {
     priv list: LazyList<T>,
 }
 
-enum ListElement<T> {
-    Unevaluated(~Iterator:<T>),
+enum Element<T> {
+    Unevaluated(~Evaluator:<T>),
+    Evaluated(Option<(T,LazyList<T>)>),
     Concat(LazyList<T>,LazyList<T>),
-    Cons(T,LazyList<T>),
-    Nil,
+    Placeholder,
 }
 
-impl<T:Pod> LazyList<T> {
-    pub fn new(iter: ~Iterator:<T>) -> LazyList<T> {
-        LazyList { list: Rc::new(RefCell::new(Unevaluated(iter))) }
+pub trait Evaluator<T> {
+    fn eval(~self) -> Option<(T,~Evaluator:<T>)>;
+}
+
+impl<T:Pod+Clone> LazyList<T> {
+    pub fn new(element: ~Evaluator:<T>) -> LazyList<T> {
+        LazyList { list: Rc::new(RefCell::new(Unevaluated(element))) }
+    }
+
+    pub fn concat(list1: LazyList<T>, list2: LazyList<T>) -> LazyList<T> {
+        LazyList { list: Rc::new(RefCell::new(Concat(list1,list2))) }
+    }
+
+    pub fn from_iter(iter: ~Iterator:<T>) -> LazyList<T> {
+        struct FromIter<T> { iter: ~Iterator:<T> }
+        impl<T> Evaluator<T> for FromIter<T> {
+            fn eval(mut ~self) -> Option<(T,~Evaluator:<T>)> {
+                match self.iter.next() {
+                    None => None,
+                    Some(t) => Some((t,self as ~Evaluator:<T>)),
+                }
+            }
+        }
+        LazyList::new(~FromIter { iter: iter } as ~Evaluator:<T>)
     }
 
     pub fn eval(&self) -> Option<(T,LazyList<T>)> {
-        self.list.borrow().with_mut(|element: &mut ListElement<T>| -> Option<(T,LazyList<T>)> {
-            enum MatchResult<T> {
-                Ready(Option<(T,LazyList<T>)>),
-                EndList,
-                ContinueIter(T),
-                ContinueConcat(T,LazyList<T>,LazyList<T>),
-                EndConcat(T,LazyList<T>),
+        self.list.borrow().with_mut(|element: &mut Element<T>| -> Option<(T,LazyList<T>)> {
+            match *element {
+                Evaluated(ref result) => { return result.clone(); },
+                _ => (),
             }
-            let result = match *element {
-                Nil => Ready(None),
-                Cons(item,ref rest) => Ready(Some((item,rest.clone()))),
-                Unevaluated(ref mut iter) => match iter.next() {
-                    None => EndList,
-                    Some(item) => ContinueIter(item),
-                },
-                Concat(ref head,ref tail) => {
-                    match head.eval() {
-                        Some((item,ref rest)) => ContinueConcat(item,rest.clone(),tail.clone()),
-                        None => {
-                            match tail.eval() {
-                                None => EndList,
-                                Some((item,ref rest)) => EndConcat(item,rest.clone()),
-                            }
-                        }
+            let mut temp = Placeholder;
+            util::swap(&mut temp, element);
+            let result = match temp {
+                Unevaluated(eval) => {
+                    match eval.eval() {
+                        None => None,
+                        Some((t,next)) => Some((t,LazyList::new(next))),
                     }
                 },
+                Concat(head,tail) => {
+                    match head.eval() {
+                        Some((t,rest)) => Some((t,LazyList::concat(rest,tail))),
+                        None => {
+                            match tail.eval() {
+                                None => None,
+                                Some((t,rest)) => Some((t,rest.clone())),
+                            }
+                        },
+                    }
+                },
+                _ => unreachable!(),
             };
-            match result {
-                Ready(r) => r,
-                EndList => {
-                    util::replace(element, Nil);
-                    None
-                },
-                ContinueIter(item) => {
-                    let new_tail_element = util::replace(element, Nil);
-                    let new_tail = LazyList { list: Rc::new(RefCell::new(new_tail_element)) };
-                    util::replace(element, Cons(item,new_tail.clone()));
-                    Some((item,new_tail))
-                },
-                ContinueConcat(item,ref head,ref tail) => {
-                    let new_tail = LazyList { list: Rc::new(RefCell::new(Concat(head.clone(), tail.clone()))) };
-                    util::replace(element, Cons(item,new_tail.clone()));
-                    Some((item,new_tail))
-                },
-                EndConcat(item,ref tail) => {
-                    util::replace(element, Cons(item,tail.clone()));
-                    Some((item,tail.clone()))
-                },
-            }
+            *element = Evaluated(result.clone());
+            result
         })
     }
 
@@ -87,7 +88,7 @@ impl<T:Pod> LazyList<T> {
 
 impl<T> LazyList<T> {
     pub fn nil() -> LazyList<T> {
-        LazyList { list: Rc::new(RefCell::new(Nil)) }
+        LazyList { list: Rc::new(RefCell::new(Evaluated(None))) }
     }
 }
 
@@ -97,13 +98,13 @@ impl<T> Clone for LazyList<T> {
     }
 }
 
-impl<T:Pod> Add<LazyList<T>,LazyList<T>> for LazyList<T> {
+impl<T:Pod+Clone> Add<LazyList<T>,LazyList<T>> for LazyList<T> {
     fn add(&self, other: &LazyList<T>) -> LazyList<T> {
-        LazyList { list: Rc::new(RefCell::new(Concat(self.clone(), other.clone()))) }
+        LazyList::concat(self.clone(), other.clone())
     }
 }
 
-impl<T:Pod> Iterator<T> for LazyListIterator<T> {
+impl<T:Pod+Clone> Iterator<T> for LazyListIterator<T> {
     fn next(&mut self) -> Option<T> {
         match self.list.eval() {
             None => None,
@@ -120,8 +121,8 @@ mod tests {
     use super::LazyList;
 
     #[test]
-    fn test_new() {
-        let l = LazyList::new(~(~[1, 2, 3]).move_iter());
+    fn test_from_iter() {
+        let l = LazyList::from_iter(~(~[1, 2, 3]).move_iter());
         assert!([1, 2, 3] == l.iter().to_owned_vec());
     }
 
@@ -133,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let l = LazyList::new(~(~[1, 2, 3]).move_iter());
+        let l = LazyList::from_iter(~(~[1, 2, 3]).move_iter());
         assert!([1, 2, 3, 1, 2, 3] == (l + l).iter().to_owned_vec());
     }
 }

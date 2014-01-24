@@ -1,6 +1,6 @@
 use std::io::File;
 
-pub use self::lazylist::{LazyList,LazyListIterator};
+pub use self::lazylist::{Evaluator,LazyList,LazyListIterator};
 
 mod lazylist;
 
@@ -12,7 +12,7 @@ pub struct Bytes {
     priv iter: LazyListIterator<bool>,
 }
 
-struct ReaderBitIterator {
+struct ReaderEvaluator {
     priv reader: ~Reader,
     priv bit: u8,
     priv byte: u8,
@@ -20,11 +20,11 @@ struct ReaderBitIterator {
 
 impl Bits {
     pub fn new(iter: ~Iterator:<bool>) -> Bits {
-        Bits { list: LazyList::new(iter) }
+        Bits { list: LazyList::from_iter(iter) }
     }
 
     pub fn from_reader(reader: ~Reader) -> Bits {
-        Bits::new(~ReaderBitIterator::new(reader))
+        Bits { list: LazyList::new(~ReaderEvaluator::new(reader)) }
     }
 
     pub fn from_file(path: &Path) -> Bits {
@@ -97,25 +97,25 @@ impl Iterator<u8> for Bytes {
     }
 }
 
-impl ReaderBitIterator {
-    pub fn new(reader: ~Reader) -> ReaderBitIterator {
-        ReaderBitIterator { reader:reader, bit:0, byte:0 }
+impl ReaderEvaluator {
+    pub fn new(reader: ~Reader) -> ReaderEvaluator {
+        ReaderEvaluator { reader:reader, bit:0, byte:0 }
     }
 }
 
-impl Iterator<bool> for ReaderBitIterator {
-    fn next(&mut self) -> Option<bool> {
+impl Evaluator<bool> for ReaderEvaluator {
+    fn eval(mut ~self) -> Option<(bool,~Evaluator:<bool>)> {
         if self.bit != 0 {
             let b = self.bit & self.byte != 0;
             self.bit >>= 1;
-            Some(b)
+            Some((b,self as ~Evaluator:<bool>))
         } else {
             match self.reader.read_byte() {
                 None => None,
                 Some(byte) => {
                     self.byte = byte;
                     self.bit = 64;
-                    Some(byte & 128 != 0)
+                    Some(((byte & 128 != 0),self as ~Evaluator:<bool>))
                 }
             }
         }
