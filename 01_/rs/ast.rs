@@ -7,8 +7,8 @@ use parse1::{Def1,Parse1,Param1,Param1Ident,Param1Nil,Param1Dot};
 use symbol::{Symbol,Symbols};
 use token::Token;
 
-pub struct Ast {
-    priv defs: ~[~[Def]],
+pub struct Ast<B> {
+    priv defs: ~[~[Def<B>]],
     priv names: HashMap<Symbol,(uint,uint)>,
 }
 
@@ -17,13 +17,13 @@ pub struct DefIndex {
     priv index: uint,
 }
 
-pub struct Def {
+pub struct Def<B> {
     match_bindings: ~[MatchBinding],
-    expr: Expr,
+    expr: Expr<B>,
 }
 
-pub struct Defs<'a> {
-    defs: &'a [Def],
+pub struct Defs<'a,B> {
+    defs: &'a [Def<B>],
 }
 
 pub struct MatchBinding {
@@ -36,15 +36,15 @@ pub enum Binding {
     Nil, Dot, Bind
 }
 
-pub enum Expr {
-    ExprLiteral(Location,Bits),
+pub enum Expr<B> {
+    ExprLiteral(Location,B),
     ExprArg(Location,uint),
-    ExprFuncall(Location,DefIndex,~[Expr]),
-    ExprConcat(Location,~Expr,~Expr),
+    ExprFuncall(Location,DefIndex,~[Expr<B>]),
+    ExprConcat(Location,~Expr<B>,~Expr<B>),
 }
 
-impl Ast {
-    pub fn parse(file_names: &[Path]) -> Result<Ast,~[Error]> {
+impl<B:Bits> Ast<B> {
+    pub fn parse(file_names: &[Path]) -> Result<Ast<B>,~[Error]> {
         match Parse1::parse(&mut Token::tokenize(file_names, Symbols::new())) {
             Err(errors) => Err(errors),
             Ok(ref parse1) => Ast::parse_parse1(parse1),
@@ -52,14 +52,14 @@ impl Ast {
     }
 
     #[cfg(test)]
-    pub fn parse_buffer(file_name: &str, buffer: ~Buffer) -> Result<Ast,~[Error]> {
+    pub fn parse_buffer(file_name: &str, buffer: ~Buffer) -> Result<Ast<B>,~[Error]> {
         match Parse1::parse(&mut Token::tokenize_buffer(file_name, buffer, Symbols::new())) {
             Err(errors) => Err(errors),
             Ok(ref parse1) => Ast::parse_parse1(parse1),
         }
     }
 
-    fn parse_parse1(parse1: &Parse1) -> Result<Ast,~[Error]> {
+    fn parse_parse1(parse1: &Parse1) -> Result<Ast<B>,~[Error]> {
         let name_list = parse1.names();
         let mut names = HashMap::new();
         let mut defs = ~[];
@@ -88,17 +88,17 @@ impl Ast {
     }
 }
 
-impl<'a> Ast {
-    fn lookup_by_index(&'a self, index: uint) -> Defs<'a> {
+impl<'a,B:Bits> Ast<B> {
+    fn lookup_by_index(&'a self, index: uint) -> Defs<'a,B> {
         Defs { defs: self.defs[index] }
     }
 
-    pub fn lookup(&'a self, index: DefIndex) -> Defs<'a> {
+    pub fn lookup(&'a self, index: DefIndex) -> Defs<'a,B> {
         self.lookup_by_index(index.index)
     }
 
     #[cfg(test)]
-    pub fn lookup_by_name(&'a self, name: &Symbol) -> Option<Defs<'a>> {
+    pub fn lookup_by_name(&'a self, name: &Symbol) -> Option<Defs<'a,B>> {
         match self.names.find(name) {
             None => None,
             Some(&(index,_)) => Some(self.lookup_by_index(index)),
@@ -106,7 +106,7 @@ impl<'a> Ast {
     }
 
     #[cfg(test)]
-    pub fn lookup_by_str(&'a self, name: &str) -> Option<Defs<'a>> {
+    pub fn lookup_by_str(&'a self, name: &str) -> Option<Defs<'a,B>> {
         self.lookup_by_name(&Symbols::new().intern_str(name))
     }
 
@@ -122,14 +122,14 @@ impl<'a> Ast {
     }
 }
 
-impl<'a> Defs<'a> {
+impl<'a,B> Defs<'a,B> {
     pub fn arity(&'a self) -> uint {
         self.defs[0].match_bindings.len()
     }
 }
 
-impl Def {
-    fn parse(def1: &Def1, names: &HashMap<Symbol,(uint,uint)>) -> Result<Def,Error> {
+impl<B:Bits> Def<B> {
+    fn parse(def1: &Def1, names: &HashMap<Symbol,(uint,uint)>) -> Result<Def<B>,Error> {
         let mut match_bindings = ~[];
         let mut bindings = HashMap::new();
         for param in def1.params.iter() {
@@ -168,8 +168,8 @@ impl MatchBinding {
     }
 }
 
-impl Expr {
-    fn parse(tokens: &[Token], start_index: uint, bindings: &HashMap<Symbol,uint>, names: &HashMap<Symbol,(uint,uint)>) -> Result<Expr,Error> {
+impl<B:Bits> Expr<B> {
+    fn parse(tokens: &[Token], start_index: uint, bindings: &HashMap<Symbol,uint>, names: &HashMap<Symbol,(uint,uint)>) -> Result<Expr<B>,Error> {
         assert!(start_index < tokens.len());
         match Expr::parse_expr(tokens, start_index, bindings, names) {
             Err(error) => Err(error),
@@ -186,7 +186,7 @@ impl Expr {
         }
     }
 
-    fn parse_expr(tokens: &[Token], start_index: uint, bindings: &HashMap<Symbol,uint>, names: &HashMap<Symbol,(uint,uint)>) -> Result<(uint,Expr),Error> {
+    fn parse_expr(tokens: &[Token], start_index: uint, bindings: &HashMap<Symbol,uint>, names: &HashMap<Symbol,(uint,uint)>) -> Result<(uint,Expr<B>),Error> {
         assert!(start_index < tokens.len());
         let tok = &tokens[start_index];
         if tok.is_zero() || tok.is_one() || tok.is_nil() {
@@ -225,7 +225,7 @@ impl Expr {
         Ok((expr_index,ExprFuncall(location,DefIndex { index:def_index },args)))
     }
 
-    fn parse_literal(tokens: &[Token], start_index: uint) -> (uint,Expr) {
+    fn parse_literal(tokens: &[Token], start_index: uint) -> (uint,Expr<B>) {
         let mut bits = ~[];
         let mut location = tokens[start_index].location().clone();
         for i in range(start_index, tokens.len()) {
@@ -237,12 +237,12 @@ impl Expr {
                 bits.push(true);
             } else if tokens[i].is_nil() {
                 location = location + *tokens[i].location();
-                return (i+1,ExprLiteral(location,Bits::new(~bits.move_iter())));
+                return (i+1,ExprLiteral(location,Bits::from_vec(bits)));
             } else {
-                return (i,ExprLiteral(location,Bits::new(~bits.move_iter())));
+                return (i,ExprLiteral(location,Bits::from_vec(bits)));
             }
         }
-        (tokens.len(),ExprLiteral(location,Bits::new(~bits.move_iter())))
+        (tokens.len(),ExprLiteral(location,Bits::from_vec(bits)))
     }
 
     pub fn location(&self) -> Location {
@@ -258,9 +258,10 @@ impl Expr {
 #[cfg(test)]
 mod tests {
     use ast::{Ast,Bind,Dot,Nil,ExprLiteral,ExprArg,ExprFuncall,ExprConcat};
+    use bits1::Bits1;
     use error::Error;
 
-    fn parse(src: &str) -> Result<Ast,~[Error]> {
+    fn parse(src: &str) -> Result<Ast<Bits1>,~[Error]> {
         use std::io::mem::MemReader;
         Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()))
     }
@@ -353,7 +354,7 @@ mod tests {
         use std::io::File;
         let path = os::tmpdir().join(format!("test{}", unsafe { libc::getpid() }));
         File::create(&path).write(bytes!("x=x.y z=z."));
-        let ast = Ast::parse([path.clone()]).unwrap();
+        let ast : Ast<Bits1> = Ast::parse([path.clone()]).unwrap();
         fs::unlink(&path);
         let defs = ast.lookup_by_str("x").unwrap();
         assert!(defs.arity() == 0);

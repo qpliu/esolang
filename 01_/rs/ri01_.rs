@@ -1,5 +1,6 @@
 mod ast;
 mod bits;
+mod bits1;
 mod error;
 mod interp;
 mod location;
@@ -56,6 +57,7 @@ fn main() {
     use std::rc::Rc;
     use ast::Ast;
     use bits::Bits;
+    use bits1::Bits1;
     use interp::eval;
 
     let mut args = os::args();
@@ -63,7 +65,7 @@ fn main() {
     if args.len() < 1 {
         error([format!("usage: {} FILENAME ... [- FUNCTION [FILENAME ...]]", name)]);
     }
-    let ast = match Ast::parse(get_src_files(args)) {
+    let ast : Ast<Bits1> = match Ast::parse(get_src_files(args)) {
         Ok(ast) => ast,
         Err(errors) => error(errors.map(|e| e.to_str())),
     };

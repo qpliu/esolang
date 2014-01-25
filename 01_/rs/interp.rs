@@ -1,21 +1,22 @@
 use std::rc::Rc;
 
 use ast::{Ast,Bind,Def,DefIndex,Expr,ExprLiteral,ExprArg,ExprFuncall,ExprConcat,Nil};
-use bits::{Bits,LazyListIterator};
+use bits::Bits;
+use bits1::{Bits1,LazyListIterator};
 use location::Location;
 
-pub fn eval(ast: &Rc<Ast>, f: DefIndex, args: ~[Bits]) -> Bits {
+pub fn eval(ast: &Rc<Ast<Bits1>>, f: DefIndex, args: ~[Bits1]) -> Bits1 {
     eval_funcall(ast, f, args, None)
 }
 
-fn eval_funcall(ast: &Rc<Ast>, f: DefIndex, args: ~[Bits], location: Option<Location>) -> Bits {
-    Bits::new(~Unevaluated(Funcall { ast:ast.clone(), f:f, args:args, location:location }))
+fn eval_funcall(ast: &Rc<Ast<Bits1>>, f: DefIndex, args: ~[Bits1], location: Option<Location>) -> Bits1 {
+    Bits1::new(~Unevaluated(Funcall { ast:ast.clone(), f:f, args:args, location:location }))
 }
 
 struct Funcall {
-    ast: Rc<Ast>,
+    ast: Rc<Ast<Bits1>>,
     f: DefIndex,
-    args: ~[Bits],
+    args: ~[Bits1],
     location: Option<Location>,
 }
 
@@ -60,7 +61,7 @@ impl Iterator<bool> for FuncallBitIterator {
     }
 }
 
-fn match_bindings(def: &Def, args: &[Bits]) -> Option<~[Bits]> {
+fn match_bindings(def: &Def<Bits1>, args: &[Bits1]) -> Option<~[Bits1]> {
     assert!(def.match_bindings.len() == args.len());
     let mut bindings = ~[];
     for i in range(0, args.len()) {
@@ -81,7 +82,7 @@ fn match_bindings(def: &Def, args: &[Bits]) -> Option<~[Bits]> {
     Some(bindings)
 }
 
-fn eval_expr(ast: &Rc<Ast>, expr: &Expr, bindings: &[Bits]) -> Bits {
+fn eval_expr(ast: &Rc<Ast<Bits1>>, expr: &Expr<Bits1>, bindings: &[Bits1]) -> Bits1 {
     match *expr {
         ExprLiteral(_,ref bits) => bits.clone(),
         ExprArg(_,index) => bindings[index].clone(),
@@ -102,8 +103,9 @@ mod tests {
     use std::rc::Rc;
     use interp;
     use ast::Ast;
+    use bits1::Bits1;
 
-    fn parse(src: &str) -> Ast {
+    fn parse(src: &str) -> Ast<Bits1> {
         use std::io::mem::MemReader;
         Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned())).unwrap()
     }
