@@ -3,6 +3,7 @@ mod bits;
 mod bits1;
 mod error;
 mod interp;
+mod interp1;
 mod location;
 mod parse1;
 mod symbol;
@@ -54,11 +55,11 @@ fn error(msg: &[~str]) -> ! {
 fn main() {
     use std::io;
     use std::os;
-    use std::rc::Rc;
     use ast::Ast;
     use bits::Bits;
     use bits1::Bits1;
-    use interp::eval;
+    use interp::Interp;
+    use interp1::Interp1;
 
     let mut args = os::args();
     let name = args.shift();
@@ -90,7 +91,8 @@ fn main() {
     }
     
     assert!(args.len() == main_arity);
-    eval(&Rc::new(ast), main_index, args).write(&mut io::stdout());
+    let interp : Interp1 = Interp::new(ast, main_index, args);
+    interp.run().write(&mut io::stdout());
 }
 
 #[cfg(test)]
