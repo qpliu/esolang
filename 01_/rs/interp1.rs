@@ -6,17 +6,19 @@ use bits1::{Bits1,LazyListIterator};
 use interp::Interp;
 use location::Location;
 
-pub struct Interp1 {
-    priv bits: Bits1,
-}
+pub struct Interp1;
 
 impl Interp<Bits1> for Interp1 {
-    fn new(ast: Ast<Bits1>, f: DefIndex, args: ~[Bits1]) -> Interp1 {
-        Interp1 { bits: eval_funcall(&Rc::new(ast), f, args, None) }
-    }
+    fn new() -> Interp1 { Interp1 }
 
-    fn run(self) -> Bits1 {
-        self.bits
+    fn nil(&mut self) -> Bits1 { Bits::nil() }
+
+    fn constant(&mut self, bits: ~[bool]) -> Bits1 { Bits::from_vec(bits) }
+
+    fn file(&mut self, path: &Path) -> Bits1 { Bits::from_file(path) }
+
+    fn run(self, ast: Ast<Bits1>, f: DefIndex, args: ~[Bits1], writer: &mut Writer) {
+        eval_funcall(&Rc::new(ast), f, args, None).write(writer);
     }
 }
 
@@ -112,16 +114,15 @@ fn eval_expr(ast: &Rc<Ast<Bits1>>, expr: &Expr<Bits1>, bindings: &[Bits1]) -> Bi
 #[cfg(test)]
 mod tests {
     use ast::Ast;
+    use bits::Bits;
     use bits1::Bits1;
-    use interp::Interp;
-    use interp1::Interp1;
 
     fn run(src: &str, f: &str, args: ~[Bits1]) -> Bits1 {
         use std::io::mem::MemReader;
-        let ast = Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned())).unwrap();
+        use std::rc::Rc;
+        let ast = Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits)).unwrap();
         let f_index = ast.lookup_index_by_str(f).unwrap();
-        let interp : Interp1 = Interp::new(ast, f_index, args);
-        interp.run()
+        super::eval_funcall(&Rc::new(ast), f_index, args, None)
     }
 
     #[test]

@@ -66,7 +66,8 @@ fn main() {
     if args.len() < 1 {
         error([format!("usage: {} FILENAME ... [- FUNCTION [FILENAME ...]]", name)]);
     }
-    let ast : Ast<Bits1> = match Ast::parse(get_src_files(args)) {
+    let mut interp : Interp1 = Interp::new();
+    let ast : Ast<Bits1> = match Ast::parse(get_src_files(args), &|bits| interp.constant(bits)) {
         Ok(ast) => ast,
         Err(errors) => error(errors.map(|e| e.to_str())),
     };
@@ -91,8 +92,7 @@ fn main() {
     }
     
     assert!(args.len() == main_arity);
-    let interp : Interp1 = Interp::new(ast, main_index, args);
-    interp.run().write(&mut io::stdout());
+    interp.run(ast, main_index, args, &mut io::stdout());
 }
 
 #[cfg(test)]
