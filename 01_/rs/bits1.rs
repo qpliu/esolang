@@ -9,9 +9,9 @@ pub struct Bits1 {
 }
 
 struct ReaderEvaluator {
-    priv reader: ~Reader,
-    priv bit: u8,
-    priv byte: u8,
+    reader: ~Reader,
+    bit: u8,
+    byte: u8,
 }
 
 impl Bits1 {
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_reader_iterator() {
-        use std::io::mem::MemReader;
+        use std::io::MemReader;
         
         let bits : Bits1 = Bits::from_reader(~MemReader::new(~[170u8,0,255]));
         assert!("101010100000000011111111" == bits.to_str());
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_write() {
-        use std::io::mem::MemWriter;
+        use std::io::MemWriter;
         let bits = Bits1::new(~(~[false, true]).move_iter());
         let mut writer = MemWriter::new();
         (bits+bits+bits+bits).write(&mut writer);

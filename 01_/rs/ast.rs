@@ -207,7 +207,7 @@ impl<B> Expr<B> {
         let mut location = tok.location().clone();
         for i in range(0,arity) {
             if expr_index >= tokens.len() {
-                return Err(Error::new(tok.location().clone() + *tokens.last().location(), format!("`{}` given {} argument(s), requires {} argument(s)", tok.to_str(), i, arity)));
+                return Err(Error::new(tok.location().clone() + *tokens.last().unwrap().location(), format!("`{}` given {} argument(s), requires {} argument(s)", tok.to_str(), i, arity)));
             }
             match Expr::parse_expr(tokens, expr_index, bindings, names, make_literal) {
                 Err(error) => { return Err(error); },
@@ -260,7 +260,7 @@ mod tests {
     use error::Error;
 
     fn parse(src: &str) -> Result<Ast<Bits1>,~[Error]> {
-        use std::io::mem::MemReader;
+        use std::io::MemReader;
         Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits))
     }
 

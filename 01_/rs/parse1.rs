@@ -152,7 +152,7 @@ impl Def1 {
         if self.params.is_empty() {
             self.ident_location.clone()
         } else {
-            self.ident_location + self.params.last().location()
+            self.ident_location + self.params.last().unwrap().location()
         }
     }
 
@@ -253,13 +253,13 @@ impl Param1 {
         match self.location_without_bits() {
             None => {
                 assert!(!self.bits.is_empty());
-                self.bits.head().location + self.bits.last().location
+                self.bits.head().unwrap().location + self.bits.last().unwrap().location
             },
             Some(ref location) => {
                 if self.bits.is_empty() {
                     location.clone()
                 } else {
-                    self.bits.head().location + *location
+                    self.bits.head().unwrap().location + *location
                 }
             },
         }
@@ -268,7 +268,7 @@ impl Param1 {
 
 #[cfg(test)]
 mod tests {
-    use std::io::mem::MemReader;
+    use std::io::MemReader;
     use error::Error;
     use parse1::Parse1;
     use symbol::Symbols;

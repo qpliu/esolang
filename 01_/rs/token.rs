@@ -1,6 +1,6 @@
-use std::io::File;
-use std::io::buffered::BufferedReader;
+use std::io::BufferedReader;
 use std::io::Buffer;
+use std::io::File;
 use std::rc::Rc;
 
 use location::Location;
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_tokenize() {
-        use std::io::mem::MemReader;
+        use std::io::MemReader;
         let expected = ["cat", "a", "_", "=", "0", "1", "a", "."].map(|s| s.to_owned());
         let tokens : ~[Token] = Token::tokenize_buffer("-", ~MemReader::new(bytes!("cat a\n _ = == comment \n 01a.").to_owned()), Symbols::new()).collect();
         assert!(expected == tokens.map(|t| t.to_str()));
