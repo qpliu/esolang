@@ -17,6 +17,8 @@ impl Interp<Bits1> for Interp1 {
 
     fn file(&mut self, path: &Path) -> Bits1 { Bits::from_file(path) }
 
+    fn reader(&mut self, reader: ~Reader) -> Bits1 { Bits::from_reader(reader) }
+
     fn run(self, ast: Ast<Bits1>, f: DefIndex, args: ~[Bits1], writer: &mut Writer) {
         eval_funcall(&Rc::new(ast), f, args, None).write(writer);
     }

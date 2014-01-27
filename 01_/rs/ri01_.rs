@@ -1,9 +1,12 @@
+#[feature(struct_variant)];
+
 mod ast;
 mod bits;
 mod bits1;
 mod error;
 mod interp;
 mod interp1;
+mod interp2;
 mod location;
 mod parse1;
 mod symbol;
@@ -42,57 +45,57 @@ fn get_arg_files(args: &[~str]) -> ~[Path] {
 }
 
 #[cfg(not(test))]
-fn error(msg: &[~str]) -> ! {
-    use std::io;
-    use std::libc;
-    for line in msg.iter() {
-        io::stderr().write_line(line.to_str());
-    }
-    unsafe { libc::exit(1) }
-}
-
-#[cfg(not(test))]
 fn main() {
     use std::io;
     use std::os;
     use ast::Ast;
-    use bits::Bits;
-    use bits1::Bits1;
     use interp::Interp;
     use interp1::Interp1;
 
-    let mut args = os::args();
-    let name = args.shift();
-    if args.len() < 1 {
-        error([format!("usage: {} FILENAME ... [- FUNCTION [FILENAME ...]]", name)]);
+    fn error(msg: &[~str]) -> ! {
+        use std::libc;
+        for line in msg.iter() {
+            io::stderr().write_line(line.to_str());
+        }
+        unsafe { libc::exit(1) }
     }
-    let mut interp : Interp1 = Interp::new();
-    let ast : Ast<Bits1> = match Ast::parse(get_src_files(args), &|bits| interp.constant(bits)) {
-        Ok(ast) => ast,
-        Err(errors) => error(errors.map(|e| e.to_str())),
-    };
-    let main_name = get_main(args);
-    let main_index = match ast.lookup_index_by_str(main_name) {
-        None => error([format!("No such function `{}`", main_name)]),
-        Some(index) => index,
-    };
-    let main_arity = ast.lookup(main_index).arity();
-    let mut arg_files = get_arg_files(args);
-    while arg_files.len() > main_arity {
-        arg_files.pop();
+
+    fn run<B,I:Interp<B>>(mut interp: I) {
+        let mut args = os::args();
+        let name = args.shift();
+        if args.len() < 1 {
+            error([format!("usage: {} FILENAME ... [- FUNCTION [FILENAME ...]]", name)]);
+        }
+        let ast : Ast<B> = match Ast::parse(get_src_files(args), &|bits| interp.constant(bits)) {
+            Ok(ast) => ast,
+            Err(errors) => error(errors.map(|e| e.to_str())),
+        };
+        let main_name = get_main(args);
+        let main_index = match ast.lookup_index_by_str(main_name) {
+            None => error([format!("No such function `{}`", main_name)]),
+            Some(index) => index,
+        };
+        let main_arity = ast.lookup(main_index).arity();
+        let mut arg_files = get_arg_files(args);
+        while arg_files.len() > main_arity {
+            arg_files.pop();
+        }
+        assert!(arg_files.len() <= main_arity);
+        let mut args = arg_files.map(|path| interp.file(path));
+        assert!(args.len() <= main_arity);
+        if args.len() < main_arity {
+            args.push(interp.reader(~io::stdin()));
+        }
+        while args.len() < main_arity {
+            args.push(interp.nil());
+        }
+
+        assert!(args.len() == main_arity);
+        interp.run(ast, main_index, args, &mut io::stdout());
     }
-    assert!(arg_files.len() <= main_arity);
-    let mut args = arg_files.map(|path| Bits::from_file(path));
-    assert!(args.len() <= main_arity);
-    if args.len() < main_arity {
-        args.push(Bits::from_reader(~io::stdin()));
-    }
-    while args.len() < main_arity {
-        args.push(Bits::nil());
-    }
-    
-    assert!(args.len() == main_arity);
-    interp.run(ast, main_index, args, &mut io::stdout());
+
+    let interp : Interp1 = Interp::new();
+    run(interp);
 }
 
 #[cfg(test)]
