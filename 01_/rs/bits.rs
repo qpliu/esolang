@@ -5,7 +5,7 @@ pub trait Bits: Clone {
 
     fn nil() -> Self;
 
-    fn eval(&self) -> Option<(bool,Self)>;
+    fn eval(&mut self) -> Option<(bool,Self)>;
 
     fn from_file(path: &Path) -> Self {
         use std::io::File;

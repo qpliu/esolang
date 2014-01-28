@@ -37,7 +37,7 @@ impl Bits for Bits1 {
         Bits1 { list: LazyList::nil() }
     }
 
-    fn eval(&self) -> Option<(bool,Bits1)> {
+    fn eval(&mut self) -> Option<(bool,Bits1)> {
         match self.list.eval() {
             None => None,
             Some((bit,tail)) => Some((bit,Bits1 { list:tail })),
@@ -116,10 +116,10 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let bits = Bits1::new(~(~[true, false]).move_iter());
-        let (head1,tail1) = bits.eval().unwrap();
+        let mut bits = Bits1::new(~(~[true, false]).move_iter());
+        let (head1,mut tail1) = bits.eval().unwrap();
         assert!(head1);
-        let (head2,tail2) = tail1.eval().unwrap();
+        let (head2,mut tail2) = tail1.eval().unwrap();
         assert!(!head2);
         assert!(tail2.eval().is_none());
     }
