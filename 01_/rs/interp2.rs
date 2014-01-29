@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use ast::{Ast,DefIndex};
+use ast;
+use ast::{Ast,Def,DefIndex,Expr};
 use bits::Bits;
 use interp::Interp;
 
@@ -111,8 +112,11 @@ impl Bits for Bits2 {
                     }
                 }
             },
-            Funcall{ast: ref _ast, def_index: ref _def_index, args: ref _args} => {
-                fail!()
+            Funcall{ast: ref ast, def_index: ref def_index, args: ref args} => {
+                match force_funcall(ast, *def_index, *args).eval() {
+                    None => End,
+                    Some((b,rest)) => Replace(b,rest),
+                }
             },
         } {
             End => {
@@ -139,6 +143,91 @@ impl Clone for Bits2 {
     }
 }
 
+fn force_funcall(ast: &Rc<Ast<Bits2>>, def_index: DefIndex, args: &[Bits2]) -> Bits2 {
+    let defs = ast.borrow().lookup(def_index);
+    assert!(defs.arity() == args.len());
+    for def in defs.defs.iter() {
+        match match_bindings(def, args) {
+            None => (),
+            Some(bindings) => {
+                return eval_expr(ast, &def.expr, bindings);
+            }
+        }
+    }
+    fail!("Failed to match")
+}
+
+fn match_bindings(def: &Def<Bits2>, args: &[Bits2]) -> Option<~[Bits2]> {
+    assert!(def.match_bindings.len() == args.len());
+    let mut bindings = ~[];
+    for i in range(0, args.len()) {
+        let mut arg = args[i].clone();
+        for &b in def.match_bindings[i].bits.iter() {
+            match arg.eval() {
+                None => { return None; },
+                Some((bit,_)) if bit != b => { return None; },
+                Some((_,tail)) => { arg = tail.clone(); },
+            }
+        }
+        match def.match_bindings[i].binding {
+            ast::Bind => { bindings.push(arg); },
+            ast::Nil if !arg.eval().is_none() => { return None; },
+            _ => (),
+        }
+    }
+    Some(bindings)
+}
+
+fn eval_expr(ast: &Rc<Ast<Bits2>>, expr: &Expr<Bits2>, bindings: &[Bits2]) -> Bits2 {
+    match *expr {
+        ast::ExprLiteral(_,ref bits) => bits.clone(),
+        ast::ExprArg(_,index) => bindings[index].clone(),
+        ast::ExprConcat(_,ref expr1,ref expr2) => {
+            let bits1 = eval_expr(ast, *expr1, bindings);
+            let bits2 = eval_expr(ast, *expr2, bindings);
+            Bits2::from_data(Concat(bits1, bits2))
+        },
+        ast::ExprFuncall(_,ref f,ref exprs) => {
+            let args = exprs.map(|e| eval_expr(ast, e, bindings));
+            Bits2::from_data(Funcall{ast:ast.clone(), def_index:*f, args:args})
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use ast::Ast;
+    use bits::Bits;
+    use interp2::Bits2;
+
+    fn run(src: &str, f: &str, args: ~[Bits2]) -> Bits2 {
+        use std::io::MemReader;
+        use std::rc::Rc;
+        let ast : Ast<Bits2> = Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits)).unwrap();
+        let f_index = ast.lookup_index_by_str(f).unwrap();
+        super::force_funcall(&Rc::new(ast), f_index, args)
+    }
+
+    #[test]
+    fn test_eval() {
+        let b10 = run("f=10.", "f", ~[]);
+        assert!("10" == b10.bits_to_str());
+
+        let b1010 = run("2 x=x x.", "2", ~[b10]);
+        assert!("1010" == b1010.bits_to_str());
+
+        let b0101 = run("-0b=1- b.-1b=0- b.-_=_.", "-", ~[b1010.clone()]);
+        assert!("0101" == b0101.bits_to_str());
+    }
+
+    #[test]
+    #[should_fail]
+    fn test_fail() {
+        run("f=g1.g0=.","f",~[]).bits_to_str();
+    }
+
+    #[test]
+    fn test_lazy() {
+        run("f=g1.g0=.","f",~[]);
+    }
 }

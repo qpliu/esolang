@@ -50,7 +50,7 @@ fn main() {
     use std::os;
     use ast::Ast;
     use interp::Interp;
-    use interp1::Interp1;
+    use InterpImpl = interp2::Interp2;
 
     fn error(msg: &[~str]) -> ! {
         use std::libc;
@@ -94,7 +94,7 @@ fn main() {
         interp.run(ast, main_index, args, &mut io::stdout());
     }
 
-    let interp : Interp1 = Interp::new();
+    let interp : InterpImpl = Interp::new();
     run(interp);
 }
 
