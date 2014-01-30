@@ -7,6 +7,7 @@ mod error;
 mod interp;
 mod interp1;
 mod interp2;
+mod interp3;
 mod location;
 mod parse1;
 mod symbol;
@@ -50,7 +51,7 @@ fn main() {
     use std::os;
     use ast::Ast;
     use interp::Interp;
-    use InterpImpl = interp2::Interp2;
+    use InterpImpl = interp3::Interp3;
 
     fn error(msg: &[~str]) -> ! {
         use std::libc;
