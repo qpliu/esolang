@@ -56,7 +56,7 @@ fn main() {
     fn error(msg: &[~str]) -> ! {
         use std::libc;
         for line in msg.iter() {
-            io::stderr().write_line(line.to_str());
+            io::stderr().write_line(line.to_str()).ok();
         }
         unsafe { libc::exit(1) }
     }

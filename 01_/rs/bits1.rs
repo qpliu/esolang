@@ -77,7 +77,7 @@ impl Evaluator<bool> for ReaderEvaluator {
             self.bit >>= 1;
             Some((b,self as ~Evaluator:<bool>))
         } else {
-            match self.reader.read_byte() {
+            match self.reader.read_byte().ok() {
                 None => None,
                 Some(byte) => {
                     self.byte = byte;
@@ -108,10 +108,10 @@ mod tests {
         use std::os;
         use std::io::File;
         let path = os::tmpdir().join(format!("testbits{}", unsafe { libc::getpid() }));
-        File::create(&path).write(bytes!("01_"));
+        File::create(&path).write(bytes!("01_")).ok();
         let bits : Bits1 = Bits::from_file(&path);
         assert!("001100000011000101011111" == bits.to_str());
-        fs::unlink(&path);
+        fs::unlink(&path).ok();
     }
 
     #[test]
@@ -126,9 +126,9 @@ mod tests {
 
     #[test]
     fn test_reader_iterator() {
-        use std::io::MemReader;
+        use std::io::{BufferedReader,MemReader};
         
-        let bits : Bits1 = Bits::from_reader(~MemReader::new(~[170u8,0,255]));
+        let bits : Bits1 = Bits::from_reader(~BufferedReader::new(MemReader::new(~[170u8,0,255])));
         assert!("101010100000000011111111" == bits.to_str());
     }
 

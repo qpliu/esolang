@@ -29,7 +29,7 @@ pub trait Bits: Clone {
             }
             bit >>= 1;
             if bit == 0 {
-                writer.write_u8(byte);
+                writer.write_u8(byte).ok();
                 byte = 0;
                 bit = 128;
             }

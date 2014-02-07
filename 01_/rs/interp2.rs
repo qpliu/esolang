@@ -88,7 +88,7 @@ impl Bits for Bits2 {
                     *bit >>= 1;
                     Insert(*bit & *byte != 0)
                 } else {
-                    match reader.read_byte() {
+                    match reader.read_byte().ok() {
                         None => End,
                         Some(next_byte) => {
                             *bit = 64;
@@ -201,9 +201,9 @@ mod tests {
     use interp2::Bits2;
 
     fn run(src: &str, f: &str, args: ~[Bits2]) -> Bits2 {
-        use std::io::MemReader;
+        use std::io::{BufferedReader,MemReader};
         use std::rc::Rc;
-        let ast : Ast<Bits2> = Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits)).unwrap();
+        let ast : Ast<Bits2> = Ast::parse_buffer("-", ~BufferedReader::new(MemReader::new(src.as_bytes().to_owned())), &|bits| Bits::from_vec(bits)).unwrap();
         let f_index = ast.lookup_index_by_str(f).unwrap();
         super::force_funcall(&Rc::new(ast), f_index, args)
     }

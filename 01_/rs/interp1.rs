@@ -120,9 +120,9 @@ mod tests {
     use bits1::Bits1;
 
     fn run(src: &str, f: &str, args: ~[Bits1]) -> Bits1 {
-        use std::io::MemReader;
+        use std::io::{BufferedReader,MemReader};
         use std::rc::Rc;
-        let ast = Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits)).unwrap();
+        let ast = Ast::parse_buffer("-", ~BufferedReader::new(MemReader::new(src.as_bytes().to_owned())), &|bits| Bits::from_vec(bits)).unwrap();
         let f_index = ast.lookup_index_by_str(f).unwrap();
         super::eval_funcall(&Rc::new(ast), f_index, args, None)
     }

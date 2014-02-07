@@ -107,7 +107,7 @@ impl Iterator<Token> for TokenIterator {
         }
         loop {
             if self.column >= self.line.len() {
-                let line = self.buffer.read_line().unwrap_or_else(|| {
+                let line = self.buffer.read_line().ok().unwrap_or_else(|| {
                     self.eof = true;
                     ~""
                 });
@@ -190,9 +190,9 @@ mod tests {
 
     #[test]
     fn test_tokenize() {
-        use std::io::MemReader;
+        use std::io::{BufferedReader,MemReader};
         let expected = ["cat", "a", "_", "=", "0", "1", "a", "."].map(|s| s.to_owned());
-        let tokens : ~[Token] = Token::tokenize_buffer("-", ~MemReader::new(bytes!("cat a\n _ = == comment \n 01a.").to_owned()), Symbols::new()).collect();
+        let tokens : ~[Token] = Token::tokenize_buffer("-", ~BufferedReader::new(MemReader::new(bytes!("cat a\n _ = == comment \n 01a.").to_owned())), Symbols::new()).collect();
         assert!(expected == tokens.map(|t| t.to_str()));
 
         let expected = ["-:1:1: 1:3", "-:1:5: 1:5", "-:2:2: 2:2", "-:2:4: 2:4", "-:3:2: 3:2", "-:3:3: 3:3", "-:3:4: 3:4", "-:3:5: 3:5"].map(|s| s.to_owned());
@@ -212,9 +212,9 @@ mod tests {
         use std::os;
         use std::io::File;
         let path = os::tmpdir().join(format!("testtoken{}", unsafe { libc::getpid() }));
-        File::create(&path).write(bytes!("id x=x."));
+        File::create(&path).write(bytes!("id x=x.")).ok();
         let tokens : ~[Token] = Token::tokenize([path.clone()], Symbols::new()).collect();
-        fs::unlink(&path);
+        fs::unlink(&path).ok();
         assert!(["id", "x", "=", "x", "."].map(|s| s.to_owned()) == tokens.map(|t| t.to_str()));
     }
 }

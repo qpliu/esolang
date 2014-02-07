@@ -70,7 +70,7 @@ impl Bits3 {
                     *bit >>= 1;
                     Insert(*bit & *byte != 0)
                 } else {
-                    match reader.read_byte() {
+                    match reader.read_byte().ok() {
                         None => Replace(Nil),
                         Some(next_byte) => {
                             *bit = 64;
@@ -214,8 +214,8 @@ mod tests {
     use interp3::Bits3;
 
     fn run(src: &str, f: &str, args: ~[Bits3]) -> (~Ast<Bits3>,Bits3) {
-        use std::io::MemReader;
-        let ast = ~Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits)).unwrap();
+        use std::io::{BufferedReader,MemReader};
+        let ast = ~Ast::parse_buffer("-", ~BufferedReader::new(MemReader::new(src.as_bytes().to_owned())), &|bits| Bits::from_vec(bits)).unwrap();
         let f_index = ast.lookup_index_by_str(f).unwrap();
         let bits = Bits3::from_data(super::force_funcall(&*ast, f_index, args));
         (ast,bits)

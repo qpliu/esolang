@@ -260,8 +260,8 @@ mod tests {
     use error::Error;
 
     fn parse(src: &str) -> Result<Ast<Bits1>,~[Error]> {
-        use std::io::MemReader;
-        Ast::parse_buffer("-", ~MemReader::new(src.as_bytes().to_owned()), &|bits| Bits::from_vec(bits))
+        use std::io::{BufferedReader,MemReader};
+        Ast::parse_buffer("-", ~BufferedReader::new(MemReader::new(src.as_bytes().to_owned())), &|bits| Bits::from_vec(bits))
     }
 
     #[test]
@@ -351,9 +351,9 @@ mod tests {
         use std::os;
         use std::io::File;
         let path = os::tmpdir().join(format!("test{}", unsafe { libc::getpid() }));
-        File::create(&path).write(bytes!("x=x.y z=z."));
+        File::create(&path).write(bytes!("x=x.y z=z.")).ok();
         let ast : Ast<Bits1> = Ast::parse([path.clone()], &|bits| Bits::from_vec(bits)).unwrap();
-        fs::unlink(&path);
+        fs::unlink(&path).ok();
         let defs = ast.lookup_by_str("x").unwrap();
         assert!(defs.arity() == 0);
         assert!(defs.defs.len() == 1);

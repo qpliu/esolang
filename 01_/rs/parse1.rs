@@ -268,14 +268,14 @@ impl Param1 {
 
 #[cfg(test)]
 mod tests {
-    use std::io::MemReader;
+    use std::io::{BufferedReader,MemReader};
     use error::Error;
     use parse1::Parse1;
     use symbol::Symbols;
     use token::Token;
 
     fn parse(src: &str, symbols: Symbols) -> Result<Parse1,~[Error]> {
-        let mut tokens = Token::tokenize_buffer("-", ~MemReader::new(src.to_str().into_bytes()), symbols);
+        let mut tokens = Token::tokenize_buffer("-", ~BufferedReader::new(MemReader::new(src.to_str().into_bytes())), symbols);
         Parse1::parse(&mut tokens)
     }
 
