@@ -1,0 +1,77 @@
+-- Initial ideas for a dataflow language on bits
+
+-- binary not
+-- every branch must send to each output exactly once
+-- though not necessarily in the same order
+-- syntax: tokens: -> { } <- if else ;
+-- -- introduces a comment
+not x -> result {
+    -- evaluation of the if and else bodies block on reading x if it
+    -- is not available, but execution can continue on to subsequent
+    -- statements if there were any
+    if x {
+        -- sending to output resumes evaluation of whatever was blocking on it
+        0 -> result;
+    } else {
+        1 -> result;
+    }
+}
+
+xor x y -> result {
+    if x {
+        -- single result expressions are implicit
+        not y -> result;
+    } else {
+        y -> result;
+    }
+}
+
+-- one bit addition
+-- carry (the input) and carry (the output) are different entities that
+-- share a name
++ x y carry -> carry sum {
+    if xor x y {
+        carry -> carry;
+        xor xor x y carry -> sum;
+    } else {
+        x -> carry;
+        not carry -> sum;
+    }
+}
+
+-- one bit subtraction
+- x y borrow -> borrow difference {
+    if x {
+        if y {
+            borrow -> borrow;
+            borrow -> difference;
+        } else {
+            0 -> borrow;
+            not borrow -> difference;
+        }
+    } else {
+        if y {
+            1 -> borrow;
+            not borrow -> difference;
+        } else {
+            borrow -> borrow;
+            borrow -> difference;
+        }        
+    }
+}
+
+-- 4 bit addition
++4 x0 x1 x2 x3 y0 y1 y2 y3 -> s0 s1 s2 s3 s4 carry {
+    -- bind expressions with multiple results
+    c0 s0 <- + x0 y0 0;
+    -- if s0 is unavailable, but c0 and x1 and y1 are available
+    -- output to s0 is blocked, but execution of + x1 y1 c0 proceeds
+    s0 -> s0;
+    c1 s1 <- + x1 y1 c0;
+    s1 -> s1;
+    c2 s2 <- + x2 y2 c1;
+    s2 -> s2;
+    c3 s3 <- + x3 y3 c2;
+    s3 -> s3;
+    c3 -> carry;
+}
