@@ -1,28 +1,48 @@
--- Initial ideas for a dataflow language on bits
+-- flower: a dataflow language on bits
+
+-- -- introduces a comment through the end of the line
+-- syntax: tokens are: -> <- { } if else ;
 
 -- binary not
 -- every branch must send to each output exactly once
--- though not necessarily in the same order
+-- though not necessarily in the same order, though the order
+-- of the statements doesn't necessarily mean the outputs will be
+-- sent in the same order
 -- syntax: tokens: -> { } <- if else ;
--- -- introduces a comment
-not x -> result {
+not x -> not {
     -- evaluation of the if and else bodies block on reading x if it
     -- is not available, but execution can continue on to subsequent
     -- statements if there were any
+    -- This is similar to lazy evaluation.
     if x {
         -- sending to output resumes evaluation of whatever was blocking on it
-        0 -> result;
+        0 -> not;
     } else {
-        1 -> result;
+        1 -> not;
     }
 }
 
-xor x y -> result {
+xor x y -> xor {
     if x {
-        -- single result expressions are implicit
-        not y -> result;
+        not y -> xor;
     } else {
-        y -> result;
+        y -> xor;
+    }
+}
+
+-- alternatively
+xor' x y -> xor' {
+    -- Single value condition in an if statement means true branch is taken
+    -- if the value is true.  An even number of condition arguments means
+    -- true branch is taken if the first half of the arguments are equal
+    -- to the second half of the arguments.  Zero arguments means the true
+    -- branch is taken, though the else branch(es) still must send to the
+    -- same outputs to be legal.
+    -- An odd number (other than 1) of arguments is illegal.
+    if x y {
+        0 -> xor'
+    } else {
+        1 -> xor'
     }
 }
 
@@ -34,44 +54,224 @@ xor x y -> result {
         carry -> carry;
         xor xor x y carry -> sum;
     } else {
-        x -> carry;
-        not carry -> sum;
+        -- send multiple values to multiple output
+        x not carry -> carry sum;
     }
 }
 
 -- one bit subtraction
 - x y borrow -> borrow difference {
-    if x {
-        if y {
-            borrow -> borrow;
-            borrow -> difference;
-        } else {
-            0 -> borrow;
-            not borrow -> difference;
-        }
+    if x y 1 1 {
+        borrow borrow -> borrow difference;
+    } else if x y 1 0 {
+        0 not borrow -> borrow difference;
+    } else if x y 0 1 {
+        1 not borrow -> borrow difference;
+    } else if x y 0 0 {
+        borrow borrow -> borrow difference;
     } else {
-        if y {
-            1 -> borrow;
-            not borrow -> difference;
-        } else {
-            borrow -> borrow;
-            borrow -> difference;
-        }        
+        -- unreachable, but needed to prevent (compile time) error
+        0 0 -> borrow difference;
     }
 }
 
 -- 4 bit addition
-+4 x0 x1 x2 x3 y0 y1 y2 y3 -> s0 s1 s2 s3 s4 carry {
-    -- bind expressions with multiple results
-    c0 s0 <- + x0 y0 0;
++4 x0 x1 x2 x3 y0 y1 y2 y3 carry -> s0 s1 s2 s3 carry {
+    -- bind expressions with multiple results, use <- to bind one
+    -- or more local symbols
+    c0 s0 <- + x0 y0 carry;
     -- if s0 is unavailable, but c0 and x1 and y1 are available
     -- output to s0 is blocked, but execution of + x1 y1 c0 proceeds
-    s0 -> s0;
     c1 s1 <- + x1 y1 c0;
-    s1 -> s1;
     c2 s2 <- + x2 y2 c1;
-    s2 -> s2;
-    c3 s3 <- + x3 y3 c2;
-    s3 -> s3;
-    c3 -> carry;
+    -- multiple results are multiple values
+    + x3 y3 c2 -> carry s3;
+    -- write to all unwritten outputs from inputs or locals of the
+    -- same name
+    -- (compile time) error if an unwritten output has no input or
+    -- local with the same name
+    -- In this case: s0 s1 s2 -> s0 s1 s2;
+    ->;
 }
+
+-- 4 bit subtraction
+-4 x0 x1 x2 x3 y0 y1 y2 y3 borrow -> d0 d1 d2 d3 borrow {
+    b0 d0 <- - x0 y0 borrow;
+    b1 d1 <- - x1 y1 b0;
+    b2 d2 <- - x2 y2 b1;
+    - x3 y3 b2 -> borrow d3;
+    ->;
+}
+
+-- The main function must take at least 2 inputs, eof? and bit, plus
+-- any number of state bits.
+--
+-- The main function must write to at least 4 outputs plus any number of
+-- state bits.  The output state bits will be sent to the input state
+-- bits in the next evaluation.  (The number of output state bits does not
+-- necessarily have to be the same as the number of input state bits.
+-- Extraneous output state bits will be ignored.  Additional input state
+-- bits will be 0.)
+--
+-- On the initial invocation, no input is read.  eof? and bit are both
+-- 0 and all state bits are 0.
+--
+-- For output, if eof? (end of file) is true, it terminates, otherwise
+-- main will be evaluated again.  If read-next? is true, the inputs eof?
+-- and bit will reflect the next bit of input on the next evaluation.  If
+-- read-next? is false, eof? and bit will be unchanged for the next
+-- evaluation.  If write-bit? is true, bit will be written to the output,
+-- otherwise bit will be ignored.
+main eof? bit state0 state1 state2 state3 -> eof? read-next? write-bit? bit state0 state1 state2 state3 {
+   -- (compile-time) error, since each output needs to be written exactly once
+}
+
+-- infinite loop
+loop eof? bit -> eof? read-next? write-bit? bit {
+    0 -> eof?;
+    0 -> read-next?;
+    0 -> write-bit?;
+    0 -> bit;
+}
+
+-- cat
+cat eof? bit state -> eof? read-next? write-bit? bit state {
+    eof? -> eof?;
+    1 -> read-next?;
+    state -> write-bit?;
+    bit -> bit;
+    1 -> state;
+}
+
+-- Hello world
+hello eof? bit f0 f1 f2 f3 f4 f5 f6 f7 o0 o1 o2 o3 o4 o5 o6 o7 s0 s1 s2 s3
+        -> eof? read-next? write-bit? bit
+           f0 f1 f2 f3 f4 f5 f6 f7 o0 o1 o2 o3 o4 o5 o6 o7 s0 s1 s2 s3 {
+    0 -> read-next?;
+    if f0 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o0 -> bit;
+        0 -> f0;
+        ->;
+    } else if f1 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o1 -> bit;
+        0 -> f1;
+        ->;
+    } else if f2 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o2 -> bit;
+        0 -> f2;
+        ->;
+    } else if f3 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o3 -> bit;
+        0 -> f3;
+        ->;
+    } else if f4 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o4 -> bit;
+        0 -> f4;
+        ->;
+    } else if f5 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o4 -> bit;
+        0 -> f5;
+        ->;
+    } else if f6 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o6 -> bit;
+        0 -> f6;
+        ->;
+    } else if f7 {
+        0 -> eof?;
+        1 -> write-bit?;
+        o7 -> bit;
+        0 -> f7;
+        ->;
+    } else if 0 0 0 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 0 1 0 1 0 0 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- H
+        -- _ is ignored value, can also be on the left of <-.
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 1 0 0 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 1 0 0 1 -> o0 o1 o2 o3 o4 o5 o6 o7; -- e
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 0 1 0 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 1 1 0 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- l
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 1 1 0 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 1 1 0 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- l
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 0 0 1 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 1 1 1 1 -> o0 o1 o2 o3 o4 o5 o6 o7; -- o
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 1 0 1 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 0 1 0 0 0 0 0 -> o0 o1 o2 o3 o4 o5 o6 o7; --
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 0 1 1 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 1 0 1 1 1 -> o0 o1 o2 o3 o4 o5 o6 o7; -- w
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 1 1 1 0 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 0 1 1 1 -> o0 o1 o2 o3 o4 o5 o6 o7; -- o
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 0 0 0 1 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 1 0 0 1 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- r
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 1 0 0 1 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 1 1 0 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- l
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 0 1 0 1 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 1 1 0 0 1 0 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- d
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 1 1 0 1 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 0 1 0 0 0 0 1 -> o0 o1 o2 o3 o4 o5 o6 o7; -- !
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else if 0 0 1 1 s0 s1 s2 s3 {
+        0 0 0 -> eof? write-bit? bit;
+        1 1 1 1 1 1 1 1 -> f0 f1 f2 f3 f4 f5 f6 f7;
+        0 0 0 0 1 0 1 0 -> o0 o1 o2 o3 o4 o5 o6 o7; -- \n
+        +4 s0 s1 s2 s3 0 0 0 0 1 -> s0 s1 s2 s3 _;
+    } else {
+        1 0 -> eof? write-bit?;
+        ->;
+    }
+}
+
+-- Additional ideas.
+--
+-- Function arguments:
+-- If an expression in an argument position has multiple outputs, they
+-- map to multiple arguments (in left-to-right order).  It is a (compile
+-- time) error for an expression to have more outputs than there are
+-- remaining input arguments to the function.
