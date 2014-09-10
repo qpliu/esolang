@@ -4,17 +4,19 @@ module Parse
      Expression(ExpressionLiteral,ExpressionBound,ExpressionCall),
      Symbol(Symbol),
      Literal(Literal),
-     parser,resolver,parserResolver)
+     parse,resolve,parseResolve,prettyPrint)
 where
 
 import Data.Either(partitionEithers)
+import Data.List(intercalate,nub,partition,sort)
 import Data.Map(Map,empty,insert,member)
 import qualified Data.Map
 import Text.ParserCombinators.Parsec
     (Parser,ParseError,SourcePos,
      getPosition,lookAhead,many,many1,manyTill,
-     newline,noneOf,oneOf,parse,space,string,try,
+     newline,noneOf,oneOf,space,string,try,
      (<|>))
+import qualified Text.ParserCombinators.Parsec
 import Text.Parsec.Error(Message(Message),newErrorMessage)
 
 data Definition = Definition SourcePos Symbol [Symbol] [Symbol] [Statement]
@@ -36,14 +38,19 @@ data Expression = ExpressionLiteral Literal
     deriving Show
 
 data Symbol = Symbol SourcePos String
-    deriving (Eq,Show)
+    deriving Show
+
+instance Eq Symbol where
+    (Symbol _ name1) == (Symbol _ name2) = name1 == name2
+
+instance Ord Symbol where
+    compare (Symbol _ name1) (Symbol _ name2) = compare name1 name2
 
 data Literal = Literal SourcePos Bool
     deriving Show
 
-parser :: String -> String -> Either ParseError [Definition]
-parser filename source =
-    parse (skipSpace False >> many definition) filename source
+parse :: String -> String -> Either ParseError [Definition]
+parse filename source = Text.ParserCombinators.Parsec.parse (skipSpace False >> many definition) filename source
 
 skipSpace :: Bool -> Parser ()
 skipSpace required = do
@@ -154,12 +161,12 @@ undeterminedExpression = do
             <|> (try (token "1" True) >> return (Right (Literal position True)))
             <|> fmap Left symbol
 
-parserResolver :: String -> String -> Either [ParseError] [Definition]
-parserResolver filename source =
-    either (Left . (:[])) resolver (parser filename source)
+parseResolve :: String -> String -> Either [ParseError] [Definition]
+parseResolve filename source =
+    either (Left . (:[])) resolve (parse filename source)
 
-resolver :: [Definition] -> Either [ParseError] [Definition]
-resolver definitions = do
+resolve :: [Definition] -> Either [ParseError] [Definition]
+resolve definitions = do
     arity <- arities definitions
     case partitionEithers (map (resolveAndCheck arity) definitions) of
         ([],definitions) -> Right definitions
@@ -284,8 +291,38 @@ checkSend (Definition _ _ _ _ body) = reverse (foldl checkS [] body)
 -- make sure each branch sends to the same outputs
 -- make sure each output is sent to exactly once
 resolveSendAll :: Definition -> Either [ParseError] Definition
-resolveSendAll definition = undefined
-
+resolveSendAll (Definition position name inputs outputs statements) = do
+    (unsent,resolved) <- resolveSends inputs outputs statements []
+    if null unsent
+        then return (Definition position name inputs outputs resolved)
+        else Left [newErrorMessage (Message ("Unused output(s):" ++ show (map symbolName unsent))) position]
+  where
+    resolveSends locals outputs statements resolved =
+        case statements of
+            [] -> Right (outputs,reverse resolved)
+            (SendAllStatement position:statements) ->
+                let (sent,unsent) = partition (`elem` locals) outputs
+                in  resolveSends locals unsent statements (SendStatement position True (map ExpressionBound sent) sent:resolved)
+            (IfStatement position ifBlocks:statements) ->
+                resolveIfBlocks locals outputs statements resolved position ifBlocks
+            (statement@(SendStatement position _ _ symbols):statements) ->
+                case (filter (`notElem` outputs) symbols,filter (`notElem` symbols) outputs) of
+                    ([],unsent) -> resolveSends locals unsent statements (statement:resolved)
+                    (invalid,_) -> Left [newErrorMessage (Message ("Invalid output(s):" ++ show (map symbolName invalid))) position]
+            (statement@(BindStatement _ symbols _):statements) ->
+                resolveSends (symbols ++ locals) outputs statements (statement:resolved)
+    ifBlockStatements (IfBlock _ _ statements) = statements
+    resolveIfBlocks locals outputs statements resolved ifPosition ifBlocks =
+        case partitionEithers (map (flip (resolveSends locals outputs) [] . ifBlockStatements) ifBlocks) of
+            ([],resolvedBlocks) -> checkBlocks resolvedBlocks
+            (errors,_) -> Left (concat errors)
+      where
+        checkBlocks blockResolutions
+          | length (nub (map (sort . fst) blockResolutions)) /= 1 =
+                Left [newErrorMessage (Message "Unmatching outputs in if-branches") ifPosition]
+          | otherwise =
+                resolveSends locals (fst (head blockResolutions)) statements (IfStatement ifPosition (zipWith replaceBody blockResolutions ifBlocks):resolved)
+    replaceBody (_,statements) (IfBlock position expressions _) = IfBlock position expressions statements
 
 -- resolve undetermined expressions
 resolveUndeterminedExpressions :: (String -> Maybe (Int,Int)) -> [String] -> [Expression] -> Either [ParseError] [Expression]
@@ -317,3 +354,36 @@ resolveUndeterminedExpressions arity locals expressions =
                     takeArgs position inputs stack (argc+outputs) (expr:args)
                 expr:stack ->
                     takeArgs position inputs stack (argc+1) (expr:args)
+
+prettyPrint :: Definition -> String
+prettyPrint (Definition _ name inputs outputs statements) =
+    symbolName name ++ " "
+        ++ symbolNames inputs ++ " -> " ++ symbolNames outputs
+        ++ " {\n" ++ concatMap (ppStatement 1) statements ++ "}\n"
+  where
+    indent indentLevel = replicate (4 * indentLevel) ' '
+    symbolNames = intercalate " " . map symbolName
+    ppExpressions = intercalate " " . map ppExpression
+    ppStatement indentLevel statement =
+        case statement of
+            IfStatement _ ifBlocks ->
+                indent indentLevel ++ concatMap (ppIfBlock indentLevel) ifBlocks
+            SendStatement _ True _ _ -> indent indentLevel ++ "->;\n"
+            SendStatement _ False expressions symbols ->
+                indent indentLevel ++ ppExpressions expressions
+                    ++ " -> " ++ symbolNames symbols ++ ";\n"
+            BindStatement _ symbols expressions ->
+                indent indentLevel ++ symbolNames symbols
+                    ++ " <- " ++ ppExpressions expressions ++ ";\n"
+            _ -> error ("prettyPrint:" ++ show statement)
+    ppIfBlock indentLevel (IfBlock _ expressions statements)
+      | null expressions = "{\n" ++ concatMap (ppStatement (indentLevel + 1)) statements ++ indent indentLevel ++ "}\n"
+      | otherwise = "if " ++ ppExpressions expressions ++ " {\n" ++ concatMap (ppStatement (indentLevel + 1)) statements ++ indent indentLevel ++ "} else "
+    ppExpression expression =
+        case expression of
+            ExpressionLiteral (Literal _ True) -> "1"
+            ExpressionLiteral (Literal _ False) -> "0"
+            ExpressionBound symbol -> symbolName symbol
+            ExpressionCall symbol expressions _ ->
+                symbolName symbol ++ " " ++ ppExpressions expressions
+            _ -> error ("prettyPrint:" ++ show expression)
