@@ -1,5 +1,7 @@
 module Parse
-    (Statement(IfStatement,SendStatement,BindStatement),
+    (Unresolved,
+     Definition(Definition),
+     Statement(IfStatement,SendStatement,BindStatement),
      IfBlock(IfBlock),
      Expression(ExpressionLiteral,ExpressionBound,ExpressionCall),
      Symbol(Symbol),
@@ -18,6 +20,8 @@ import Text.ParserCombinators.Parsec
      (<|>))
 import qualified Text.ParserCombinators.Parsec
 import Text.Parsec.Error(Message(Message),newErrorMessage)
+
+data Unresolved = Unresolved [Definition]
 
 data Definition = Definition SourcePos Symbol [Symbol] [Symbol] [Statement]
     deriving Show
@@ -49,8 +53,8 @@ instance Ord Symbol where
 data Literal = Literal SourcePos Bool
     deriving Show
 
-parse :: String -> String -> Either ParseError [Definition]
-parse filename source = Text.ParserCombinators.Parsec.parse (skipSpace False >> many definition) filename source
+parse :: String -> String -> Either ParseError Unresolved
+parse filename source = Text.ParserCombinators.Parsec.parse (skipSpace False >> many definition >>= return . Unresolved) filename source
 
 skipSpace :: Bool -> Parser ()
 skipSpace required = do
@@ -96,7 +100,7 @@ token tok checkSpace = do
     return ()
 
 statementBlock :: Parser [Statement]
-statementBlock = do 
+statementBlock = do
     token "{" False
     statements <- many statement
     token "}" False
@@ -165,8 +169,8 @@ parseResolve :: String -> String -> Either [ParseError] [Definition]
 parseResolve filename source =
     either (Left . (:[])) resolve (parse filename source)
 
-resolve :: [Definition] -> Either [ParseError] [Definition]
-resolve definitions = do
+resolve :: Unresolved -> Either [ParseError] [Definition]
+resolve (Unresolved definitions) = do
     arity <- arities definitions
     case partitionEithers (map (resolveAndCheck arity) definitions) of
         ([],definitions) -> Right definitions
@@ -232,7 +236,7 @@ resolveUndetermined arity (Definition position name inputs outputs statements) =
             (Right expressions,([],_,body)) -> Right (IfBlock position expressions (reverse body))
             (Left errors,(bodyErrors,_,_)) -> Left (errors ++ bodyErrors)
             (_,(bodyErrors,_,_)) -> Left bodyErrors
-    
+
 check :: (Definition -> [ParseError]) -> Definition -> Either [ParseError] Definition
 check checker definition =
     case checker definition of
