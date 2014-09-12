@@ -1,0 +1,76 @@
+hello eof? bit s0 s1 s2 s3 c0 c1 c2 b1 b2 b3 b4 b5 b6 b7
+   -> eof? read-next? write-bit?
+           bit s0 s1 s2 s3 c0 c1 c2 b1 b2 b3 b4 b5 b6 b7 {
+    0 1 -> read-next? write-bit?;
+    if c0 c1 c2 0 0 0 {
+        0 0 1 -> c0 c1 c2;
+        next-char s0 s1 s2 s3 -> eof? s0 s1 s2 s3 bit b1 b2 b3 b4 b5 b6 b7;
+    } else if c0 c1 c2 0 0 1 {
+        0 0 1 0 b1 -> eof? c0 c1 c2 bit;
+        ->;
+    } else if c0 c1 c2 0 1 0 {
+        0 0 1 1 b2 -> eof? c0 c1 c2 bit;
+        ->;
+    } else if c0 c1 c2 0 1 1 {
+        0 1 0 0 b3 -> eof? c0 c1 c2 bit;
+        ->;
+    } else if c0 c1 c2 1 0 0 {
+        0 1 0 1 b4 -> eof? c0 c1 c2 bit;
+        ->;
+    } else if c0 c1 c2 1 0 1 {
+        0 1 1 0 b5 -> eof? c0 c1 c2 bit;
+        ->;
+    } else if c0 c1 c2 1 1 0 {
+        0 1 1 1 b6 -> eof? c0 c1 c2 bit;
+        ->;
+    } else {
+        0 0 0 0 b7 -> eof? c0 c1 c2 bit;
+        ->;
+    }
+}
+
+next-char s0 s1 s2 s3 -> eof? s0 s1 s2 s3 b0 b1 b2 b3 b4 b5 b6 b7 {
+    if s0 s1 s2 s3 0 0 0 0 {
+        0 0 0 0 1 -> eof? s0 s1 s2 s3;
+        0 1 0 0 1 0 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- H
+    } else if  s0 s1 s2 s3 0 0 0 1 {
+        0 0 0 1 0 -> eof? s0 s1 s2 s3;
+        0 1 1 0 0 1 0 1 -> b0 b1 b2 b3 b4 b5 b6 b7; -- e
+    } else if  s0 s1 s2 s3 0 0 1 0 {
+        0 0 0 1 1 -> eof? s0 s1 s2 s3;
+        0 1 1 0 1 1 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- l
+    } else if  s0 s1 s2 s3 0 0 1 1 {
+        0 0 1 0 0 -> eof? s0 s1 s2 s3;
+        0 1 1 0 1 1 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- l
+    } else if  s0 s1 s2 s3 0 1 0 0 {
+        0 0 1 0 1 -> eof? s0 s1 s2 s3;
+        0 1 1 0 1 1 1 1 -> b0 b1 b2 b3 b4 b5 b6 b7; -- o
+    } else if  s0 s1 s2 s3 0 1 0 1 {
+        0 0 1 1 0 -> eof? s0 s1 s2 s3;
+        0 0 1 0 0 0 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7; --
+    } else if  s0 s1 s2 s3 0 1 1 0 {
+        0 0 1 1 1 -> eof? s0 s1 s2 s3;
+        0 1 1 1 0 1 1 1 -> b0 b1 b2 b3 b4 b5 b6 b7; -- w
+    } else if  s0 s1 s2 s3 0 1 1 1 {
+        0 1 0 0 0 -> eof? s0 s1 s2 s3;
+        0 1 1 0 1 1 1 1 -> b0 b1 b2 b3 b4 b5 b6 b7; -- o
+    } else if  s0 s1 s2 s3 1 0 0 0 {
+        0 1 0 0 1 -> eof? s0 s1 s2 s3;
+        0 1 1 1 0 0 1 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- r
+    } else if  s0 s1 s2 s3 1 0 0 1 {
+        0 1 0 1 0 -> eof? s0 s1 s2 s3;
+        0 1 1 0 1 1 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- l
+    } else if  s0 s1 s2 s3 1 0 1 0 {
+        0 1 0 1 1 -> eof? s0 s1 s2 s3;
+        0 1 1 0 0 1 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- d
+    } else if  s0 s1 s2 s3 1 0 1 1 {
+        0 1 1 0 0 -> eof? s0 s1 s2 s3;
+        0 0 1 0 0 0 0 1 -> b0 b1 b2 b3 b4 b5 b6 b7; -- !
+    } else if  s0 s1 s2 s3 1 1 0 0 {
+        0 1 1 1 1 -> eof? s0 s1 s2 s3;
+        0 0 0 0 1 0 1 0 -> b0 b1 b2 b3 b4 b5 b6 b7; -- \n
+    } else {
+        1 1 1 1 1 -> eof? s0 s1 s2 s3;
+        0 0 0 0 0 0 0 0 -> b0 b1 b2 b3 b4 b5 b6 b7;
+    }
+}

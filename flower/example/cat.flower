@@ -1,0 +1,4 @@
+cat eof? bit state -> eof? read-next? write-bit? bit state {
+    1 1 state -> read-next? state write-bit?;
+    ->;
+}
