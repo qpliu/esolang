@@ -3,11 +3,12 @@ package eval
 import (
 	"./interp"
 	"bytes"
+	"sort"
 )
 
 type State struct {
 	tokens []string
-	defs   map[string]interp.Def
+	defs   map[string]*interp.Def
 }
 
 func (s *State) Prompt() string {
@@ -45,12 +46,41 @@ func (s *State) evalDirective(tokens []string) string {
 	case "?", "help", "h":
 		return "help message"
 	case "=", "def", "d":
-		return "list def names or bodies of specified name"
+		return directiveDef(s, tokens[2:])
 	case "-", "undef", "u":
 		return "undefine specified name"
 	default:
 		return "unrecognized directive: " + tokens[1]
 	}
+}
+
+func directiveDef(s *State, tokens []string) string {
+	result := ""
+	sep := ""
+	if len(tokens) == 0 {
+		names := make([]string, 0, len(s.defs))
+		for name := range s.defs {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			result += sep + name
+			sep = "\n"
+		}
+		return result
+	}
+	for _, name := range tokens {
+		if def, ok := s.defs[name]; ok {
+			for _, show := range def.Show() {
+				result += sep + show
+				sep = "\n"
+			}
+		} else {
+			result += sep + name + " not defined."
+		}
+		sep = "\n"
+	}
+	return result
 }
 
 func (s *State) eval() (string, int, bool, bool) {
@@ -123,7 +153,7 @@ func (s *State) evalExpr(firstIndex, lastIndex int) (string, int, bool, bool) {
 
 func (s *State) evalDef(eqIndex, lastIndex int) (string, int, bool, bool) {
 	if s.defs == nil {
-		s.defs = make(map[string]interp.Def)
+		s.defs = make(map[string]*interp.Def)
 	}
 	if def, ok := s.defs[s.tokens[0]]; ok {
 		if err := def.Add(s.tokens[1:eqIndex], s.tokens[eqIndex+1:lastIndex]); err != nil {

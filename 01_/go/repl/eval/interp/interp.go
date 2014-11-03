@@ -9,8 +9,8 @@ type Def struct {
 	compiled []compiledDef
 }
 
-func NewDef(name string, parameters, body []string) Def {
-	return Def{
+func NewDef(name string, parameters, body []string) *Def {
+	return &Def{
 		name:   name,
 		arity:  arity(parameters),
 		bodies: [][2][]string{[2][]string{parameters, body}},
@@ -70,7 +70,7 @@ type Value struct {
 	args []*Value
 }
 
-func (v *Value) Force(defs map[string]Def) (bool, *Value, error) {
+func (v *Value) Force(defs map[string]*Def) (bool, *Value, error) {
 	switch v.val {
 	case v0, v1, vnil:
 		return v.val == v1, v.next, nil
@@ -81,10 +81,42 @@ func (v *Value) Force(defs map[string]Def) (bool, *Value, error) {
 	}
 }
 
-func CompileExpr(tokens []string, defs map[string]Def) (Expr, error) {
+func CompileExpr(tokens []string, defs map[string]*Def) (Expr, error) {
 	return nil, errors.New("not implemented")
 }
 
-func EvalExpr(defs map[string]Def, expr Expr, args []*Value) *Value {
+func EvalExpr(defs map[string]*Def, expr Expr, args []*Value) *Value {
 	return &Value{vthunk, nil, expr, args}
+}
+
+func (def *Def) Show() []string {
+	result := make([]string, 0, len(def.bodies))
+	for _, body := range def.bodies {
+		s := def.name
+		addSpace := true
+		for _, token := range body[0] {
+			if addSpace {
+				s += " "
+			}
+			s += token
+			literal, terminated := isLiteralTerminated(token)
+			addSpace = !literal || terminated
+		}
+		s += " ="
+		for _, token := range body[1] {
+			s += " " + token
+		}
+		result = append(result, s+".")
+	}
+	return result
+}
+
+func isLiteralTerminated(token string) (bool, bool) {
+	if token == "_" {
+		return true, true
+	} else if token[0] == '0' || token[0] == '1' {
+		return true, token[len(token)-1] == '_'
+	} else {
+		return false, false
+	}
 }
