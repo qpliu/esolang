@@ -1,5 +1,9 @@
 package interp
 
+import (
+	"errors"
+)
+
 type Expr interface {
 	Eval(result *Value, defs map[string]*Def, args []*Value) error
 }
@@ -8,7 +12,7 @@ type literalExpr string
 
 func (expr literalExpr) Eval(result *Value, defs map[string]*Def, args []*Value) error {
 	str := string(expr)
-	if len(str) == 0 || str[0] == '_' {
+	if len(str) == 0 || str == "_" {
 		result.val = vnil
 		result.next = nil
 		result.expr = nil
@@ -61,4 +65,16 @@ func (expr concatExpr) Eval(result *Value, defs map[string]*Def, args []*Value) 
 		panic("unreachable")
 	}
 	return nil
+}
+
+type funcallExpr struct {
+	def  *Def
+	args []Expr
+}
+
+func (expr funcallExpr) Eval(result *Value, defs map[string]*Def, args []*Value) error {
+	if err := expr.def.compile(defs); err != nil {
+		return err
+	}
+	return errors.New("not implemented")
 }
