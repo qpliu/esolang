@@ -48,10 +48,8 @@ func arity(parameters []string) int {
 
 type compiledDef struct {
 	// header
-	body Expr
-}
-
-type Expr interface {
+	body       Expr
+	compileErr error
 }
 
 type valType int
@@ -71,13 +69,17 @@ type Value struct {
 }
 
 func (v *Value) Force(defs map[string]*Def) (bool, *Value, error) {
-	switch v.val {
-	case v0, v1, vnil:
-		return v.val == v1, v.next, nil
-	case vthunk:
-		return false, nil, errors.New("not implemented")
-	default:
-		panic("unreachable")
+	for {
+		switch v.val {
+		case v0, v1, vnil:
+			return v.val == v1, v.next, nil
+		case vthunk:
+			if err := v.expr.Eval(v, defs, v.args); err != nil {
+				return false, nil, err
+			}
+		default:
+			panic("unreachable")
+		}
 	}
 }
 
