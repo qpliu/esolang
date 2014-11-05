@@ -4,7 +4,7 @@ import "errors"
 
 type Def struct {
 	name     string
-	arity    int
+	arity    uint
 	bodies   [][2][]string
 	compiled []compiledDef
 }
@@ -36,8 +36,8 @@ func (def *Def) compile(defs map[string]*Def) error {
 	return errors.New("not implemented")
 }
 
-func arity(parameters []string) int {
-	return len(compileParams(parameters))
+func arity(parameters []string) uint {
+	return uint(len(compileParams(parameters)))
 }
 
 type compiledDef struct {
@@ -103,7 +103,97 @@ func CompileExpr(tokens []string, defs map[string]*Def) (Expr, error) {
 }
 
 func compileExpr(tokens []string, defs map[string]*Def, params []param) (Expr, error) {
-	return nil, errors.New("not implemented")
+	bindings := make(map[string]uint)
+	i := uint(0)
+	for _, param := range params {
+		if param.ptype == paramBind {
+			if _, ok := bindings[param.bind]; ok {
+				return nil, errors.New("duplicate parameter:" + param.bind)
+			}
+			bindings[param.bind] = i
+			i++
+		}
+	}
+	var stack *compileStack = nil
+	for _, token := range tokens {
+		var expr Expr = nil
+		if isLiteral, _ := isLiteralTerminated(token); isLiteral {
+			expr = literalExpr(token)
+		} else if index, ok := bindings[token]; ok {
+			expr = argExpr(index)
+		} else if def, ok := defs[token]; ok && def.arity == 0 {
+			expr = funcallExpr{def: def, args: nil}
+		}
+		if expr != nil {
+			stack = stack.push()
+			stack.expr = expr
+			for stack.argc > 0 && stack.argi+1 >= stack.argc {
+				args := make([]Expr, stack.argc)
+				for {
+					if stack.call != nil {
+						panic("stack.call != nil")
+					}
+					if stack.argi != 0 && stack.previous.argi+1 != stack.argi {
+						panic("stack.argi != 0 && stack.previous.argi + 1 != stack.argi")
+					}
+					args[stack.argi] = stack.expr
+					if stack.argi != 0 {
+						stack = stack.previous
+						continue
+					}
+					stack = stack.previous
+					if stack.call == nil || stack.expr != nil || stack.call.arity != uint(len(args)) {
+						panic("stack.call == nil || stack.expr != nil || stack.call.arity != uint(len(args))")
+					}
+					stack.expr = funcallExpr{def: stack.call, args: args}
+					stack.call = nil
+					break
+				}
+			}
+		} else if def, ok := defs[token]; ok {
+			if def.arity == 0 {
+				panic("def.arity == 0")
+			}
+			stack = stack.push()
+			stack.call = def
+		} else {
+			return nil, errors.New("undefined symbol:" + token)
+		}
+	}
+	if stack == nil {
+		return literalExpr(""), nil
+	} else if stack.argc != 0 || stack.call != nil {
+		return nil, errors.New("not enough arguments to a function")
+	}
+	if stack.expr == nil {
+		panic("stack.expr == nil")
+	}
+	appendExpr := stack.expr
+	for stack = stack.previous; stack != nil; stack = stack.previous {
+		if stack.expr == nil || stack.call != nil || stack.argc != 0 {
+			panic("stack.expr == nil || stack.call != nil || stack.argc != 0")
+		}
+		appendExpr = concatExpr{stack.expr, appendExpr}
+	}
+	return appendExpr, nil
+}
+
+type compileStack struct {
+	previous   *compileStack
+	call       *Def
+	expr       Expr
+	argc, argi uint
+}
+
+func (stack *compileStack) push() *compileStack {
+	if stack == nil {
+		return &compileStack{}
+	} else if stack.call != nil && stack.call.arity > 0 {
+		return &compileStack{previous: stack, argc: stack.call.arity}
+	} else if stack.argc == 0 {
+		return &compileStack{previous: stack}
+	}
+	return &compileStack{previous: stack, argc: stack.argc, argi: stack.argi + 1}
 }
 
 func EvalExpr(defs map[string]*Def, expr Expr, args []*Value) *Value {

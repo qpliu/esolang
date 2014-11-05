@@ -36,10 +36,10 @@ func (expr literalExpr) Eval(result *Value, defs map[string]*Def, args []*Value)
 	return nil
 }
 
-type argExpr int
+type argExpr uint
 
 func (expr argExpr) Eval(result *Value, defs map[string]*Def, args []*Value) error {
-	arg := args[int(expr)]
+	arg := args[uint(expr)]
 	result.val = arg.val
 	result.next = arg.next
 	result.expr = arg.expr
@@ -55,7 +55,7 @@ func (expr concatExpr) Eval(result *Value, defs map[string]*Def, args []*Value) 
 	}
 	switch result.val {
 	case v0, v1:
-		result.next.expr = concatExpr{result.next.expr, expr[1]}
+		result.next = EvalExpr(defs, concatExpr{result.next.expr, expr[1]}, args)
 	case vnil:
 		result.val = vthunk
 		result.expr = expr[1]
