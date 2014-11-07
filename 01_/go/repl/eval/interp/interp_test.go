@@ -114,6 +114,50 @@ func TestCompileExpr(t *testing.T) {
 	testCompileExpr("g g f_q f", []string{"g", "g", "f", "_", "q", "f"}, defs, params, concatExpr{funcallExpr{def: defg, args: []Expr{funcallExpr{def: defg, args: []Expr{funcallExpr{def: deff}, literalExpr("_")}}, argExpr(1)}}, funcallExpr{def: deff}}, t)
 }
 
+func testEvalExpr(label string, expr Expr, defs map[string]*Def, expected []bool, t *testing.T) {
+	eq, err := valueEq(expected, EvalExpr(defs, expr, nil), defs)
+	if err != nil {
+		t.Errorf("evaluation error: %s: %s", err.Error(), label)
+	} else if !eq {
+		t.Errorf("testEvalExpr failed: %s", label)
+	}
+}
+
+func TestEvalExpr(t *testing.T) {
+	defs := make(map[string]*Def)
+	id := &Def{
+		name:   "id",
+		arity:  1,
+		bodies: [][2][]string{{{"x"}, {"x"}}},
+	}
+	defs["id"] = id
+	concat := &Def{
+		name:   "concat",
+		arity:  2,
+		bodies: [][2][]string{{{"a", "b"}, {"a", "b"}}},
+	}
+	defs["concat"] = concat
+	xor := &Def{
+		name:  "xor",
+		arity: 2,
+		bodies: [][2][]string{
+			{{"_", "b"}, {"b"}},
+			{{"a", "_"}, {"a"}},
+			{{"0", "a", "0", "b"}, {"0", "xor", "a", "b"}},
+			{{"0", "a", "1", "b"}, {"1", "xor", "a", "b"}},
+			{{"1", "a", "0", "b"}, {"1", "xor", "a", "b"}},
+			{{"1", "a", "1", "b"}, {"0", "xor", "a", "b"}},
+		},
+	}
+	defs["xor"] = xor
+	testEvalExpr("01_", literalExpr("01_"), defs, []bool{false, true}, t)
+	testEvalExpr("id 01_", funcallExpr{def: id, args: []Expr{literalExpr("01_")}}, defs, []bool{false, true}, t)
+	testEvalExpr("concat 01_ 01_", funcallExpr{def: concat, args: []Expr{literalExpr("01_"), literalExpr("01_")}}, defs, []bool{false, true, false, true}, t)
+	testEvalExpr("xor _ _", funcallExpr{def: xor, args: []Expr{literalExpr("_"), literalExpr("_")}}, defs, nil, t)
+	testEvalExpr("xor 0101_ 011001_", funcallExpr{def: xor, args: []Expr{literalExpr("0101_"), literalExpr("011001_")}}, defs, []bool{false, false, true, true, false, true}, t)
+	testEvalExpr("xor 010101_ 0110_", funcallExpr{def: xor, args: []Expr{literalExpr("0101_"), literalExpr("011001_")}}, defs, []bool{false, false, true, true, false, true}, t)
+}
+
 func exprEq(e1, e2 Expr) bool {
 	switch e1.(type) {
 	case literalExpr:
@@ -141,4 +185,19 @@ func exprEq(e1, e2 Expr) bool {
 	default:
 		return false
 	}
+}
+
+func valueEq(bits []bool, val *Value, defs map[string]*Def) (bool, error) {
+	if val == nil {
+		return len(bits) == 0, nil
+	}
+	for _, bit := range bits {
+		b, v, err := val.Force(defs)
+		if err != nil || b != bit || val == nil {
+			return false, err
+		}
+		val = v
+	}
+	_, v, err := val.Force(defs)
+	return v == nil && err == nil, err
 }

@@ -33,7 +33,12 @@ func (def *Def) compile(defs map[string]*Def) error {
 	if len(def.compiled) == len(def.bodies) {
 		return nil
 	}
-	return errors.New("not implemented")
+	def.compiled = make([]compiledDef, len(def.bodies))
+	for i, body := range def.bodies {
+		def.compiled[i].params = compileParams(body[0])
+		def.compiled[i].body, def.compiled[i].compileErr = compileExpr(body[1], defs, def.compiled[i].params)
+	}
+	return nil
 }
 
 func arity(parameters []string) uint {
@@ -196,8 +201,8 @@ func (stack *compileStack) push() *compileStack {
 	return &compileStack{previous: stack, argc: stack.argc, argi: stack.argi + 1}
 }
 
-func EvalExpr(defs map[string]*Def, expr Expr, args []*Value) *Value {
-	return &Value{vthunk, nil, expr, args}
+func EvalExpr(defs map[string]*Def, expr Expr, bindings []*Value) *Value {
+	return &Value{vthunk, nil, expr, bindings}
 }
 
 func (def *Def) Show() []string {
