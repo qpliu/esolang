@@ -48,7 +48,10 @@ func (s *State) evalDirective(tokens []string) string {
 	case "=", "def", "d":
 		return directiveDef(s, tokens[2:])
 	case "-", "undef", "u":
-		return "undefine specified name"
+		for _, token := range tokens[2:] {
+			delete(s.defs, token)
+		}
+		return ""
 	default:
 		return "unrecognized directive: " + tokens[1]
 	}
@@ -130,11 +133,11 @@ func (s *State) evalExpr(firstIndex, lastIndex int) (string, int, bool, bool) {
 	result := interp.EvalExpr(s.defs, expr, nil)
 	var buffer bytes.Buffer
 	for {
-		bit, result, err := result.Force(s.defs)
+		bit, res, err := result.Force(s.defs)
 		if err != nil {
 			return err.Error(), 0, true, false
 		}
-		if result == nil {
+		if res == nil {
 			if _, err = buffer.WriteRune('_'); err != nil {
 				return err.Error(), 0, true, false
 			}
@@ -148,22 +151,28 @@ func (s *State) evalExpr(firstIndex, lastIndex int) (string, int, bool, bool) {
 				return err.Error(), 0, true, false
 			}
 		}
+		result = res
 	}
 }
 
 func (s *State) evalDef(eqIndex, lastIndex int) (string, int, bool, bool) {
+	clearCompilations := true
 	if s.defs == nil {
 		s.defs = make(map[string]*interp.Def)
+		clearCompilations = false
 	}
 	if def, ok := s.defs[s.tokens[0]]; ok {
 		if err := def.Add(s.tokens[1:eqIndex], s.tokens[eqIndex+1:lastIndex]); err != nil {
 			return err.Error(), 0, true, false
 		}
+		clearCompilations = false
 	} else {
 		s.defs[s.tokens[0]] = interp.NewDef(s.tokens[0], s.tokens[1:eqIndex], s.tokens[eqIndex+1:lastIndex])
 	}
-	for _, def := range s.defs {
-		def.ClearCompilation()
+	if clearCompilations {
+		for _, def := range s.defs {
+			def.ClearCompilation()
+		}
 	}
 	return "", lastIndex + 1, false, false
 }

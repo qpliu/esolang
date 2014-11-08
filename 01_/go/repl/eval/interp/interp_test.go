@@ -156,28 +156,29 @@ func TestEvalExpr(t *testing.T) {
 	testEvalExpr("xor _ _", funcallExpr{def: xor, args: []Expr{literalExpr("_"), literalExpr("_")}}, defs, nil, t)
 	testEvalExpr("xor 0101_ 011001_", funcallExpr{def: xor, args: []Expr{literalExpr("0101_"), literalExpr("011001_")}}, defs, []bool{false, false, true, true, false, true}, t)
 	testEvalExpr("xor 010101_ 0110_", funcallExpr{def: xor, args: []Expr{literalExpr("0101_"), literalExpr("011001_")}}, defs, []bool{false, false, true, true, false, true}, t)
+	testEvalExpr("concat id 0_ 1_", funcallExpr{def: concat, args: []Expr{funcallExpr{def: id, args: []Expr{literalExpr("0_")}}, literalExpr("1_")}}, defs, []bool{false, true}, t)
 }
 
 func exprEq(e1, e2 Expr) bool {
 	switch e1.(type) {
 	case literalExpr:
-		e, ok := e2.(literalExpr)
-		return ok && e1 == e
+		e2, ok := e2.(literalExpr)
+		return ok && e1 == e2
 	case argExpr:
-		e, ok := e2.(argExpr)
-		return ok && e1 == e
+		e2, ok := e2.(argExpr)
+		return ok && e1 == e2
 	case concatExpr:
-		e, ok := e2.(concatExpr)
-		ee := e1.(concatExpr)
-		return ok && exprEq(ee[0], e[0]) && exprEq(ee[1], e[1])
+		e1 := e1.(concatExpr)
+		e2, ok := e2.(concatExpr)
+		return ok && exprEq(e1[0], e2[0]) && exprEq(e1[1], e2[1])
 	case funcallExpr:
-		e, ok := e2.(funcallExpr)
-		ee := e1.(funcallExpr)
-		if !ok || ee.def != e.def || len(ee.args) != len(e.args) {
+		e1 := e1.(funcallExpr)
+		e2, ok := e2.(funcallExpr)
+		if !ok || e1.def != e2.def || len(e1.args) != len(e2.args) {
 			return false
 		}
-		for i, arg := range ee.args {
-			if !exprEq(arg, e.args[i]) {
+		for i, arg := range e1.args {
+			if !exprEq(arg, e2.args[i]) {
 				return false
 			}
 		}
