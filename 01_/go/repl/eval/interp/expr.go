@@ -58,6 +58,7 @@ type concatExpr [2]Expr
 
 func (expr concatExpr) Eval(result *Value, defs map[string]*Def) error {
 	bindings := result.bindings
+	result.expr = expr[0]
 	if err := expr[0].Eval(result, defs); err != nil {
 		return err
 	}
@@ -109,14 +110,9 @@ DefLoop:
 			if param.ptype == paramBind {
 				bindings = append(bindings, value)
 			} else if param.ptype == paramNil {
-				if len(param.match) == 0 {
-					if _, val, err := value.Force(defs); err != nil {
-						return err
-					} else {
-						value = val
-					}
-				}
-				if value != nil {
+				if _, val, err := value.Force(defs); err != nil {
+					return err
+				} else if val != nil {
 					continue DefLoop
 				}
 			}
