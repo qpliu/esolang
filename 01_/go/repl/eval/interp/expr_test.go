@@ -83,6 +83,34 @@ func TestExpr(t *testing.T) {
 	if !checkVal("3:bindings[1]", val.bindings[1], vthunk, literalExpr("1_"), 0, nil, t) {
 		return
 	}
+	if !checkVal("3", val, vthunk, concatExpr{argExpr(0), argExpr(1)}, 2, defs, t) {
+		return
+	}
+	if !checkVal("4", val, v0, nil, 0, nil, t) {
+		return
+	}
+	val = val.next
+	if !checkVal("5:preliminary", val, vthunk, concatExpr{literalExpr("_"), argExpr(1)}, 2, nil, t) {
+		return
+	}
+	if !checkVal("5:bindings[0]", val.bindings[0], v0, nil, 0, nil, t) {
+		return
+	}
+	if !checkVal("5:bindings[0].next", val.bindings[0].next, vthunk, literalExpr("_"), 0, nil, t) {
+		return
+	}
+	if !checkVal("5:bindings[1]", val.bindings[1], vthunk, literalExpr("1_"), 0, nil, t) {
+		return
+	}
+	if !checkVal("5", val, vthunk, concatExpr{literalExpr("_"), argExpr(1)}, 2, defs, t) {
+		return
+	}
+	if !checkVal("6.preliminary", val, vthunk, argExpr(1), 2, nil, t) {
+		return
+	}
+	if !checkVal("6:bindings[0]", val.bindings[0], v0, nil, 0, nil, t) {
+		return
+	}
 }
 
 func checkVal(label string, val *Value, vtype valType, expr Expr, nbindings int, defs map[string]*Def, t *testing.T) bool {

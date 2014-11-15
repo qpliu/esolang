@@ -157,6 +157,8 @@ func TestEvalExpr(t *testing.T) {
 	testEvalExpr("xor 0101_ 011001_", funcallExpr{def: xor, args: []Expr{literalExpr("0101_"), literalExpr("011001_")}}, defs, []bool{false, false, true, true, false, true}, t)
 	testEvalExpr("xor 010101_ 0110_", funcallExpr{def: xor, args: []Expr{literalExpr("0101_"), literalExpr("011001_")}}, defs, []bool{false, false, true, true, false, true}, t)
 	testEvalExpr("concat id 0_ 1_", funcallExpr{def: concat, args: []Expr{funcallExpr{def: id, args: []Expr{literalExpr("0_")}}, literalExpr("1_")}}, defs, []bool{false, true}, t)
+	testEvalExpr("concat 0_ id 1_", funcallExpr{def: concat, args: []Expr{literalExpr("0_"), funcallExpr{def: id, args: []Expr{literalExpr("1_")}}}}, defs, []bool{false, true}, t)
+	testEvalExpr("concat xor 00_ 01_ xor 11_ 01_", funcallExpr{def: concat, args: []Expr{funcallExpr{def: xor, args: []Expr{literalExpr("00_"), literalExpr("01_")}}, funcallExpr{def: xor, args: []Expr{literalExpr("11_"), literalExpr("01_")}}}}, defs, []bool{false, true, true, false}, t)
 }
 
 func exprEq(e1, e2 Expr) bool {
