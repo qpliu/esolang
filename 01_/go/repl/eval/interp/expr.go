@@ -57,20 +57,29 @@ func (expr argExpr) Eval(result *Value, defs map[string]*Def) error {
 type concatExpr [2]Expr
 
 func (expr concatExpr) Eval(result *Value, defs map[string]*Def) error {
-	bindings := result.bindings
-	result.expr = expr[0]
-	if err := expr[0].Eval(result, defs); err != nil {
+	result.expr = concat2Expr{[2]Expr(expr), result.bindings}
+	return nil
+}
+
+type concat2Expr struct {
+	expr     [2]Expr
+	bindings []*Value
+}
+
+func (expr concat2Expr) Eval(result *Value, defs map[string]*Def) error {
+	result.expr = expr.expr[0]
+	if err := result.expr.Eval(result, defs); err != nil {
 		return err
 	}
 	switch result.val {
 	case v0, v1:
-		result.next = EvalExpr(defs, concatExpr{result.next.expr, expr[1]}, bindings)
+		result.next = EvalExpr(defs, concat2Expr{[2]Expr{result.next.expr, expr.expr[1]}, expr.bindings}, result.bindings)
 	case vnil:
 		result.val = vthunk
-		result.expr = expr[1]
-		result.bindings = bindings
+		result.expr = expr.expr[1]
+		result.bindings = expr.bindings
 	case vthunk:
-		result.expr = concatExpr{result.expr, expr[1]}
+		result.expr = concat2Expr{[2]Expr{result.expr, expr.expr[1]}, expr.bindings}
 	default:
 		panic("unreachable")
 	}

@@ -74,41 +74,60 @@ func TestExpr(t *testing.T) {
 	if !checkVal("2", val, vthunk, concatExpr{argExpr(0), argExpr(1)}, 2, defs, t) {
 		return
 	}
-	if !checkVal("3:preliminary", val, vthunk, concatExpr{argExpr(0), argExpr(1)}, 2, nil, t) {
+	if !checkVal("3:preliminary", val, vthunk, concat2Expr{[2]Expr{argExpr(0), argExpr(1)}, nil}, 2, nil, t) {
 		return
 	}
-	if !checkVal("3:bindings[0]", val.bindings[0], vthunk, argExpr(0), 1, nil, t) {
+	if !checkVal("3:bindings[0]", val.bindings[0], vthunk, funcallExpr{id, []Expr{literalExpr("0_")}}, 0, nil, t) {
 		return
 	}
 	if !checkVal("3:bindings[1]", val.bindings[1], vthunk, literalExpr("1_"), 0, nil, t) {
 		return
 	}
-	if !checkVal("3", val, vthunk, concatExpr{argExpr(0), argExpr(1)}, 2, defs, t) {
+	if !checkVal("3", val, vthunk, concat2Expr{[2]Expr{argExpr(0), argExpr(1)}, nil}, 2, defs, t) {
 		return
 	}
-	if !checkVal("4", val, v0, nil, 0, nil, t) {
+	if !checkVal("4:preliminary", val, vthunk, concat2Expr{[2]Expr{argExpr(0), argExpr(1)}, nil}, 2, nil, t) {
+		return
+	}
+	if !checkVal("4:bindings[0]", val.bindings[0], vthunk, argExpr(0), 1, nil, t) {
+		return
+	}
+	if !checkVal("4:bindings[1]", val.bindings[1], vthunk, literalExpr("1_"), 0, nil, t) {
+		return
+	}
+	if !checkVal("4", val, vthunk, concat2Expr{[2]Expr{argExpr(0), argExpr(1)}, nil}, 2, defs, t) {
+		return
+	}
+	if !checkVal("5", val, v0, nil, 0, nil, t) {
 		return
 	}
 	val = val.next
-	if !checkVal("5:preliminary", val, vthunk, concatExpr{literalExpr("_"), argExpr(1)}, 2, nil, t) {
+	if !checkVal("6", val, vthunk, concat2Expr{[2]Expr{literalExpr("_"), argExpr(1)}, nil}, 0, defs, t) {
 		return
 	}
-	if !checkVal("5:bindings[0]", val.bindings[0], v0, nil, 0, nil, t) {
+	if !checkVal("7:preliminary", val, vthunk, argExpr(1), 2, nil, t) {
 		return
 	}
-	if !checkVal("5:bindings[0].next", val.bindings[0].next, vthunk, literalExpr("_"), 0, nil, t) {
+	if !checkVal("7:bindings[0]", val.bindings[0], v0, nil, 0, nil, t) {
 		return
 	}
-	if !checkVal("5:bindings[1]", val.bindings[1], vthunk, literalExpr("1_"), 0, nil, t) {
+	if !checkVal("7:bindings[0].next", val.bindings[0].next, vthunk, literalExpr("_"), 0, nil, t) {
 		return
 	}
-	if !checkVal("5", val, vthunk, concatExpr{literalExpr("_"), argExpr(1)}, 2, defs, t) {
+	if !checkVal("7:bindings[1]", val.bindings[1], vthunk, literalExpr("1_"), 0, nil, t) {
 		return
 	}
-	if !checkVal("6.preliminary", val, vthunk, argExpr(1), 2, nil, t) {
+	if !checkVal("7", val, vthunk, argExpr(1), 2, defs, t) {
 		return
 	}
-	if !checkVal("6:bindings[0]", val.bindings[0], v0, nil, 0, nil, t) {
+	if !checkVal("8", val, v1, nil, 0, nil, t) {
+		return
+	}
+	val = val.next
+	if !checkVal("9", val, vthunk, literalExpr("_"), 0, defs, t) {
+		return
+	}
+	if !checkVal("10", val, vnil, nil, 0, nil, t) {
 		return
 	}
 }
@@ -148,6 +167,9 @@ func exprToStr(expr Expr) string {
 	case concatExpr:
 		expr := expr.(concatExpr)
 		return "C(" + exprToStr(expr[0]) + "," + exprToStr(expr[1]) + ")"
+	case concat2Expr:
+		expr := expr.(concat2Expr)
+		return "C2(" + exprToStr(expr.expr[0]) + "," + exprToStr(expr.expr[1]) + ")"
 	case funcallExpr:
 		expr := expr.(funcallExpr)
 		str := "F" + expr.def.name + "("

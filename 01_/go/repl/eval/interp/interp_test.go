@@ -173,6 +173,10 @@ func exprEq(e1, e2 Expr) bool {
 		e1 := e1.(concatExpr)
 		e2, ok := e2.(concatExpr)
 		return ok && exprEq(e1[0], e2[0]) && exprEq(e1[1], e2[1])
+	case concat2Expr:
+		e1 := e1.(concat2Expr)
+		e2, ok := e2.(concat2Expr)
+		return ok && exprEq(e1.expr[0], e2.expr[0]) && exprEq(e1.expr[1], e2.expr[1])
 	case funcallExpr:
 		e1 := e1.(funcallExpr)
 		e2, ok := e2.(funcallExpr)
