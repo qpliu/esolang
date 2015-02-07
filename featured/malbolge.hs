@@ -3,38 +3,26 @@
 import Data.Array(Array,listArray,(!),(//))
 import Data.Char(chr,isSpace,ord)
 
-trits :: [Int]
-trits = take 10 $ iterate (*3) 1
-
-toInt :: [Int] -> Int
-toInt word = sum $ zipWith (*) trits word
-
-fromInt :: Int -> [Int]
-fromInt i = map ((`mod` 3) . (i `div`)) trits
-
-wordOp :: [Int] -> [Int] -> [Int]
-wordOp a b = zipWith op' a b
-  where
-    op' 0 0 = 1
-    op' 0 1 = 1
-    op' 0 2 = 2
-    op' 1 0 = 0
-    op' 1 1 = 0
-    op' 1 2 = 2
-    op' 2 0 = 0
-    op' 2 1 = 2
-    op' 2 2 = 1
-
 op :: Int -> Int -> Int
-op a b = toInt (fromInt a `wordOp` fromInt b)
-
+op a b = toInt (zipWith tritOp (fromInt a) (fromInt b))
+  where
+    tritVals = take 10 $ iterate (*3) 1
+    toInt word = sum $ zipWith (*) tritVals word
+    fromInt i = map ((`mod` 3) . (i `div`)) tritVals
+    tritOp 0 0 = 1
+    tritOp 0 1 = 1
+    tritOp 0 2 = 2
+    tritOp 1 0 = 0
+    tritOp 1 1 = 0
+    tritOp 1 2 = 2
+    tritOp 2 0 = 0
+    tritOp 2 1 = 2
+    tritOp 2 2 = 1
+    
 rotate :: Int -> Int
 rotate a = (a `mod` 3) * 3^9 + a `div` 3
 
 data State = State Int Int Int (Array Int Int)
-
-table :: Array Int Int
-table = listArray (0,93) (map ord "5z]&gqtyfr$(we4{WP)H-Zn,[%\\3dL+Q;>U!pJS72FhOA1CB6v^=I_0/8|jsb9m<.TVac`uY*MK'X~xDl}REokN:#?G\"i@")
 
 insn :: Int -> Maybe (State -> String -> String)
 insn 4 = Just jumpInsn
@@ -74,6 +62,7 @@ execNext (State a c d mem) =
   where
     m | mem!c < 33 || mem!c > 126 = mem!c
       | otherwise = table!((mem!c + c - 33) `mod` 94)
+    table = listArray (0,93) (map ord "5z]&gqtyfr$(we4{WP)H-Zn,[%\\3dL+Q;>U!pJS72FhOA1CB6v^=I_0/8|jsb9m<.TVac`uY*MK'X~xDl}REokN:#?G\"i@")
 
 exec :: State -> String -> String
 exec state@(State a c d mem) input
@@ -88,9 +77,9 @@ initMem prog = State 0 0 0 (listArray (0,3^10-1) (fillMem 0 0 0 prog))
     fillMem _ m1 m2 [] = (m1 `op` m2) : fillMem 0 (m1 `op` m2) m1 []
     fillMem i m1 m2 (c:cs)
       | isSpace c = fillMem i m1 m2 cs
-      | ord c < 33 || ord c > 126 = error "invalid character in source file:"
+      | ord c < 33 || ord c > 126 = error "invalid character in source file"
       | otherwise =
-            maybe (error "invalid character in source file:")
+            maybe (error "invalid character in source file")
                   (const (ord c : fillMem (i + 1) (ord c) m1 cs))
                   (insn ((ord c + i) `mod` 94))
 
