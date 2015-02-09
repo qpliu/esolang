@@ -1,9 +1,10 @@
 -- http://esolangs.org/wiki/Glass
 
-import Data.Array(Array,array,bounds,inRange)
+import Data.Array(Array)
+import qualified Data.Array as A
 import Data.Char(chr,isAlpha,isDigit,isLower,isSpace,isUpper,ord)
 import Data.Fixed(mod')
-import Data.Map(Map,(!))
+import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Set(Set)
 import qualified Data.Set as S
@@ -155,8 +156,8 @@ compileClass :: Class -> (String,CClass)
 compileClass (Class name fns) = (name,(M.fromList . map compileFn) fns)
 
 compileFn :: Function -> (String,CFunc)
-compileFn (Function name cmds) = (name,uncurry array (compileCmds 0 cmds []))
-compileFn (FunctionBuiltin name op) = (name,array (0,0) [(0,op)])
+compileFn (Function name cmds) = (name,uncurry A.array (compileCmds 0 cmds []))
+compileFn (FunctionBuiltin name op) = (name,A.array (0,0) [(0,op)])
 
 compileCmds :: Int -> [Command] -> [(Int,Op)] -> ((Int,Int),[(Int,Op)])
 compileCmds i [] ops = ((0,i-1),ops)
@@ -216,19 +217,27 @@ cmdRet :: Op
 cmdRet cont st@State{stGCFlag = flag, stCallStack = frame:frames} =
     cont' st{stCallStack = frames}
   where cont' | null frames = cont
-              | otherwise = (incPC . setGCFlag True . gc . setGCFlag flag) cont
+              | otherwise = (setGCFlag True . gc . setGCFlag flag . incPC) cont
 
 cmdAssign :: Op
 cmdAssign cont st@State{stStack = val:name:stack} =
     incPC cont (setVar st{stStack = stack} name val)
 
 cmdNew :: Op
-cmdNew = undefined
+cmdNew cont st@State{stGCFlag = flag, stStack = cname:name:stack, stObjs = objs} =
+    (runFunc cclass "c__" objRef . setGCFlag flag . incPC) cont st'
+  where
+    ValClass cclass = getVar st cname
+    objRef = newObjRef st
+    st' = setVar st{stGCFlag = True, stStack = stack, stObjs = M.insert objRef Obj{objClass = cclass, objVars = M.empty} objs} name (ValObj objRef)
 
 cmdLookupFunc :: Op
-cmdLookupFunc cont st@State{stStack = ValLocalName name:ValObj objRef:stack, stObjs = objs} =
-    let Obj{objClass = cclass} = objs!objRef
-    in  incPC cont st{stStack = ValFunc CallFrame{cfOps = cclass!name, cfPC = 0, cfObj = objRef, cfLocals = M.empty}:stack}
+cmdLookupFunc cont st@State{stStack = ValInstanceName fname:oname:stack, stObjs = objs} =
+    incPC cont st{stStack = ValFunc newFunc:stack}
+  where
+    ValObj objRef = getVar st oname
+    Obj{objClass = cclass} = objs M.! objRef
+    newFunc = CallFrame{cfOps = cclass M.! fname, cfPC = 0, cfObj = objRef, cfLocals = M.empty}
 
 cmdCallFunc :: Op
 cmdCallFunc cont st@State{stStack = ValFunc frame:stack, stCallStack = frames} =
@@ -253,7 +262,7 @@ cmdIfTrue name dest cont st@State{stCallStack = frame:frames}
 
 incPC :: Op
 incPC cont st@State{stCallStack = frame@CallFrame{cfOps = ops, cfPC = pc}:frames}
-  | bounds ops `inRange` (pc + 1) =
+  | A.bounds ops `A.inRange` (pc + 1) =
         cont st{stCallStack = frame{cfPC = pc+1}:frames}
   | otherwise = cmdRet cont st
 
@@ -372,7 +381,7 @@ setGCFlag :: Bool -> Op
 setGCFlag flag cont st = cont st{stGCFlag = flag}
 
 gc :: Op
-gc cont st@State{stGCFlag = True} = cont st -- running destructors or constructing M
+gc cont st@State{stGCFlag = True} = cont st -- running constructor or destructor
 gc cont st = cont st -- ... to be defined ...
 
 gcRoots :: State -> Set ObjRef
@@ -448,25 +457,57 @@ testVal (ValNum _) = True
 testVal _ = False
 
 getVar :: State -> Val -> Val
-getVar State{stGlobals = globals} (ValGlobalName name) = globals!name
+getVar State{stGlobals = globals} (ValGlobalName name) = globals M.! name
 getVar State{stCallStack = CallFrame{cfObj = objRef}:_, stObjs = objs} (ValInstanceName name) =
-    let Obj{objVars = instanceVars} = objs!objRef
-    in  instanceVars!name
+    instanceVars M.! name
+  where Obj{objVars = instanceVars} = objs M.! objRef
 getVar State{stCallStack = CallFrame{cfLocals = locals}:_} (ValLocalName name) =
-    locals!name
+    locals M.! name
 
 setVar :: State -> Val -> Val -> State
 setVar st@State{stGlobals = globals} (ValGlobalName name) val =
     st{stGlobals = M.insert name val globals}
 setVar st@State{stCallStack = CallFrame{cfObj = objRef}:_, stObjs = objs} (ValInstanceName name) val =
-    let obj@Obj{objVars = instanceVars} = objs!objRef
-    in  st{stObjs = M.insert objRef obj{objVars = M.insert name val instanceVars} objs}
+    st{stObjs = M.insert objRef obj{objVars = M.insert name val instanceVars} objs}
+  where obj@Obj{objVars = instanceVars} = objs M.! objRef
 setVar st@State{stCallStack = frame@CallFrame{cfLocals = locals}:frames} (ValLocalName name) val =
     st{stCallStack = frame{cfLocals = M.insert name val locals}:frames}
+
+newObjRef :: State -> ObjRef
+newObjRef State{stObjs = objs}
+  | M.null objs = ObjRef 0
+  | otherwise = ObjRef (n+1) where (ObjRef n,_) = M.findMax objs
+
+runFunc :: CClass -> String -> ObjRef -> Op
+runFunc cclass func objRef cont st@State{stCallStack = frames}
+  | not (M.member func cclass) = cont st
+  | otherwise = runOp st{stCallStack = [CallFrame{cfOps = cclass M.! func, cfPC = 0, cfObj = objRef, cfLocals = M.empty}]}
+  where
+    runOp st@State{stCallStack = []} = cont st{stCallStack = frames}
+    runOp st@State{stCallStack = CallFrame{cfOps = ops, cfPC = pc}:_} =
+        (ops A.! pc) runOp st
+
+runMain :: State -> String -> String
+runMain st@State{stGCFlag = flag, stGlobals = globals, stObjs = objs} =
+    runFunc mainClass "c__" mainObj cont st'
+  where
+    mainObj = newObjRef st
+    ValClass mainClass = globals M.! "M"
+    cont = (setGCFlag flag . runFunc mainClass "m" mainObj . const . const) ""
+    st' = st{stGCFlag = True, stObjs = M.insert mainObj Obj{objClass = mainClass, objVars = M.empty} objs}
 
 
 
 --
 
+initialState :: String -> State
+initialState prog = State{
+    stGlobals = (M.map ValClass . compile . (++ builtins) . parse . tokenize) prog,
+    stStack = [],
+    stCallStack = [],
+    stObjs = M.empty,
+    stGCFlag = False
+    }
+
 glass :: String -> IO ()
-glass prog = undefined
+glass prog = (interact . runMain . initialState) prog
