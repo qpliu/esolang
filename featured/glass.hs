@@ -225,11 +225,11 @@ cmdAssign cont st@State{stStack = val:name:stack} =
 
 cmdNew :: Op
 cmdNew cont st@State{stGCFlag = flag, stStack = cname:name:stack, stObjs = objs} =
-    (runFunc cclass "c__" objRef . setGCFlag flag . incPC) cont st'
+    (runFunc cclass "c__" objRef . setGCFlag flag . incPC) cont st''
   where
     ValClass cclass = getVar st cname
-    objRef = newObjRef st
-    st' = setVar st{stGCFlag = True, stStack = stack, stObjs = M.insert objRef Obj{objClass = cclass, objVars = M.empty} objs} name (ValObj objRef)
+    (objRef,st') = newObj cclass st
+    st'' = setVar st'{stGCFlag = True, stStack = stack} name (ValObj objRef)
 
 cmdLookupFunc :: Op
 cmdLookupFunc cont st@State{stStack = ValInstanceName fname:oname:stack, stObjs = objs} =
@@ -257,7 +257,8 @@ cmdJump dest cont st@State{stCallStack = frame:frames} =
 
 cmdIfTrue :: String -> Int -> Op
 cmdIfTrue name dest cont st@State{stCallStack = frame:frames}
-  | testVal (getVar st (nameVal name)) = incPC cont st{stCallStack = frame{cfPC = dest}:frames}
+  | testVal (getVar st (nameVal name)) =
+        incPC cont st{stCallStack = frame{cfPC = dest}:frames}
   | otherwise = incPC cont st
 
 incPC :: Op
@@ -473,16 +474,19 @@ setVar st@State{stCallStack = CallFrame{cfObj = objRef}:_, stObjs = objs} (ValIn
 setVar st@State{stCallStack = frame@CallFrame{cfLocals = locals}:frames} (ValLocalName name) val =
     st{stCallStack = frame{cfLocals = M.insert name val locals}:frames}
 
-newObjRef :: State -> ObjRef
-newObjRef State{stObjs = objs}
-  | M.null objs = ObjRef 0
-  | otherwise = ObjRef (n+1) where (ObjRef n,_) = M.findMax objs
+newObj :: CClass -> State -> (ObjRef,State)
+newObj cclass st@State{stObjs = objs} =
+    (objRef,st{stObjs = M.insert objRef Obj{objClass = cclass, objVars = M.empty} objs})
+  where objRef | M.null objs = ObjRef 0
+               | otherwise = ObjRef (n+1)
+        (ObjRef n,_) = M.findMax objs
 
 runFunc :: CClass -> String -> ObjRef -> Op
 runFunc cclass func objRef cont st@State{stCallStack = frames}
   | not (M.member func cclass) = cont st
-  | otherwise = runOp st{stCallStack = [CallFrame{cfOps = cclass M.! func, cfPC = 0, cfObj = objRef, cfLocals = M.empty}]}
+  | otherwise = runOp st{stCallStack = [newFrame]}
   where
+    newFrame = CallFrame{cfOps = cclass M.! func, cfPC = 0, cfObj = objRef, cfLocals = M.empty}
     runOp st@State{stCallStack = []} = cont st{stCallStack = frames}
     runOp st@State{stCallStack = CallFrame{cfOps = ops, cfPC = pc}:_} =
         (ops A.! pc) runOp st
@@ -491,10 +495,9 @@ runMain :: State -> String -> String
 runMain st@State{stGCFlag = flag, stGlobals = globals, stObjs = objs} =
     runFunc mainClass "c__" mainObj cont st'
   where
-    mainObj = newObjRef st
     ValClass mainClass = globals M.! "M"
+    (mainObj,st') = newObj mainClass st{stGCFlag = True}
     cont = (setGCFlag flag . runFunc mainClass "m" mainObj . const . const) ""
-    st' = st{stGCFlag = True, stObjs = M.insert mainObj Obj{objClass = mainClass, objVars = M.empty} objs}
 
 
 
@@ -502,7 +505,7 @@ runMain st@State{stGCFlag = flag, stGlobals = globals, stObjs = objs} =
 
 initialState :: String -> State
 initialState prog = State{
-    stGlobals = (M.map ValClass . compile . (++ builtins) . parse . tokenize) prog,
+    stGlobals = (M.map ValClass . compile . (builtins ++) . parse . tokenize) prog,
     stStack = [],
     stCallStack = [],
     stObjs = M.empty,
