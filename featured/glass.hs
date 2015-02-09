@@ -19,7 +19,6 @@ data Token =
   | TokenString String
   | TokenNumber Float
   | TokenCommand Char
-  deriving Show
 
 
 tokenize :: String -> [Token]
@@ -48,15 +47,10 @@ tokenize (ch:rest)
 -- parse
 
 data Class = Class String [Function]
-  deriving Show
 
 data Function =
     Function String [Command]
   | FunctionBuiltin String Op
-
-instance Show Function where
-    show (Function name cmds) = "Function " ++ show name ++ " " ++ show cmds
-    show (FunctionBuiltin name _) = "FunctionBuiltin " ++ show name
 
 data Command =
     CommandPushName String
@@ -72,7 +66,6 @@ data Command =
   | CommandLookupVar
   | CommandAssignObj
   | CommandLoop String [Command]
-  deriving Show
 
 
 parse :: [Token] -> [Class]
@@ -186,7 +179,7 @@ compileCmds i (CommandLookupVar:cmds) ops =
 compileCmds i (CommandAssignObj:cmds) ops =
     compileCmds (i+1) cmds ((i,cmdAssignObj):ops)
 compileCmds i (CommandLoop name loopCmds:cmds) ops =
-    compileCmds (j+2) cmds ((i,cmdJump (j+1)):(j+1,cmdIfTrue name (i+1)):ops')
+    compileCmds (j+2) cmds ((i,cmdJump j):(j+1,cmdIfTrue name i):ops')
   where ((_,j),ops') = compileCmds (i+1) loopCmds ops
 
 
@@ -383,13 +376,13 @@ setGCFlag flag cont st = cont st{stGCFlag = flag}
 
 gc :: Op
 gc cont st@State{stGCFlag = True} = cont st -- running constructor or destructor
-gc cont st = cont st -- ... to be defined ...
+gc cont st = gcDestruct (S.toList garbage) (gcSweep garbage cont) st
+  where garbage = gcGarbage st
 
-gcRoots :: State -> Set ObjRef
+gcRoots :: State -> [ObjRef]
 gcRoots State{stGlobals = globals, stStack = stack, stCallStack = frames} =
-    S.fromList $ concatMap gcValRefs (M.elems globals) ++
-                 concatMap gcValRefs stack ++
-                 concatMap gcFrameRefs frames
+    concatMap gcValRefs (M.elems globals)
+        ++ concatMap gcValRefs stack ++ concatMap gcFrameRefs frames
 
 gcValRefs :: Val -> [ObjRef]
 gcValRefs (ValObj objRef) = [objRef]
@@ -400,8 +393,32 @@ gcFrameRefs :: CallFrame -> [ObjRef]
 gcFrameRefs CallFrame{cfObj = obj, cfLocals = locals} =
     obj : concatMap gcValRefs (M.elems locals)
 
-gcObjRefs :: Obj -> [ObjRef]
-gcObjRefs Obj{objVars = vars} = concatMap gcValRefs (M.elems vars)
+gcObjRefs :: State -> ObjRef -> [ObjRef]
+gcObjRefs State{stObjs = objs} objRef = concatMap gcValRefs (M.elems vars)
+  where Obj{objVars = vars} = objs M.! objRef
+
+gcGarbage :: State -> Set ObjRef
+gcGarbage st@State{stObjs = objs} =
+    S.difference (M.keysSet objs) (mark S.empty (gcRoots st))
+  where
+    mark marked [] = marked
+    mark marked (objRef:objRefs)
+      | objRef `S.member` marked = mark marked objRefs
+      | otherwise =
+            mark (S.insert objRef marked) (gcObjRefs st objRef ++ objRefs)
+
+gcDestruct :: [ObjRef] -> Op
+gcDestruct [] cont st = cont st
+gcDestruct (objRef:objRefs) cont st@State{stObjs = objs} =
+    runFunc cclass "d__" objRef (gcDestruct objRefs cont) st
+  where Obj{objClass = cclass} = objs M.! objRef
+
+gcSweep :: Set ObjRef -> Op
+gcSweep garbage cont st@State{stObjs = objs} =
+    cont st{stObjs = M.filterWithKey (const . notGarbage) objs}
+  where
+    notGarbage objRef = -- including those resurrected by destructors
+        not (objRef `S.member` (S.difference garbage (gcGarbage st)))
 
 
 
@@ -424,6 +441,16 @@ data Val =
   | ValObj ObjRef
   | ValFunc CallFrame
   | ValClass CClass
+
+instance Show Val where
+    show (ValGlobalName n) = "(" ++ n ++ ")"
+    show (ValInstanceName n) = "(" ++ n ++ ")"
+    show (ValLocalName n) = "(" ++ n ++ ")"
+    show (ValString s) = show s
+    show (ValNum n) = "<" ++ show n ++ ">"
+    show (ValObj (ObjRef n)) = "[" ++ show n ++ "]"
+    show (ValFunc _) = "[func]"
+    show (ValClass _) = "[class]"
 
 data CallFrame = CallFrame {
     cfOps    :: CFunc,
@@ -449,9 +476,6 @@ boolVal :: Bool -> Val
 boolVal b | b = ValNum 1 | otherwise = ValNum 0
 
 testVal :: Val -> Bool
-testVal (ValGlobalName (_:_)) = True
-testVal (ValInstanceName (_:_)) = True
-testVal (ValLocalName (_:_)) = True
 testVal (ValString (_:_)) = True
 testVal (ValNum 0) = False
 testVal (ValNum _) = True
