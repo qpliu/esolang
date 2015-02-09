@@ -3,8 +3,10 @@
 import Data.Array(Array,array,bounds,inRange)
 import Data.Char(chr,isAlpha,isDigit,isLower,isSpace,isUpper,ord)
 import Data.Fixed(mod')
-import Data.List(nub)
-import Data.Map(Map,delete,elems,fromList,member,(!))
+import Data.Map(Map,(!))
+import qualified Data.Map as M
+import Data.Set(Set)
+import qualified Data.Set as S
 
 
 
@@ -147,10 +149,10 @@ type Op = (State -> String -> String) -> State -> String -> String
 
 
 compile :: [Class] -> Map String CClass
-compile = fromList . map compileClass
+compile = M.fromList . map compileClass
 
 compileClass :: Class -> (String,CClass)
-compileClass (Class name fns) = (name,(fromList . map compileFn) fns)
+compileClass (Class name fns) = (name,(M.fromList . map compileFn) fns)
 
 compileFn :: Function -> (String,CFunc)
 compileFn (Function name cmds) = (name,uncurry array (compileCmds 0 cmds []))
@@ -191,64 +193,69 @@ compileCmds i (CommandLoop name loopCmds:cmds) ops =
 -- commands
 
 cmdPushName :: String -> Op
-cmdPushName name@(ch:_) cont st@State{stStack = stack} inp
-  | isUpper ch = incPC cont st{stStack = ValGlobalName name:stack} inp
-  | isLower ch = incPC cont st{stStack = ValInstanceName name:stack} inp
-  | ch == '_' = incPC cont st{stStack = ValLocalName name:stack} inp
+cmdPushName name cont st@State{stStack = stack} =
+    incPC cont st{stStack = nameVal name:stack}
 
 cmdDup :: Int -> Op
-cmdDup i cont st@State{stStack = stack} inp =
-    incPC cont st{stStack = head (drop i stack):stack} inp
+cmdDup i cont st@State{stStack = stack} =
+    incPC cont st{stStack = head (drop i stack):stack}
 
 cmdPushStr :: String -> Op
-cmdPushStr str cont st@State{stStack = stack} inp =
-    incPC cont st{stStack = ValString str:stack} inp
+cmdPushStr str cont st@State{stStack = stack} =
+    incPC cont st{stStack = ValString str:stack}
 
 cmdPushNum :: Float -> Op
-cmdPushNum num cont st@State{stStack = stack} inp =
-    incPC cont st{stStack = ValNum num:stack} inp
+cmdPushNum num cont st@State{stStack = stack} =
+    incPC cont st{stStack = ValNum num:stack}
 
 cmdPop :: Op
-cmdPop cont st@State{stStack = stack} inp =
-    incPC cont st{stStack = drop 1 stack} inp
+cmdPop cont st@State{stStack = stack} =
+    incPC cont st{stStack = drop 1 stack}
 
 cmdRet :: Op
-cmdRet cont st@State{stGCFlag = flag, stCallStack = frame:frames} inp =
-    cont' st{stCallStack = frames} inp
+cmdRet cont st@State{stGCFlag = flag, stCallStack = frame:frames} =
+    cont' st{stCallStack = frames}
   where cont' | null frames = cont
-              | otherwise = (setGCFlag True . gc . setGCFlag flag) cont
+              | otherwise = (incPC . setGCFlag True . gc . setGCFlag flag) cont
 
 cmdAssign :: Op
-cmdAssign = undefined
+cmdAssign cont st@State{stStack = val:name:stack} =
+    incPC cont (setVar st{stStack = stack} name val)
 
 cmdNew :: Op
 cmdNew = undefined
 
 cmdLookupFunc :: Op
-cmdLookupFunc = undefined
+cmdLookupFunc cont st@State{stStack = ValLocalName name:ValObj objRef:stack, stObjs = objs} =
+    let Obj{objClass = cclass} = objs!objRef
+    in  incPC cont st{stStack = ValFunc CallFrame{cfOps = cclass!name, cfPC = 0, cfObj = objRef, cfLocals = M.empty}:stack}
 
 cmdCallFunc :: Op
-cmdCallFunc cont st@State{stStack = ValFunc frame:stack, stCallStack = frames} inp =
-    cont st{stStack = stack, stCallStack = frame:frames} inp
+cmdCallFunc cont st@State{stStack = ValFunc frame:stack, stCallStack = frames} =
+    cont st{stStack = stack, stCallStack = frame:frames}
 
 cmdLookupVar :: Op
-cmdLookupVar = undefined
+cmdLookupVar cont st@State{stStack = name:stack} =
+    incPC cont st{stStack = getVar st name:stack}
 
 cmdAssignObj :: Op
-cmdAssignObj = undefined
+cmdAssignObj cont st@State{stStack = name:stack, stCallStack = CallFrame{cfObj = objRef}:_} =
+    incPC cont (setVar st{stStack = stack} name (ValObj objRef))
 
 cmdJump :: Int -> Op
-cmdJump dest cont st@State{stCallStack = frame:frames} inp =
-    incPC cont st{stCallStack = frame{cfPC = dest}:frames} inp
+cmdJump dest cont st@State{stCallStack = frame:frames} =
+    incPC cont st{stCallStack = frame{cfPC = dest}:frames}
 
 cmdIfTrue :: String -> Int -> Op
-cmdIfTrue = undefined
+cmdIfTrue name dest cont st@State{stCallStack = frame:frames}
+  | testVal (getVar st (nameVal name)) = incPC cont st{stCallStack = frame{cfPC = dest}:frames}
+  | otherwise = incPC cont st
 
 incPC :: Op
-incPC cont st@State{stCallStack = frame@CallFrame{cfOps = ops, cfPC = pc}:frames} inp
+incPC cont st@State{stCallStack = frame@CallFrame{cfOps = ops, cfPC = pc}:frames}
   | bounds ops `inRange` (pc + 1) =
-        cont st{stCallStack = frame{cfPC = pc+1}:frames} inp
-  | otherwise = cmdRet cont st inp
+        cont st{stCallStack = frame{cfPC = pc+1}:frames}
+  | otherwise = cmdRet cont st
 
 
 
@@ -258,77 +265,77 @@ builtins :: [Class]
 builtins = [
     Class "A" [
         FunctionBuiltin "a"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (x + y):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = ValNum (x + y):stack}),
         FunctionBuiltin "s"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (x - y):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = ValNum (x - y):stack}),
         FunctionBuiltin "m"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (x * y):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = ValNum (x * y):stack}),
         FunctionBuiltin "d"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (x / y):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = ValNum (x / y):stack}),
         FunctionBuiltin "mod"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (mod' x y):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = ValNum (mod' x y):stack}),
         FunctionBuiltin "f"
-            (\ cont st@State{stStack = ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (fromIntegral $ floor x):stack} inp),
+            (\ cont st@State{stStack = ValNum x:stack} ->
+                incPC cont st{stStack = ValNum (fromIntegral $ floor x):stack}),
         FunctionBuiltin "e"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (if x == y then 1 else 0):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = boolVal (x == y):stack}),
         FunctionBuiltin "ne"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (if x /= y then 1 else 0):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = boolVal (x /= y):stack}),
         FunctionBuiltin "lt"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (if x < y then 1 else 0):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = boolVal (x < y):stack}),
         FunctionBuiltin "le"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (if x <= y then 1 else 0):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = boolVal (x <= y):stack}),
         FunctionBuiltin "gt"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (if x > y then 1 else 0):stack} inp),
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = boolVal (x > y):stack}),
         FunctionBuiltin "ge"
-            (\ cont st@State{stStack = ValNum y:ValNum x:stack} inp ->
-                incPC cont st{stStack = ValNum (if x >= y then 1 else 0):stack} inp)
+            (\ cont st@State{stStack = ValNum y:ValNum x:stack} ->
+                incPC cont st{stStack = boolVal (x >= y):stack})
         ],
     Class "S" [
         FunctionBuiltin "l"
-            (\ cont st@State{stStack = ValString str:stack} inp ->
-                incPC cont st{stStack = ValNum (fromIntegral $ length str):stack} inp),
+            (\ cont st@State{stStack = ValString str:stack} ->
+                incPC cont st{stStack = ValNum (fromIntegral $ length str):stack}),
         FunctionBuiltin "i"
-            (\ cont st@State{stStack = ValNum n:ValString str:stack} inp ->
-                incPC cont st{stStack = ValString (take 1 $ drop (round n) str):stack} inp),
+            (\ cont st@State{stStack = ValNum n:ValString str:stack} ->
+                incPC cont st{stStack = ValString (take 1 $ drop (round n) str):stack}),
         FunctionBuiltin "si"
-            (\ cont st@State{stStack = ValString ch:ValNum n:ValString str:stack} inp ->
-                incPC cont st{stStack = ValString (take (round n) str ++ ch ++ drop (round n + 1) str):stack} inp),
+            (\ cont st@State{stStack = ValString ch:ValNum n:ValString str:stack} ->
+                incPC cont st{stStack = ValString (take (round n) str ++ ch ++ drop (round n + 1) str):stack}),
         FunctionBuiltin "a"
-            (\ cont st@State{stStack = ValString s2:ValString s1:stack} inp ->
-                incPC cont st{stStack = ValString (s1++s2):stack} inp),
+            (\ cont st@State{stStack = ValString s2:ValString s1:stack} ->
+                incPC cont st{stStack = ValString (s1++s2):stack}),
         FunctionBuiltin "d"
-            (\ cont st@State{stStack = ValNum n:ValString str:stack} inp ->
-                incPC cont st{stStack = ValString (drop (round n) str):ValString (take (round n) str):stack} inp),
+            (\ cont st@State{stStack = ValNum n:ValString str:stack} ->
+                incPC cont st{stStack = ValString (drop (round n) str):ValString (take (round n) str):stack}),
         FunctionBuiltin "e"
-            (\ cont st@State{stStack = ValString s2:ValString s1:stack} inp ->
-                incPC cont st{stStack = ValNum (if s1 == s2 then 1 else 0):stack} inp),
+            (\ cont st@State{stStack = ValString s2:ValString s1:stack} ->
+                incPC cont st{stStack = boolVal (s1 == s2):stack}),
         FunctionBuiltin "ns"
-            (\ cont st@State{stStack = ValNum n:stack} inp ->
-                incPC cont st{stStack = ValString [chr $ round n]:stack} inp),
+            (\ cont st@State{stStack = ValNum n:stack} ->
+                incPC cont st{stStack = ValString [chr $ round n]:stack}),
         FunctionBuiltin "sn"
-            (\ cont st@State{stStack = ValString (ch:_):stack} inp ->
-                incPC cont st{stStack = ValNum (fromIntegral $ ord ch):stack} inp)
+            (\ cont st@State{stStack = ValString (ch:_):stack} ->
+                incPC cont st{stStack = ValNum (fromIntegral $ ord ch):stack})
         ],
     Class "V" [
         FunctionBuiltin "n"
-            (\ cont st@State{stGlobals = globals, stStack = stack} inp ->
-                let gen n | member ("Gen " ++ show n) globals = gen (n+1)
+            (\ cont st@State{stGlobals = globals, stStack = stack} ->
+                let gen n | M.member ("Gen " ++ show n) globals = gen (n+1)
                           | otherwise = "Gen " ++ show n
-                in  incPC cont st{stStack = ValGlobalName (gen 0):stack} inp),
+                in  incPC cont st{stStack = ValGlobalName (gen 0):stack}),
         FunctionBuiltin "d"
-            (\ cont st@State{stGlobals = globals, stStack = ValGlobalName name:stack} inp ->
-                incPC cont st{stGlobals = delete name globals, stStack = stack} inp)
+            (\ cont st@State{stGlobals = globals, stStack = ValGlobalName name:stack} ->
+                incPC cont st{stGlobals = M.delete name globals, stStack = stack})
         ],
     Class "O" [
         FunctionBuiltin "o"
@@ -336,24 +343,24 @@ builtins = [
                  p (ValInstanceName name) = name
                  p (ValLocalName name) = name
                  p (ValString str) = str
-             in  \ cont st@State{stStack = val:stack} inp ->
-                     p val ++ incPC cont st{stStack = stack} inp),
+             in  \ cont st@State{stStack = val:stack} input ->
+                     p val ++ incPC cont st{stStack = stack} input),
         FunctionBuiltin "on"
             (let p n | n == fromIntegral (round n) = show (round n) | otherwise = show n
-             in  \ cont st@State{stStack = ValNum n:stack} inp ->
-                     p n ++ incPC cont st{stStack = stack} inp)
+             in  \ cont st@State{stStack = ValNum n:stack} input ->
+                     p n ++ incPC cont st{stStack = stack} input)
         ],
     Class "I" [
         FunctionBuiltin "l"
-            (\ cont st@State{stStack = stack} inp ->
-                let (line,rest) = break (== '\n') inp
-                in  incPC cont st{stStack = ValString line:stack} (drop 1 inp)),
+            (\ cont st@State{stStack = stack} input ->
+                let (line,rest) = break (== '\n') input
+                in  incPC cont st{stStack = ValString line:stack} rest),
         FunctionBuiltin "c"
-            (\ cont st@State{stStack = stack} inp ->
-                incPC cont st{stStack = ValString (take 1 inp):stack} (drop 1 inp)),
+            (\ cont st@State{stStack = stack} input ->
+                incPC cont st{stStack = ValString (take 1 input):stack} (drop 1 input)),
         FunctionBuiltin "e"
-            (\ cont st@State{stStack = stack} inp ->
-                incPC cont st{stStack = ValNum (if null inp then 1 else 0):stack} inp)
+            (\ cont st@State{stStack = stack} input ->
+                incPC cont st{stStack = boolVal (null input):stack} input)
         ]
     ]
 
@@ -362,17 +369,17 @@ builtins = [
 -- garbage collector
 
 setGCFlag :: Bool -> Op
-setGCFlag flag cont st inp = cont st{stGCFlag = flag} inp
+setGCFlag flag cont st = cont st{stGCFlag = flag}
 
 gc :: Op
-gc cont st@State{stGCFlag = True} inp = cont st inp -- running destructors or constructing M
-gc cont st inp = cont st inp -- ... to be defined ...
+gc cont st@State{stGCFlag = True} = cont st -- running destructors or constructing M
+gc cont st = cont st -- ... to be defined ...
 
-gcRoots :: State -> [ObjRef]
+gcRoots :: State -> Set ObjRef
 gcRoots State{stGlobals = globals, stStack = stack, stCallStack = frames} =
-    nub $ concatMap gcValRefs (elems globals) ++
-          concatMap gcValRefs stack ++
-          concatMap gcFrameRefs frames
+    S.fromList $ concatMap gcValRefs (M.elems globals) ++
+                 concatMap gcValRefs stack ++
+                 concatMap gcFrameRefs frames
 
 gcValRefs :: Val -> [ObjRef]
 gcValRefs (ValObj objRef) = [objRef]
@@ -381,10 +388,10 @@ gcValRefs _ = []
 
 gcFrameRefs :: CallFrame -> [ObjRef]
 gcFrameRefs CallFrame{cfObj = obj, cfLocals = locals} =
-    obj : concatMap gcValRefs (elems locals)
+    obj : concatMap gcValRefs (M.elems locals)
 
 gcObjRefs :: Obj -> [ObjRef]
-gcObjRefs Obj{objVars = vars} = concatMap gcValRefs (elems vars)
+gcObjRefs Obj{objVars = vars} = concatMap gcValRefs (M.elems vars)
 
 
 
@@ -421,6 +428,41 @@ data Obj = Obj {
     }
 
 newtype ObjRef = ObjRef Int deriving (Eq,Ord)
+
+nameVal :: String -> Val
+nameVal name@(ch:_)
+  | isUpper ch = ValGlobalName name
+  | isLower ch = ValInstanceName name
+  | ch == '_' = ValLocalName name
+
+boolVal :: Bool -> Val
+boolVal b | b = ValNum 1 | otherwise = ValNum 0
+
+testVal :: Val -> Bool
+testVal (ValGlobalName (_:_)) = True
+testVal (ValInstanceName (_:_)) = True
+testVal (ValLocalName (_:_)) = True
+testVal (ValString (_:_)) = True
+testVal (ValNum 0) = False
+testVal (ValNum _) = True
+testVal _ = False
+
+getVar :: State -> Val -> Val
+getVar State{stGlobals = globals} (ValGlobalName name) = globals!name
+getVar State{stCallStack = CallFrame{cfObj = objRef}:_, stObjs = objs} (ValInstanceName name) =
+    let Obj{objVars = instanceVars} = objs!objRef
+    in  instanceVars!name
+getVar State{stCallStack = CallFrame{cfLocals = locals}:_} (ValLocalName name) =
+    locals!name
+
+setVar :: State -> Val -> Val -> State
+setVar st@State{stGlobals = globals} (ValGlobalName name) val =
+    st{stGlobals = M.insert name val globals}
+setVar st@State{stCallStack = CallFrame{cfObj = objRef}:_, stObjs = objs} (ValInstanceName name) val =
+    let obj@Obj{objVars = instanceVars} = objs!objRef
+    in  st{stObjs = M.insert objRef obj{objVars = M.insert name val instanceVars} objs}
+setVar st@State{stCallStack = frame@CallFrame{cfLocals = locals}:frames} (ValLocalName name) val =
+    st{stCallStack = frame{cfLocals = M.insert name val locals}:frames}
 
 
 
