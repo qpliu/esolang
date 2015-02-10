@@ -357,7 +357,7 @@ builtins = [
         FunctionBuiltin "l"
             (\ cont st@State{stStack = stack} input ->
                 let (line,rest) = break (== '\n') input
-                in  incPC cont st{stStack = ValString line:stack} rest),
+                in  incPC cont st{stStack = ValString line:stack} (drop 1 rest)),
         FunctionBuiltin "c"
             (\ cont st@State{stStack = stack} input ->
                 incPC cont st{stStack = ValString (take 1 input):stack} (drop 1 input)),
