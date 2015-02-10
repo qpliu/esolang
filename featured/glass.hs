@@ -442,16 +442,6 @@ data Val =
   | ValFunc CallFrame
   | ValClass CClass
 
-instance Show Val where
-    show (ValGlobalName n) = "(" ++ n ++ ")"
-    show (ValInstanceName n) = "(" ++ n ++ ")"
-    show (ValLocalName n) = "(" ++ n ++ ")"
-    show (ValString s) = show s
-    show (ValNum n) = "<" ++ show n ++ ">"
-    show (ValObj (ObjRef n)) = "[" ++ show n ++ "]"
-    show (ValFunc _) = "[func]"
-    show (ValClass _) = "[class]"
-
 data CallFrame = CallFrame {
     cfOps    :: CFunc,
     cfPC     :: Int,
