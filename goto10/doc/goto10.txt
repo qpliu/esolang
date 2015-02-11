@@ -1,0 +1,46 @@
+GOTO 10
+
+GOTO 10 is a programming language with only GOTO statements.
+Execution starts on the line(s) with the line number 10.
+
+Syntax
+
+A program is a collection of lines.  A valid line consists of a number
+followed by GOTO followed by another number.  The first number is the
+line number, and the second number is the target line number.  Invalid
+lines result in a SYNTAX ERROR, which stops execution.  Spaces are
+ignored, so the following lines are valid and equivalent:
+
+    10 GOTO 10
+    10GOTO10
+    10 GO TO 1 0
+      1  0 G OT  O10
+    0000010 GO TO 010
+
+Execution
+
+The execution of a GOTO 10 program is done by a number of threads,
+each executing a single GOTO statement simultaneously in a step.
+
+If the target of a GOTO statement does not exist, the thread executing
+it dies.  If all threads die, execution stops.
+
+If there are multiple targets to a GOTO statement, the thread
+executing it forks, with one thread per target for the next step.
+
+Branching
+
+Line 0 is an implicit branch statement (in addition to any GOTO
+statements with line number 0 defined by the program).  On each step,
+all threads executing the implicit branch statement die.  If 1 or more
+threads execute the implicit branch statement, the number of threads
+indicates the target line number for a new thread or new threads that
+are spawned for the next step.
+
+Output
+
+Line 1 is an implicit output statement (in addition to any GOTO
+statements with line number 1 defined by the program).  On each step,
+all threads executing the implicit output statement die.  If 1 or more
+threads execute the output statement, then the number of threads minus
+1 is output as little-endian binary.
