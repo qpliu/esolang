@@ -1,6 +1,5 @@
-REM Input = 0. Change line 10 to GOTO 30 for input = 1.
-10 GOTO 20
-20 GOTO 1
-30 GOTO 30
-30 GOTO 1
-30 GOTO 1
+REM Input = 0.  Add a second 10 GOTO 0 for input = 1.
+10 GOTO 0
+2 GOTO 1
+2 GOTO 1
+2 GOTO 2

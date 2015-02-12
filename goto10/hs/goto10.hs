@@ -18,16 +18,15 @@ parseLine prog line
         break (not . isDigit) (filter (not . isSpace) line)
     (targetLineNum,trailingGarbage) =
         break (not . isDigit) (drop 4 lineContents)
-    addStmt stmt =
-        M.alter (maybe (Just [stmt]) (Just . (stmt:))) (read lineNum) prog
+    addStmt stmt = M.alter (Just . (stmt:) . maybe [] id) (read lineNum) prog
 
 
 type Stmt = State -> State
 
 data State = State{
     stProg :: Map Integer [Stmt],
-    stLine0 :: Integer,
-    stLine1 :: Int,
+    st0 :: Integer,
+    st1 :: Int,
     stThreads :: [Stmt]
     }
 
@@ -37,20 +36,19 @@ goto target st@State{stProg = prog, stThreads = threads} =
   where update stmts = st{stThreads = stmts ++ threads}
 
 line0 :: Stmt
-line0 st@State{stLine0 = n} = st{stLine0 = n + 1}
+line0 st@State{st0 = n} = st{st0 = n + 1}
 
 line1 :: Stmt
-line1 st@State{stLine1 = n} = st{stLine1 = n + 1}
+line1 st@State{st1 = n} = st{st1 = n + 1}
 
 
 run :: State -> [Bool]
 run st@State{stThreads = threads}
   | null threads = []
-  | otherwise = output n1 ++ run st''
+  | otherwise = output n1 ++ run st''{st0 = 0, st1 = 0}
   where
-    st'@State{stLine0 = n0} =
-        foldl (flip ($)) st{stLine0 = 0, stLine1 = 0, stThreads = []} threads
-    st''@State{stLine1 = n1} | n0 == 0 = st' | otherwise = goto n0 st'
+    st'@State{st0 = n0} = foldl (flip ($)) st{stThreads = []} threads
+    st''@State{st1 = n1} | n0 == 0 = st' | otherwise = goto n0 st'
     output 0 = []
     output 1 = [False]
     output n = bits (n-1)
@@ -66,8 +64,7 @@ toStr b | null b = [] | otherwise = toChr (take 8 b) : toStr (drop 8 b)
 goto10 :: String -> String
 goto10 = (toStr . run . goto 10 . init)
   where
-    init prog =
-        State{stProg = parse prog, stThreads = [], stLine0 = 0, stLine1 = 0}
+    init prog = State{stProg = parse prog, stThreads = [], st0 = 0, st1 = 0}
 
 main :: IO ()
 main = interact goto10
