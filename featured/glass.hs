@@ -376,8 +376,9 @@ setGCFlag flag cont st = cont st{stGCFlag = flag}
 
 gc :: Op
 gc cont st@State{stGCFlag = True} = cont st -- running constructor or destructor
-gc cont st = gcDestruct (S.toList garbage) (gcSweep garbage cont) st
+gc cont st = gcDestruct (S.toList garbage) cont' st{stGCFlag = True}
   where garbage = gcGarbage st
+        cont' = (gcSweep garbage . setGCFlag False) cont
 
 gcRoots :: State -> [ObjRef]
 gcRoots State{stGlobals = globals, stStack = stack, stCallStack = frames} =
