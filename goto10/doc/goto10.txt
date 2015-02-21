@@ -5,11 +5,12 @@ Execution starts on the line(s) with the line number 10.
 
 Syntax
 
-A program is a collection of lines.  A valid line consists of a number
-followed by GOTO followed by another number.  The first number is the
-line number, and the second number is the target line number.  Invalid
-lines result in a SYNTAX ERROR, which stops execution.  Spaces are
-ignored, so the following lines are valid and equivalent:
+A program is a collection of lines.  Lines beginning with REM are
+comments.  Otherwise, a valid line consists of a line number, GOTO, an
+expression, and an optional WITH clause, consisting of WITH and an
+expression.
+
+Spaces are ignored, so the following lines are valid and equivalent:
 
     10 GOTO 10
     10GOTO10
@@ -17,30 +18,58 @@ ignored, so the following lines are valid and equivalent:
       1  0 G OT  O10
     0000010 GO TO 010
 
+EBNF grammar
+
+  program = { line, "\n" } ;
+  line = comment-line | goto-line ;
+  comment-line = [ number ], "REM", { ? non-newline character ? } ;
+  goto-line = number, "GOTO", expression, [ "WITH", expression ] ;
+  number = digit, { digit } ;
+  digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+  expression = number
+       | ( "I" | "N" ), [ "(", expression, ")" ]
+       | expression, "+", expression
+       | expression, "-", expression
+       | expression, "*", expression
+       | expression, "/", expression
+       | "(", expression, ")" ;
+
 Execution
 
-The execution of a GOTO 10 program is done by a number of threads,
-each executing a single GOTO statement simultaneously in a step.
+Execution is done by a number of threads in discrete steps, with each
+thread executing a single GOTO statement simultaneously in a step.
 
 If the target of a GOTO statement does not exist, the thread executing
 it dies.  If all threads die, execution stops.
 
-If there are multiple targets to a GOTO statement, the thread
-executing it forks, with one thread per target for the next step.
+If there are multiple lines with the line number targeted by a GOTO
+statement, the thread executing it forks, with one thread per target
+for the next step.
 
-Branching
+The WITH clause causes the total number of threads going to the target
+line from the given line to be the value of the WITH expression
+instead of the number of threads executing the given line.  So a GOTO
+statement without a WITH clause is equivalent to one with a WITH N
+clause.
 
-Line 0 is an implicit branch statement (in addition to any GOTO
-statements with line number 0 defined by the program).  On each step,
-all threads executing the implicit branch statement die.  If 1 or more
-threads execute the implicit branch statement, the number of threads
-indicates the target line number for a new thread or new threads that
-are spawned for the next step.
+Expressions
+
+Expressions are integer expressions.  The +, -, *, / are the
+conventional integer addition, subtraction, multiplication, and
+division operators.  Division by zero results in a run-time error that
+stops execution.
+
+The special symbol I reads input.  I evaluates to the next bit of
+input, while I(x) evaluates to the next x bits of input as a
+little-endian integer.  If x <= 0, I(x) = 0.  At EOF, I = -1 and I(x)
+= -1.  If x is greater than the number of input bits remaining, I(x)
+evaluates to the remaining input bits.
+
+The special symbol N is the number of threads executing the
+statement, and N(x) is the number of threads that came from line x.
+On the initial execution of line 10, N = 1, and N(x) = 0.
 
 Output
 
-Line 1 is an implicit output statement (in addition to any GOTO
-statements with line number 1 defined by the program).  On each step,
-all threads executing the implicit output statement die.  If 1 or more
-threads execute the output statement, then the number of threads minus
-1 is output as little-endian binary.
+At each step, if the number of threads going to line 0 is greater than
+0, then that number minus 1 is output as little-endian bits.

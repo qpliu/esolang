@@ -1,5 +1,5 @@
-REM Input = 0.  Add a second 10 GOTO 0 for input = 1.
-10 GOTO 0
-2 GOTO 1
-2 GOTO 1
-2 GOTO 2
+10 GOTO I*5+20
+20 GOTO 0
+25 GOTO 25
+25 GOTO 0
+25 GOTO 0
