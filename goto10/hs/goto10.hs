@@ -103,7 +103,7 @@ toBits scale num
 
 fromStr :: String -> [Bool]
 fromStr [] = []
-fromStr (c:cs) = reverse (toBits 128 (ord c)) ++ fromStr cs
+fromStr (c:cs) = (reverse . toBits 128 . ord) c ++ fromStr cs
 
 toStr :: [Bool] -> String
 toStr b
@@ -112,7 +112,7 @@ toStr b
 
 run :: Map Integer [(Expr,Expr)] -> Map Integer (Integer,Map Integer Integer) -> [Bool] -> [Bool]
 run prog state inp
-  | M.fold (+) 0 (M.map fst state) <= 0 = []
+  | M.fold (&&) True (M.map ((<= 0) . fst) state) = []
   | otherwise =
       (maybe [] output . fmap fst . M.lookup 0) state' ++ run prog state' inp'
   where
