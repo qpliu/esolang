@@ -1,0 +1,113 @@
+Roag
+
+Roag is a two-dimensional procedural language featuring an instruction
+pointer that can move in four directions.  The name comes from the
+game rogue.
+
+A Roag program consists of a collection of rectangular procedure
+definitions.  Execution begins with the instruction pointer entering
+the m procedure going downward.  Execution ends when the call stack is
+empty.
+
+The output is the sequence of motions of the initial stack frame,
+where each motion is one of twelve values: up, down, left, right,
+clockwise, counterclockwise, horizontal flip, vertical flip, or a new
+initial stack frame leaving in one of the four directions.
+
+Syntax
+
+A non-space character begins a procedure definition, with the
+character naming the procedure.  The definition extends horizontally
+to the next occurence of that character and vertically to the next
+occurence of that character.  The outer columns and rows form four
+borders.  The bottom right character is ignored.  In each border, a
+non-space character indicates the entry point for its direction.  If
+there is no entry point in a border, the procedure is a no-op for that
+direction.  Multiple entry points in a border is illegal.  The
+characters within the borders are the procedure body.
+
+Procedure definitions may overlap, but the upper left corner of any
+definition cannot be part of any overlap.
+
+Instructions
+
+space: no-op.
+
+@: rotate the current frame relative to the calling frame 90
+degrees.  The direction depends on the direction of the instruction
+pointer and the location of the @ instruction relative to the center
+of the procedure.  The direction of rotation is as one would expect,
+i.e. clockwise if the instruction pointer is moving right and @
+instruction is above the center, and counterclockwise if the @
+instruction is below the center, and no-op if the @ instruction is
+vertically centered, etc.
+
+*: move the current frame relative to the calling frame in the
+direction of the instruction pointer.  If the instruction at the
+destination is a built-in instruction, it is executed, then replaced
+with the current procedure.  The former position of the current frame
+is becomes a space.  If the destination is a procedure, then a new
+call frame is inserted in the call stack with the destination
+procedure between the current frame and the calling frame.  If the
+current frame leaves the calling frame, the calling current frame
+moves into the calling frame's calling frame, with the destination as
+treated as specified above.  If the initial stack frame is exited, the
+frame at the bottom of the stack becomes the new initial stack frame.
+
+~: flip the current frame horizontally if the instruction pointer is
+moving horizontally, or flip the current frame vertically if the
+instruction pointer is moving vertically.
+
+\: turn 90 degrees.  Moving right -> moving down -> moving left ->
+moving up -> moving right.
+
+/: turn 90 degrees.  Moving right -> moving up -> moving left ->
+moving down -> moving right.
+
+?: read one bit of input.  No-op if EOF.  Turn 90 degrees left if 0.
+Turn 90 degrees right if 1.
+
+Procedure calls
+
+Creates a new stack frame.
+
+The stack frame includes the instruction position and the positions
+and rotations of procedure calls, and the positions of instructions.
+
+The size of the call stack is implementation-defined.  Too many levels
+of calls may overflow the call stack.
+
+Synonyms
+
+Procedures can be referred to by rotated or flipped synonyms.  A
+program cannot define more than one synonym.
+
+(): horizontal flip
+[]: horizontal flip
+{}: horizontal flip
+
+^<>v: rotations
+
+69: 180 degree rotation
+un: 180 degree rotation
+
+dqbp: flips
+
+NZ: N -> Z clockwise rotation, Z -> N counterclockwise rotation
+-|: - -> | clockwise rotation, | -> - counterclockwise rotation
+
+Examples
+
+Set direction to up
+
+  ^x   ^
+   \/ \x
+  x  /
+  ^
+
+Horizontal reflector
+  | |
+  x\
+   /x
+   \
+  |
