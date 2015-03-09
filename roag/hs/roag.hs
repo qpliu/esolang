@@ -4,15 +4,14 @@ import Data.Map(Map)
 import qualified Data.Map as M
 
 data Proc = Proc {
-    procEntU, procEntR, procEntD, procEntL :: Maybe Int,
+    procEntT, procEntR, procEntB, procEntL :: Maybe Int,
     procBody :: Array (Int,Int) Char
     }
-  deriving Show
 
 data Partial = Partial {
     partialName :: Char,
     partialStartCol, partialEndCol :: Int,
-    partialEntU, partialEntR, partialEntL :: Maybe Int,
+    partialEntT, partialEntR, partialEntL :: Maybe Int,
     partialBody :: [String]
     }
 
@@ -29,29 +28,30 @@ parseLine (partials,procs) line =
   where
     chars = take (maximum (length line : map ((+1) . partialEndCol) partials))
                  (line ++ repeat ' ')
-    newDefs = map (startPartial chars)
-                  (foldl filterDefs (zip chars [0..]) partials)
+    newDefs = (snd . foldl (startPartial chars) (0,[]))
+                    (foldl filterDefs (zip chars [0..]) partials)
     filterDefs charCols Partial{partialStartCol = startCol, partialEndCol = endCol} =
         filter (not . A.inRange (startCol,endCol) . snd) charCols
 
-startPartial :: String -> (Char,Int) -> Partial
-startPartial line (name,startCol)
+startPartial :: String -> (Int,[Partial]) -> (Char,Int) -> (Int,[Partial])
+startPartial line (minCol,partials) (name,startCol)
+  | startCol < minCol = (minCol,partials)
   | null trailer = error "parse error: horizontally unterminated definition"
-  | otherwise = Partial{
+  | otherwise = (1+(snd . head) trailer,Partial{
         partialName = name,
         partialStartCol = startCol,
         partialEndCol = (snd . head) trailer,
-        partialEntU = entry,
+        partialEntT = entry,
         partialEntR = Nothing,
         partialEntL = Nothing,
         partialBody = []
-        }
+        }:partials)
   where
     (border,trailer) =
         break ((== name) . fst) (drop (startCol + 1) (zip line [0..]))
     borderEntries =
         map snd $ filter ((/= ' ') . fst) $ zip (map fst border) [0..]
-    entry | null borderEntries = Nothing
+    entry | null borderEntries || isComment name = Nothing
           | length borderEntries > 1 =
                 error "parse error: multiple top entries"
           | otherwise = (Just . head) borderEntries
@@ -61,37 +61,51 @@ continuePartial line (partials,procs) partial@Partial{
         partialName = name,
         partialStartCol = startCol,
         partialEndCol = endCol,
-        partialEntU = entU,
+        partialEntT = entT,
         partialEntR = entR,
         partialEntL = entL,
         partialBody = body
         }
+  | lborder /= name = (partial{partialEntR = rent, partialEntL = lent, partialBody = bodyline:body}:partials,procs)
+  | isComment name = (partials,procs)
   | any (flip M.member procs) (name:(map fst . synonyms) name) =
         error ("error: multiply defined: " ++ show name)
-  | lborder == name = (partials,M.insert name finishProc procs)
-  | otherwise = (partial{partialEntR = rent, partialEntL = lent, partialBody = bodyline:body}:partials,procs)
+  | otherwise = (partials,M.insert name finishProc procs)
   where
     (leftLine,rborder:_) = splitAt endCol line
     lborder:bodyline = drop startCol leftLine
-    lent | lborder == ' ' = entL
+    lent | lborder == ' ' || isComment name = entL
          | otherwise = maybe (Just (length body))
                              (error "parse error: multiple left entries") entL
-    rent | rborder == ' ' = entR
+    rent | rborder == ' ' || isComment name = entR
          | otherwise = maybe (Just (length body))
                              (error "parse error: multiple right entries") entR
     borderEntries =
         map snd $ filter ((/= ' ') . fst) $ zip bodyline [0..]
-    entry | null borderEntries = Nothing
+    entry | null borderEntries || isComment name = Nothing
           | length borderEntries > 1 =
                 error "parse error: multiple bottom entries"
           | otherwise = (Just . head) borderEntries
     finishProc = Proc{
-        procEntU = entU,
+        procEntT = entT,
         procEntR = entR,
         procEntL = entL,
-        procEntD = entry,
-        procBody = undefined
+        procEntB = entry,
+        procBody = A.array (minimum bodyIxs,maximum bodyIxs) bodyElems
         }
+    bodyElems = (concat . zipWith enumBodyLine [0..]) body
+    enumBodyLine y line = zip (map (flip (,) y) [0..]) line
+    bodyIxs = map fst bodyElems
+
+isComment :: Char -> Bool
+isComment '@' = True
+isComment '*' = True
+isComment '~' = True
+isComment '/' = True
+isComment '\\' = True
+isComment '?' = True
+isComment '_' = True
+isComment _ = False
 
 -- Rotate = 90 degrees clockwise
 -- Flip = horizontal flip around vertical axis (i.e. 180 degree rotation through the 3rd dimension)
@@ -99,7 +113,33 @@ data XForm = Rotate | Flip | XForm [XForm]
 
 -- Should reduce to no more than 1 flip and no more than 3 rotates
 reduce :: XForm -> XForm
-reduce = undefined
+reduce = xf . xform 1234
+  where
+    xf 1234 = XForm []
+    xf 3142 = Rotate
+    xf 4321 = XForm [Rotate,Rotate]
+    xf 2413 = XForm [Rotate,Rotate,Rotate]
+    xf 2143 = Flip
+    xf 4231 = XForm [Flip,Rotate]
+    xf 3412 = XForm [Flip,Rotate,Rotate]
+    xf 1324 = XForm [Flip,Rotate,Rotate,Rotate]
+    xform 1234 Rotate = 3142
+    xform 1234 Flip = 2143
+    xform 3142 Rotate = 4321
+    xform 3142 Flip = 1324
+    xform 4321 Rotate = 2413
+    xform 4321 Flip = 3412
+    xform 2413 Rotate = 1234
+    xform 2413 Flip = 4231
+    xform 2143 Rotate = 4231
+    xform 2143 Flip = 1234
+    xform 4231 Rotate = 3412
+    xform 4231 Flip = 2413
+    xform 3412 Rotate = 1324
+    xform 3412 Flip = 4321
+    xform 1324 Rotate = 2143
+    xform 1324 Flip = 3142
+    xform b (XForm xforms) = foldl xform b xforms
 
 synonyms :: Char -> [(Char,XForm)]
 synonyms '(' = [(')',Flip)]

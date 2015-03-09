@@ -2,12 +2,11 @@ Roag
 
 Roag is a two-dimensional procedural language featuring an instruction
 pointer that can move in four directions.  The name comes from the
-game rogue.
+game Rogue.
 
-A Roag program consists of a collection of rectangular procedure
-definitions.  Execution begins with the instruction pointer entering
-the m procedure going downward.  Execution ends when the call stack is
-empty.
+A Roag program consists of a set of rectangular procedure definitions.
+Execution begins with the instruction pointer entering the m procedure
+going downward.  Execution ends when the call stack is empty.
 
 The output is the sequence of motions of the initial stack frame,
 where each motion is one of twelve values: up, down, left, right,
@@ -29,6 +28,12 @@ characters within the borders are the procedure body.
 Procedure definitions may overlap, but the upper left corner of any
 definition cannot be part of any overlap.
 
+Rectangles where the upper-left, upper-right, and lower-left
+characters match and are one of @, *, ~, /, \, ?, or _, and the
+upper-left character is not part of a definition, are comments.
+I.e. a comment is like a procedure definition with a special name,
+except the borders are allowed to have multiple non-space characters.
+
 Instructions
 
 space: no-op.
@@ -36,11 +41,17 @@ space: no-op.
 @: rotate the current frame relative to the calling frame 90
 degrees.  The direction depends on the direction of the instruction
 pointer and the location of the @ instruction relative to the center
-of the procedure.  The direction of rotation is as one would expect,
-i.e. clockwise if the instruction pointer is moving right and @
-instruction is above the center, and counterclockwise if the @
-instruction is below the center, and no-op if the @ instruction is
-vertically centered, etc.
+of the procedure.  Rotation is clockwise if the instruction is above
+the center and direction is right, or the instruction is right of
+center and the direction is down, or the instruction is below center
+and the direction is left, or the instruction is left of center and
+the direction is up.  Rotation is counterclockwise if the instruction
+is above the center and the direction is left, or the instruction is
+right of center and the direction is up, or the instruction is below
+center and direction is right, or the instruction is left of center
+and the direction is down.  There is no rotation if the instruction is
+vertically centered and the direction is vertical, or if the
+instruction is horizontally centered and the direction is horizontal.
 
 *: move the current frame relative to the calling frame in the
 direction of the instruction pointer.  If the instruction at the
@@ -52,20 +63,29 @@ procedure between the current frame and the calling frame.  If the
 current frame leaves the calling frame, the calling current frame
 moves into the calling frame's calling frame, with the destination as
 treated as specified above.  If the initial stack frame is exited, the
-frame at the bottom of the stack becomes the new initial stack frame.
+exiting frame becomes the new initial stack frame.
 
 ~: flip the current frame horizontally if the instruction pointer is
 moving horizontally, or flip the current frame vertically if the
 instruction pointer is moving vertically.
 
-\: turn 90 degrees.  Moving right -> moving down -> moving left ->
-moving up -> moving right.
+\: turn 90 degrees.  When entering moving down, leave moving right.
+When entering moving right, leave moving down.  When entering moving
+up, leave moving left.  When entering moving left, leave moving up.
 
-/: turn 90 degrees.  Moving right -> moving up -> moving left ->
-moving down -> moving right.
+/: turn 90 degrees.  When entering moving down, leave moving left.
+When entering moving right, leave moving up.  When entering moving up,
+leave moving right.  When entering moving left, leave moving down.
 
-?: read one bit of input.  No-op if EOF.  Turn 90 degrees left if 0.
-Turn 90 degrees right if 1.
+?: read input.  Turn 180 degrees on EOF.  Otherwise, move the current
+frame according to the input (one of up, down, left, right, clockwise,
+counterclockwise, horizontal flip, vertical flip, leave frame in one
+of four directions).  If the input is leave frame and the current
+frame is the initial frame, leave frame is output and the current
+frame remains the initial frame.
+
+_: check stack.  Turn 180 degrees if the current stack frame is the
+initial stack frame, otherwise, no-op.
 
 Procedure calls
 
@@ -100,14 +120,31 @@ Examples
 
 Set direction to up
 
-  ^x   ^
-   \/ \x
-  x  /
+  ^+   ^
+   \/
+  +  /\+
   ^
 
 Horizontal reflector
   | |
-  x\
-   /x
+  +\
+   /+
    \
   |
+
+cat
+
+  m+  m(+(
+   (?\  \ 
+   \ /  /
+  m    (+
+
+cat with overlapping definitions and a comment
+
+    m+  m
+  (+ (?\
+ *   \ /*
+ c  m
+ a \
+ t /
+ *(+
