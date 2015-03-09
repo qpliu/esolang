@@ -35,7 +35,7 @@ parseLine (partials,procs) line =
 
 startPartial :: String -> (Int,[Partial]) -> (Char,Int) -> (Int,[Partial])
 startPartial line (minCol,partials) (name,startCol)
-  | startCol < minCol = (minCol,partials)
+  | startCol < minCol || name == ' ' = (minCol,partials)
   | null trailer = error "parse error: horizontally unterminated definition"
   | otherwise = (1+(snd . head) trailer,Partial{
         partialName = name,
@@ -93,7 +93,7 @@ continuePartial line (partials,procs) partial@Partial{
         procEntB = entry,
         procBody = A.array (minimum bodyIxs,maximum bodyIxs) bodyElems
         }
-    bodyElems = (concat . zipWith enumBodyLine [0..]) body
+    bodyElems = (concat . zipWith enumBodyLine [0..] . reverse) body
     enumBodyLine y line = zip (map (flip (,) y) [0..]) line
     bodyIxs = map fst bodyElems
 
@@ -165,3 +165,20 @@ synonyms 'Z' = [('N',XForm [Rotate,Rotate,Rotate])]
 synonyms '|' = [('-',Rotate)]
 synonyms '-' = [('|',XForm [Rotate,Rotate,Rotate])]
 synonyms _ = []
+
+unparse :: (Char,Proc) -> String
+unparse (name,Proc{
+    procEntT = entT,
+    procEntR = entR,
+    procEntB = entB,
+    procEntL = entL,
+    procBody = body
+    }) =
+    unlines (vborder entT : map procLine [0..maxRow] ++ [vborder entB])
+  where
+    (_,(maxCol,maxRow)) = A.bounds body
+    border ent i = if maybe False (i ==) ent then '+' else ' '
+    vborder ent = name : map (border ent) [0..maxCol] ++ [name]
+    procLine row =
+        border entL row : map ((body A.!) . (flip (,) row)) [0..maxCol]
+                ++ [border entR row]

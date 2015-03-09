@@ -148,3 +148,11 @@ cat with overlapping definitions and a comment
  a \
  t /
  *(+
+
+cat using synonyms
+
+  m + mv  v
+   /v  +\/+
+   \?< v
+    \/
+  m
