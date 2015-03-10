@@ -69,13 +69,13 @@ exiting frame becomes the new initial stack frame.
 moving horizontally, or flip the current frame vertically if the
 instruction pointer is moving vertically.
 
-\: turn 90 degrees.  When entering moving down, leave moving right.
-When entering moving right, leave moving down.  When entering moving
-up, leave moving left.  When entering moving left, leave moving up.
-
 /: turn 90 degrees.  When entering moving down, leave moving left.
 When entering moving right, leave moving up.  When entering moving up,
 leave moving right.  When entering moving left, leave moving down.
+
+\: turn 90 degrees.  When entering moving down, leave moving right.
+When entering moving right, leave moving down.  When entering moving
+up, leave moving left.  When entering moving left, leave moving up.
 
 ?: read input.  Turn 180 degrees on EOF.  Otherwise, move the current
 frame according to the input (one of up, down, left, right, clockwise,

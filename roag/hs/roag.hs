@@ -107,39 +107,54 @@ isComment '?' = True
 isComment '_' = True
 isComment _ = False
 
+data Dir = Up | Dn | Lt | Rt deriving (Eq,Show)
+type Orientation = (Dir,Bool)
+
 -- Rotate = 90 degrees clockwise
 -- Flip = horizontal flip around vertical axis (i.e. 180 degree rotation through the 3rd dimension)
 data XForm = Rotate | Flip | XForm [XForm]
 
 -- Should reduce to no more than 1 flip and no more than 3 rotates
 reduce :: XForm -> XForm
-reduce = xf . xform 1234
+reduce = xf . xform (Up,False)
   where
-    xf 1234 = XForm []
-    xf 3142 = Rotate
-    xf 4321 = XForm [Rotate,Rotate]
-    xf 2413 = XForm [Rotate,Rotate,Rotate]
-    xf 2143 = Flip
-    xf 4231 = XForm [Flip,Rotate]
-    xf 3412 = XForm [Flip,Rotate,Rotate]
-    xf 1324 = XForm [Flip,Rotate,Rotate,Rotate]
-    xform 1234 Rotate = 3142
-    xform 1234 Flip = 2143
-    xform 3142 Rotate = 4321
-    xform 3142 Flip = 1324
-    xform 4321 Rotate = 2413
-    xform 4321 Flip = 3412
-    xform 2413 Rotate = 1234
-    xform 2413 Flip = 4231
-    xform 2143 Rotate = 4231
-    xform 2143 Flip = 1234
-    xform 4231 Rotate = 3412
-    xform 4231 Flip = 2413
-    xform 3412 Rotate = 1324
-    xform 3412 Flip = 4321
-    xform 1324 Rotate = 2143
-    xform 1324 Flip = 3142
-    xform b (XForm xforms) = foldl xform b xforms
+    xf (Up,False) = XForm []
+    xf (Rt,False) = Rotate
+    xf (Dn,False) = XForm [Rotate,Rotate]
+    xf (Lt,False) = XForm [Rotate,Rotate,Rotate]
+    xf (Up,True)  = Flip
+    xf (Rt,True)  = XForm [Flip,Rotate]
+    xf (Dn,True)  = XForm [Flip,Rotate,Rotate]
+    xf (Lt,True)  = XForm [Flip,Rotate,Rotate,Rotate]
+
+xform :: Orientation -> XForm -> Orientation
+xform (Up,False) Rotate = (Rt,False)
+xform (Up,False) Flip   = (Up,True)
+xform (Rt,False) Rotate = (Dn,False)
+xform (Rt,False) Flip   = (Lt,True)
+xform (Dn,False) Rotate = (Lt,False)
+xform (Dn,False) Flip   = (Dn,True)
+xform (Lt,False) Rotate = (Up,False)
+xform (Lt,False) Flip   = (Rt,True)
+xform (Up,True)  Rotate = (Rt,True)
+xform (Up,True)  Flip   = (Up,False)
+xform (Rt,True)  Rotate = (Dn,True)
+xform (Rt,True)  Flip   = (Lt,False)
+xform (Dn,True)  Rotate = (Lt,True)
+xform (Dn,True)  Flip   = (Dn,False)
+xform (Lt,True)  Rotate = (Up,True)
+xform (Lt,True)  Flip   = (Rt,False)
+xform orientation (XForm xforms) = foldl xform orientation xforms
+
+inverse :: XForm -> XForm
+inverse = inv . reduce
+  where
+    inv Rotate = XForm [Rotate,Rotate,Rotate]
+    inv (XForm [Rotate,Rotate,Rotate]) = Rotate
+    inv xform = xform
+
+(&) :: XForm -> XForm -> XForm
+x & y = (reduce . XForm) [x,y]
 
 synonyms :: Char -> [(Char,XForm)]
 synonyms '(' = [(')',Flip)]
@@ -148,22 +163,22 @@ synonyms '[' = [(']',Flip)]
 synonyms ']' = [('[',Flip)]
 synonyms '{' = [('}',Flip)]
 synonyms '}' = [('{',Flip)]
-synonyms '^' = [('>',Rotate),('v',XForm [Rotate,Rotate]),('<',XForm [Rotate,Rotate,Rotate])]
-synonyms '>' = [('v',Rotate),('<',XForm [Rotate,Rotate]),('^',XForm [Rotate,Rotate,Rotate])]
-synonyms 'v' = [('<',Rotate),('^',XForm [Rotate,Rotate]),('>',XForm [Rotate,Rotate,Rotate])]
-synonyms '<' = [('^',Rotate),('>',XForm [Rotate,Rotate]),('v',XForm [Rotate,Rotate,Rotate])]
-synonyms '6' = [('9',XForm [Rotate,Rotate])]
-synonyms '9' = [('6',XForm [Rotate,Rotate])]
-synonyms 'u' = [('n',XForm [Rotate,Rotate])]
-synonyms 'n' = [('u',XForm [Rotate,Rotate])]
-synonyms 'd' = [('q',XForm [Rotate,Rotate,Flip]),('p',XForm [Rotate,Rotate]),('b',Flip)]
-synonyms 'q' = [('d',XForm [Rotate,Rotate,Flip]),('b',XForm [Rotate,Rotate]),('p',Flip)]
-synonyms 'p' = [('b',XForm [Rotate,Rotate,Flip]),('d',XForm [Rotate,Rotate]),('q',Flip)]
-synonyms 'b' = [('p',XForm [Rotate,Rotate,Flip]),('q',XForm [Rotate,Rotate]),('d',Flip)]
+synonyms '^' = [('>',Rotate),('v',Rotate & Rotate),('<',Rotate & Rotate & Rotate)]
+synonyms '>' = [('v',Rotate),('<',Rotate & Rotate),('^',Rotate & Rotate & Rotate)]
+synonyms 'v' = [('<',Rotate),('^',Rotate & Rotate),('>',Rotate & Rotate & Rotate)]
+synonyms '<' = [('^',Rotate),('>',Rotate & Rotate),('v',Rotate & Rotate & Rotate)]
+synonyms '6' = [('9',Rotate & Rotate)]
+synonyms '9' = [('6',Rotate & Rotate)]
+synonyms 'u' = [('n',Rotate & Rotate)]
+synonyms 'n' = [('u',Rotate & Rotate)]
+synonyms 'd' = [('q',Rotate & Rotate & Flip),('p',Rotate & Rotate),('b',Flip)]
+synonyms 'q' = [('d',Rotate & Rotate & Flip),('b',Rotate & Rotate),('p',Flip)]
+synonyms 'p' = [('b',Rotate & Rotate & Flip),('d',Rotate & Rotate),('q',Flip)]
+synonyms 'b' = [('p',Rotate & Rotate & Flip),('q',Rotate & Rotate),('d',Flip)]
 synonyms 'N' = [('Z',Rotate)]
-synonyms 'Z' = [('N',XForm [Rotate,Rotate,Rotate])]
+synonyms 'Z' = [('N',Rotate & Rotate & Rotate)]
 synonyms '|' = [('-',Rotate)]
-synonyms '-' = [('|',XForm [Rotate,Rotate,Rotate])]
+synonyms '-' = [('|',Rotate & Rotate & Rotate)]
 synonyms _ = []
 
 unparse :: (Char,Proc) -> String
@@ -182,3 +197,55 @@ unparse (name,Proc{
     procLine row =
         border entL row : map ((body A.!) . (flip (,) row)) [0..maxCol]
                 ++ [border entR row]
+
+data Frame = Frame {
+    frameCaller :: Maybe Frame,
+    framePos    :: (Int,Int),
+    frameDir    :: Dir,
+    frameCells  :: Array (Int,Int) Cell
+    }
+
+data Cell = Cell Orientation Insn
+
+type Insn = Map Char Proc -> Frame -> [Data] -> (Maybe Frame,[Data],Maybe Data)
+
+data Data = DDir Dir | DRot Bool | DFlip Bool | DRet Dir deriving Show
+
+
+insnFlip :: Insn
+insnFlip procs frame inp = undefined
+
+insnTurn :: Insn
+insnTurn procs frame@Frame{frameDir = dir} inp
+  | dir == Dn = (Just frame{frameDir = Lt},inp,Nothing)
+  | dir == Rt = (Just frame{frameDir = Dn},inp,Nothing)
+  | dir == Up = (Just frame{frameDir = Rt},inp,Nothing)
+  | dir == Lt = (Just frame{frameDir = Up},inp,Nothing)
+
+insnBackturn :: Insn
+insnBackturn procs frame@Frame{frameDir = dir} inp
+  | dir == Dn = (Just frame{frameDir = Rt},inp,Nothing)
+  | dir == Rt = (Just frame{frameDir = Up},inp,Nothing)
+  | dir == Up = (Just frame{frameDir = Lt},inp,Nothing)
+  | dir == Lt = (Just frame{frameDir = Dn},inp,Nothing)
+
+insnInput :: Insn
+insnInput procs frame@Frame{frameDir = dir} inp
+  | null inp = (Just frame{frameDir = uturn dir},inp,Nothing)
+  | otherwise = undefined
+
+insnCheckStack :: Insn
+insnCheckStack procs frame@Frame{frameCaller = caller, frameDir = dir} inp =
+    (Just frame{frameDir = maybe (uturn dir) (const dir) caller},inp,Nothing)
+
+insnCall :: Orientation -> Proc -> Insn
+insnCall = undefined
+
+uturn :: Dir -> Dir
+uturn dir = fst (xform (dir,True) (Rotate & Rotate))
+
+interp :: Map Char Proc -> [Data] -> [Data]
+interp = undefined
+
+roag :: String -> [Data] -> [Data]
+roag = interp . parse
