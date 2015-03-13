@@ -18,16 +18,18 @@ data Partial = Partial {
     partialBody :: [String]
     }
 
-parse :: String -> Map Char Proc
-parse prog
-  | null partials = procs
+type Prog = Map Char (XForm,Proc)
+
+parse :: String -> Prog
+parse src
+  | null partials = prog
   | otherwise = error "parse error: vertically unterminated definition(s)"
   where
-    (partials,procs) = (foldl parseLine ([],M.empty) . lines) prog
+    (partials,prog) = (foldl parseLine ([],M.empty) . lines) src
 
-parseLine :: ([Partial],Map Char Proc) -> String -> ([Partial],Map Char Proc)
-parseLine (partials,procs) line =
-    foldl (continuePartial chars) (newDefs,procs) partials
+parseLine :: ([Partial],Prog) -> String -> ([Partial],Prog)
+parseLine (partials,prog) line =
+    foldl (continuePartial chars) (newDefs,prog) partials
   where
     chars = take (maximum (length line : map ((+1) . partialEndCol) partials))
                  (line ++ repeat ' ')
@@ -59,8 +61,8 @@ startPartial line (minCol,partials) (name,startCol)
                 error "parse error: multiple top entries"
           | otherwise = (Just . head) borderEntries
 
-continuePartial :: String -> ([Partial],Map Char Proc) -> Partial -> ([Partial],Map Char Proc)
-continuePartial line (partials,procs) partial@Partial{
+continuePartial :: String -> ([Partial],Prog) -> Partial -> ([Partial],Prog)
+continuePartial line (partials,prog) partial@Partial{
         partialName = name,
         partialStartCol = startCol,
         partialEndCol = endCol,
@@ -69,12 +71,13 @@ continuePartial line (partials,procs) partial@Partial{
         partialEntL = entL,
         partialBody = body
         }
-  | lborder /= name = (partial{partialEntR = rent, partialEntL = lent, partialBody = bodyline:body}:partials,procs)
-  | isComment name = (partials,procs)
-  | any (flip M.member procs) (name:(map fst . synonyms) name) =
-        error ("error: multiply defined: " ++ show name)
-  | otherwise = (partials,M.insert name finishProc procs)
+  | lborder /= name = (partial{partialEntR = rent, partialEntL = lent, partialBody = bodyline:body}:partials,prog)
+  | isComment name = (partials,prog)
+  | M.member canonName prog = error ("error: multiply defined: " ++ show name)
+  | otherwise =
+        (partials,M.insert canonName (inverse canonXForm,finishProc) prog)
   where
+    (canonName,canonXForm) = canonical name
     (leftLine,rborder:_) = splitAt endCol line
     lborder:bodyline = drop startCol leftLine
     lent | lborder == ' ' || isComment name = entL
@@ -182,31 +185,6 @@ xfhflip = Flip
 xfvflip :: XForm
 xfvflip = XForm [Flip,Rotate,Rotate]
 
-synonyms :: Char -> [(Char,XForm)]
-synonyms '(' = [(')',Flip)]
-synonyms ')' = [('(',Flip)]
-synonyms '[' = [(']',Flip)]
-synonyms ']' = [('[',Flip)]
-synonyms '{' = [('}',Flip)]
-synonyms '}' = [('{',Flip)]
-synonyms '^' = [('>',xf90),('v',xf180),('<',xf270)]
-synonyms '>' = [('v',xf90),('<',xf180),('^',xf270)]
-synonyms 'v' = [('<',xf90),('^',xf180),('>',xf270)]
-synonyms '<' = [('^',xf90),('>',xf180),('v',xf270)]
-synonyms '6' = [('9',xf180)]
-synonyms '9' = [('6',xf180)]
-synonyms 'u' = [('n',xf180)]
-synonyms 'n' = [('u',xf180)]
-synonyms 'd' = [('q',xfvflip),('p',xf180),('b',xfhflip)]
-synonyms 'q' = [('d',xfvflip),('b',xf180),('p',xfhflip)]
-synonyms 'p' = [('b',xfvflip),('d',xf180),('q',xfhflip)]
-synonyms 'b' = [('p',xfvflip),('q',xf180),('d',xfhflip)]
-synonyms 'N' = [('Z',Rotate)]
-synonyms 'Z' = [('N',xf270)]
-synonyms '|' = [('-',Rotate)]
-synonyms '-' = [('|',xf270)]
-synonyms _ = []
-
 canonical :: Char -> (Char,XForm)
 canonical ')' = ('(',Flip)
 canonical ']' = ('[',Flip)
@@ -224,16 +202,35 @@ canonical '-' = ('|',Rotate)
 canonical '\\' = ('/',Rotate)
 canonical c = (c,XForm [])
 
-unparse :: (Char,Proc) -> String
-unparse (name,Proc{
+uncanonical :: (Char,XForm) -> Char
+uncanonical ('(',Flip) = ')'
+uncanonical ('[',Flip) = ']'
+uncanonical ('{',Flip) = '}'
+uncanonical ('^',Rotate) = '>'
+uncanonical ('^',XForm [Rotate,Rotate]) = 'v'
+uncanonical ('^',XForm [Rotate,Rotate,Rotate]) = '<'
+uncanonical ('6',XForm [Rotate,Rotate]) = '9'
+uncanonical ('n',XForm [Rotate,Rotate]) = 'u'
+uncanonical ('d',XForm [Flip, Rotate,Rotate]) = 'q'
+uncanonical ('d',XForm [Rotate,Rotate]) = 'p'
+uncanonical ('d',Flip) = 'b'
+uncanonical ('N',Rotate) = 'Z'
+uncanonical ('|',Rotate) = '-'
+uncanonical ('/',Rotate) = '\\'
+uncanonical (c,XForm []) = c
+uncanonical (c,_) = error ("no uncanonical transform of " ++ show c)
+
+unparse :: (Char,(XForm,Proc)) -> String
+unparse (procName,(procXForm,Proc{
     procEntT = entT,
     procEntR = entR,
     procEntB = entB,
     procEntL = entL,
     procBody = body
-    }) =
+    })) =
     unlines (vborder entT : map procLine [0..maxRow] ++ [vborder entB])
   where
+    name = uncanonical (procName,procXForm)
     (_,(maxCol,maxRow)) = A.bounds body
     border ent i = if maybe False (i ==) ent then '+' else ' '
     vborder ent = name : map (border ent) [0..maxCol] ++ [name]
@@ -250,43 +247,48 @@ data Frame = Frame {
 
 data Cell = Cell Char XForm Insn
 
-type Insn = Map Char Proc -> Frame -> [Data] -> (Maybe Frame,[Data],[Data])
+type Insn = Prog -> Frame -> XForm -> [Data] -> (Frame,[Data],[Data])
 
 data Data = DDir Dir | DRot Bool | DFlip Bool | DRet Dir deriving Show
 
+insnRotate :: Insn
+insnRotate prog frame cellXForm inp = undefined
+
+insnMove :: Insn
+insnMove prog frame cellXForm inp = undefined
+
 insnFlip :: Insn
-insnFlip procs frame inp = undefined
+insnFlip prog frame cellXForm inp = undefined
 
 insnTurn :: Insn
-insnTurn procs frame@Frame{frameDir = dir} inp
-  | dir == Dn = (Just frame{frameDir = Lt},inp,[])
-  | dir == Rt = (Just frame{frameDir = Dn},inp,[])
-  | dir == Up = (Just frame{frameDir = Rt},inp,[])
-  | dir == Lt = (Just frame{frameDir = Up},inp,[])
-
-insnBackturn :: Insn
-insnBackturn procs frame@Frame{frameDir = dir} inp
-  | dir == Dn = (Just frame{frameDir = Rt},inp,[])
-  | dir == Rt = (Just frame{frameDir = Up},inp,[])
-  | dir == Up = (Just frame{frameDir = Lt},inp,[])
-  | dir == Lt = (Just frame{frameDir = Dn},inp,[])
+insnTurn prog frame@Frame{frameDir = dir} cellXForm inp =
+    (frame{frameDir = xform (turn cellDir) cellXForm},inp,[])
+  where
+    cellDir = xform dir (inverse cellXForm)
+    turn Dn = Lt
+    turn Rt = Up
+    turn Up = Rt
+    turn Lt = Dn
 
 insnInput :: Insn
-insnInput procs frame@Frame{frameDir = dir} inp
-  | null inp = (Just frame{frameDir = uturn dir},inp,[])
+insnInput prog frame@Frame{frameDir = dir} _ inp
+  | null inp = (frame{frameDir = uturn dir},inp,[])
   | otherwise = undefined
 
 insnCheckStack :: Insn
-insnCheckStack procs frame@Frame{frameCaller = caller, frameDir = dir} inp =
-    (Just frame{frameDir = maybe (uturn dir) (const dir) caller},inp,[])
+insnCheckStack prog frame@Frame{frameCaller = caller, frameDir = dir} _ inp =
+    (frame{frameDir = maybe (uturn dir) (const dir) caller},inp,[])
 
-insnCall :: Proc -> XForm -> Insn
+insnCall :: (XForm,Proc) -> Insn
 insnCall = undefined
+
+insnNop :: Insn
+insnNop prog frame _ inp = (frame,inp,[])
 
 uturn :: Dir -> Dir
 uturn dir = xform dir (Rotate & Rotate)
 
-call :: Map Char Proc -> Maybe Frame -> Dir -> XForm -> Proc -> Frame
+call :: Prog -> Maybe Frame -> Dir -> XForm -> Proc -> Frame
 call prog caller callerDir callerXForm
      Proc{procEntT = entT, procEntR = entR, procEntB = entB, procEntL = entL,
           procBody = body} =
@@ -300,18 +302,39 @@ call prog caller callerDir callerXForm
         | dir == Up = maybe (0,0) (flip (,) (maxRow+1)) entB
         | dir == Lt = maybe (0,0) ((,) (maxCol+1)) entR
     cells = A.array (A.bounds body) (map (fmap toCell) (A.assocs body))
-    toCell ch = Cell ch cellXForm cellInsn
+    toCell procCh = Cell cellCh cellXForm cellInsn
       where
-        (cellXForm,cellInsn) = undefined
+        (cellCh,cellXForm) = canonical procCh
+        cellInsn | cellCh == ' ' = insnNop
+                 | cellCh == '@' = insnRotate
+                 | cellCh == '*' = insnMove
+                 | cellCh == '~' = insnFlip
+                 | cellCh == '/' = insnTurn
+                 | cellCh == '?' = insnInput
+                 | cellCh == '_' = insnCheckStack
+                 | otherwise =
+                        maybe (error ("undefined procedure: " ++ show procCh))
+                              insnCall (M.lookup cellCh prog)
 
-interp :: Map Char Proc -> Frame -> [Data] -> [Either Data String]
-interp prog frame inp = (Right . visualize) frame : output ++ nextStep
+interp :: Prog -> Frame -> [Data] -> [Either Data String]
+interp prog frame inp = (Right . visualize) frame : map Left output ++ nextStep
   where
-    advanceIP frame = undefined -- moving out means calling frame with direction adjustment
-    (Just frame') = advanceIP frame
+    advanceIP frame@Frame{frameCaller = caller, frameDir = dir,
+                          framePos = (x,y), frameCells = cells}
+        | A.inRange (A.bounds cells) newPos = Just frame{framePos = newPos}
+        | otherwise = caller >>= advanceIP . doReturn dir
+      where
+        newPos | dir == Dn = (x,y+1) | dir == Rt = (x+1,y)
+               | dir == Up = (x,y-1) | dir == Lt = (x-1,y)
+        doReturn dir frame@Frame{framePos = pos, frameCells = cells} =
+            frame{frameDir = xform dir cellXForm}
+          where Cell _ cellXForm _ = cells A.! pos
+
+    (Just frame'@Frame{framePos = pos', frameCells = cells'}) = advanceIP frame
     (output,nextStep) | isNothing (advanceIP frame) = ([],[])
-                      | otherwise = (insnOutput,interp prog frame'' inp'')
-    (insnOutput,frame'',inp'') = undefined
+                      | otherwise = (output'',interp prog frame'' inp'')
+    (frame'',inp'',output'') = insn' prog frame' cellXForm' inp
+    Cell _ cellXForm' insn' = cells' A.! pos'
 
 visualize :: Frame -> String
 visualize Frame{framePos = (x,y), frameDir = dir, frameCells = cells} =
@@ -322,21 +345,27 @@ visualize Frame{framePos = (x,y), frameDir = dir, frameCells = cells} =
     bottom = '*' : concatMap (vborder (maxRow+1)) [0..maxCol] ++ " *"
     vborder y1 x1 = [' ',ip x1 y1,' ']
     ip x1 y1 | (x,y) /= (x1,y1) = ' ' | otherwise = showDir dir
-    showDir dir | dir == Dn = 'v' | dir == Rt = '<'
-                | dir == Up = '^' | dir == Lt = '>'
+    showDir dir | dir == Dn = 'v' | dir == Rt = '>'
+                | dir == Up = '^' | dir == Lt = '<'
     body y1 = [' ' : concatMap (fst . cell y1) [0..maxCol],
                ip (-1) y1 : concatMap (snd . cell y1) [0..maxCol]
                    ++ [' ', ip (maxCol+1) y1],
                ""]
-    cell y1 x1 = ([' ',cellFlip,cellCh],[' ',ip x1 y1,showDir cellDir])
+    cell y1 x1
+        | cellCh `elem` "@*~?_" = ([' ',' ',cellCh],[' ',ip x1 y1,' '])
+        | cellCh == '/' && (cellFlip == ' ') == (cellDir `elem` [Up,Dn]) =
+                ("  /",[' ',ip x1 y1,' '])
+        | cellCh == '/' = ("  \\",[' ',ip x1 y1,' '])
+        | otherwise = ([' ',cellFlip,cellCh],[' ',ip x1 y1,showDir cellDir])
       where
         (Cell cellCh cellXForm _) = cells A.! (x1,y1)
         cellFlip = if isFlip cellXForm then '~' else ' '
         cellDir = xform Up cellXForm
 
-run :: Map Char Proc -> [Data] -> [Either Data String]
-run prog = maybe (const []) (interp prog . call prog Nothing Dn (XForm []))
-                 (M.lookup 'm' prog)
+run :: Prog -> [Data] -> [Either Data String]
+run prog = maybe (const []) (interp prog . doCall) (M.lookup 'm' prog)
+  where
+    doCall (procXForm,proc) = call prog Nothing Dn (inverse procXForm) proc
 
 roag :: String -> [Data] -> [Data]
 roag = (lefts .) . run . parse
