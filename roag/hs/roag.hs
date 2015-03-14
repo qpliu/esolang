@@ -298,9 +298,9 @@ insnCheckStack :: Insn
 insnCheckStack prog frame@Frame{frameCaller = caller, frameDir = dir} _ inp =
     (frame{frameDir = maybe (uturn dir) (const dir) caller},inp,[])
 
-insnCall :: (XForm,Proc) -> Insn
-insnCall (procXForm,proc) prog frame@Frame{frameDir = dir} cellXForm inp =
-    (call prog (Just frame) dir (procXForm & cellXForm) proc,inp,[])
+insnCall :: Proc -> Insn
+insnCall proc prog frame@Frame{frameDir = dir} cellXForm inp =
+    (call prog (Just frame) dir cellXForm proc,inp,[])
 
 insnNop :: Insn
 insnNop prog frame _ inp = (frame,inp,[])
@@ -322,39 +322,39 @@ call prog caller callerDir callerXForm
         | dir == Up = maybe (0,0) (flip (,) (maxRow+1)) entB
         | dir == Lt = maybe (0,0) ((,) (maxCol+1)) entR
     cells = A.array (A.bounds body) (map (fmap toCell) (A.assocs body))
-    toCell procCh = Cell cellCh cellXForm cellInsn
+    toCell procCh = Cell cellCh (procXForm & cellXForm) cellInsn
       where
         (cellCh,cellXForm) = canonical procCh
-        cellInsn | cellCh == ' ' = insnNop
-                 | cellCh == '@' = insnRotate
-                 | cellCh == '*' = insnMove
-                 | cellCh == '~' = insnFlip
-                 | cellCh == '/' = insnTurn
-                 | cellCh == '?' = insnInput
-                 | cellCh == '_' = insnCheckStack
-                 | otherwise =
-                        maybe (error ("undefined procedure: " ++ show procCh))
-                              insnCall (M.lookup cellCh prog)
+        (cellInsn,procXForm)
+          | cellCh == ' ' = (insnNop,xf0)
+          | cellCh == '@' = (insnRotate,xf0)
+          | cellCh == '*' = (insnMove,xf0)
+          | cellCh == '~' = (insnFlip,xf0)
+          | cellCh == '/' = (insnTurn,xf0)
+          | cellCh == '?' = (insnInput,xf0)
+          | cellCh == '_' = (insnCheckStack,xf0)
+          | otherwise = (insnCall proc,xf)
+        (xf,proc) = maybe (error ("undefined procedure: " ++ show procCh))
+                          id (M.lookup cellCh prog)
 
 interp :: Prog -> Frame -> [Data] -> [Either Data String]
-interp prog frame inp = (Right . visualize) frame : map Left output ++ nextStep
+interp prog frame@Frame{frameCaller = caller, frameDir = dir,
+                        framePos = pos@(x,y), frameCells = cells} inp =
+    (Right . visualize) frame : map Left output ++ nextStep
   where
-    advanceIP frame@Frame{frameCaller = caller, frameDir = dir,
-                          framePos = (x,y), frameCells = cells}
-        | A.inRange (A.bounds cells) newPos = Just frame{framePos = newPos}
-        | otherwise = caller >>= advanceIP . doReturn dir
-      where
-        newPos | dir == Dn = (x,y+1) | dir == Rt = (x+1,y)
-               | dir == Up = (x,y-1) | dir == Lt = (x-1,y)
-        doReturn dir frame@Frame{framePos = pos, frameCells = cells} =
-            frame{frameDir = xform dir cellXForm}
-          where Cell _ cellXForm _ = cells A.! pos
+    (output,nextStep)
+      | A.inRange (A.bounds cells) newPos = (output',interp prog frame' inp')
+      | isNothing caller = ([],[])
+      | otherwise = ([],interp prog retFrame inp)
+    newPos | dir == Dn = (x,y+1) | dir == Rt = (x+1,y)
+           | dir == Up = (x,y-1) | dir == Lt = (x-1,y)
+    Just callerFrame@Frame{framePos = callerPos,
+                           frameCells = callerCells} = caller
+    retFrame = callerFrame{frameDir = xform dir callerXForm}
+    Cell _ callerXForm _ = callerCells A.! callerPos
 
-    (Just frame'@Frame{framePos = pos', frameCells = cells'}) = advanceIP frame
-    (output,nextStep) | isNothing (advanceIP frame) = ([],[])
-                      | otherwise = (output'',interp prog frame'' inp'')
-    (frame'',inp'',output'') = insn' prog frame' cellXForm' inp
-    Cell _ cellXForm' insn' = cells' A.! pos'
+    (frame',inp',output') = insn prog frame{framePos = newPos} cellXForm inp
+    Cell _ cellXForm insn = cells A.! newPos
 
 visualize :: Frame -> String
 visualize Frame{framePos = (x,y), frameDir = dir, frameCells = cells} =
@@ -393,5 +393,5 @@ roag = (lefts .) . run . parse
 roagVisualize :: String -> [Data] -> [String]
 roagVisualize = (rights .) . run . parse
 
-testVisualize :: String -> IO ()
-testVisualize file = readFile file >>= sequence_ . intersperse (getLine >> return ()) . map putStr . flip roagVisualize []
+testVisualize :: String -> [Data] -> IO ()
+testVisualize file inp = readFile file >>= sequence_ . intersperse (getLine >> return ()) . map putStr . flip roagVisualize inp
