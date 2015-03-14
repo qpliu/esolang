@@ -249,16 +249,35 @@ data Cell = Cell Char XForm Insn
 
 type Insn = Prog -> Frame -> XForm -> [Data] -> (Frame,[Data],[Data])
 
-data Data = DDir Dir | DRot Bool | DFlip Bool | DRet Dir deriving Show
+data Data = DDir Dir | DRot Bool | DFlip Bool | DRet Dir deriving (Eq,Show)
 
 insnRotate :: Insn
-insnRotate prog frame cellXForm inp = undefined
+insnRotate prog frame@Frame{framePos = (x,y), frameDir = dir,
+                            frameCells = cells} cellXForm inp
+  | dir == Dn && 2*x < maxCol = adjustCaller prog frame (DRot False) inp
+  | dir == Dn && 2*x > maxCol = adjustCaller prog frame (DRot True) inp
+  | dir == Rt && 2*y < maxRow = adjustCaller prog frame (DRot True) inp
+  | dir == Rt && 2*y > maxRow = adjustCaller prog frame (DRot False) inp
+  | dir == Up && 2*x < maxCol = adjustCaller prog frame (DRot True) inp
+  | dir == Up && 2*x > maxCol = adjustCaller prog frame (DRot False) inp
+  | dir == Lt && 2*y < maxRow = adjustCaller prog frame (DRot False) inp
+  | dir == Lt && 2*y > maxRow = adjustCaller prog frame (DRot True) inp
+  | otherwise = (frame,inp,[])
+  where
+    (_,(maxCol,maxRow)) = A.bounds cells
+
+adjustCaller :: Prog -> Frame -> Data -> [Data] -> (Frame,[Data],[Data])
+adjustCaller prog frame@Frame{frameCaller = caller} dat inp
+  | isNothing caller = (frame,inp,[dat])
+  | otherwise = undefined
 
 insnMove :: Insn
-insnMove prog frame cellXForm inp = undefined
+insnMove prog frame@Frame{frameDir = dir} cellXForm inp =
+    adjustCaller prog frame (DDir dir) inp
 
 insnFlip :: Insn
-insnFlip prog frame cellXForm inp = undefined
+insnFlip prog frame@Frame{frameDir = dir} cellXForm inp =
+    adjustCaller prog frame (DFlip (dir == Lt || dir == Rt)) inp
 
 insnTurn :: Insn
 insnTurn prog frame@Frame{frameDir = dir} cellXForm inp =
@@ -271,16 +290,17 @@ insnTurn prog frame@Frame{frameDir = dir} cellXForm inp =
     turn Lt = Dn
 
 insnInput :: Insn
-insnInput prog frame@Frame{frameDir = dir} _ inp
-  | null inp = (frame{frameDir = uturn dir},inp,[])
-  | otherwise = undefined
+insnInput prog frame@Frame{frameDir = dir} cellXForm inp
+  | null inp = (frame{frameDir = uturn dir},[],[])
+  | otherwise = adjustCaller prog frame (head inp) (tail inp)
 
 insnCheckStack :: Insn
 insnCheckStack prog frame@Frame{frameCaller = caller, frameDir = dir} _ inp =
     (frame{frameDir = maybe (uturn dir) (const dir) caller},inp,[])
 
 insnCall :: (XForm,Proc) -> Insn
-insnCall = undefined
+insnCall (procXForm,proc) prog frame@Frame{frameDir = dir} cellXForm inp =
+    (call prog (Just frame) dir (procXForm & cellXForm) proc,inp,[])
 
 insnNop :: Insn
 insnNop prog frame _ inp = (frame,inp,[])
