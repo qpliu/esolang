@@ -269,7 +269,19 @@ insnRotate prog frame@Frame{framePos = (x,y), frameDir = dir,
 adjustCaller :: Prog -> Frame -> Data -> [Data] -> (Frame,[Data],[Data])
 adjustCaller prog frame@Frame{frameCaller = caller} dat inp
   | isNothing caller = (frame,inp,[dat])
-  | otherwise = undefined
+  | otherwise = case dat of
+      DDir dir -> undefined
+      DRot cw -> adjCallerCell ((if cw then xf90 else xf270) &)
+      DFlip horiz -> adjCallerCell ((if horiz then xfhflip else xfvflip) &)
+      DRet dir -> undefined
+  where
+    Just callerFrame@Frame{framePos = pos, frameCells = cells} = caller
+    adjCallerCell adj = (newFrame,inp,[])
+      where
+        Cell cellCh cellXForm cellInsn = cells A.! pos
+        cell = Cell cellCh (adj cellXForm) cellInsn
+        newFrame = frame{frameCaller = Just newCaller}
+        newCaller = callerFrame{frameCells = cells A.// [(pos,cell)]}
 
 insnMove :: Insn
 insnMove prog frame@Frame{frameDir = dir} cellXForm inp =
