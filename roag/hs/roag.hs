@@ -270,18 +270,24 @@ adjustCaller :: Prog -> Frame -> Data -> [Data] -> (Frame,[Data],[Data])
 adjustCaller prog frame@Frame{frameCaller = caller} dat inp
   | isNothing caller = (frame,inp,[dat])
   | otherwise = case dat of
-      DDir dir -> undefined
-      DRot cw -> adjCallerCell ((if cw then xf90 else xf270) &)
-      DFlip horiz -> adjCallerCell ((if horiz then xfhflip else xfvflip) &)
-      DRet dir -> undefined
+      DDir dir -> (moveCallerCell (xform dir cellXForm),inp,[])
+      DRot cw -> (adjCallerCell ((if cw then xf90 else xf270) &),inp,[])
+      DFlip horiz ->
+        (adjCallerCell ((if horiz then xfhflip else xfvflip) &),inp,[])
+      DRet dir -> (retCallerCell (xform dir cellXForm),inp,[])
   where
-    Just callerFrame@Frame{framePos = pos, frameCells = cells} = caller
-    adjCallerCell adj = (newFrame,inp,[])
+    Just callerFrame@Frame{framePos = pos@(x,y), frameCells = cells} = caller
+    Cell cellCh cellXForm cellInsn = cells A.! pos
+    adjCallerCell adj = frame{frameCaller = Just newCaller}
       where
-        Cell cellCh cellXForm cellInsn = cells A.! pos
         cell = Cell cellCh (adj cellXForm) cellInsn
-        newFrame = frame{frameCaller = Just newCaller}
         newCaller = callerFrame{frameCells = cells A.// [(pos,cell)]}
+    newPos dir | dir == Dn = (x,y+1) | dir == Rt = (x+1,y)
+               | dir == Up = (x,y-1) | dir == Lt = (x-1,y)
+    moveCallerCell dir
+      | not (A.inRange (A.bounds cells) (newPos dir)) = retCallerCell dir
+      | otherwise = undefined
+    retCallerCell dir = undefined
 
 insnMove :: Insn
 insnMove prog frame@Frame{frameDir = dir} cellXForm inp =
