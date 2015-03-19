@@ -277,17 +277,23 @@ adjustCaller prog frame@Frame{frameCaller = caller} dat inp
       DRet dir -> (retCallerCell (xform dir cellXForm),inp,[])
   where
     Just callerFrame@Frame{framePos = pos@(x,y), frameCells = cells} = caller
-    Cell cellCh cellXForm cellInsn = cells A.! pos
+    curCell@(Cell cellCh cellXForm cellInsn) = cells A.! pos
     adjCallerCell adj = frame{frameCaller = Just newCaller}
       where
         cell = Cell cellCh (adj cellXForm) cellInsn
         newCaller = callerFrame{frameCells = cells A.// [(pos,cell)]}
     newPos dir | dir == Dn = (x,y+1) | dir == Rt = (x+1,y)
                | dir == Up = (x,y-1) | dir == Lt = (x-1,y)
-    moveCallerCell dir
-      | not (A.inRange (A.bounds cells) (newPos dir)) = retCallerCell dir
-      | otherwise = undefined
-    retCallerCell dir = undefined
+    moveCallerCell dir = frame{frameCaller = Just (insCell (newPos dir) dir)}
+    retCallerCell dir = frame{frameCaller = Just (insCell (-1,-1) dir)}
+    insCell insPos dir =
+        insertCell curCell insPos dir
+            callerFrame{frameCells = cells A.// [(pos,Cell ' ' xf0 insnNop)]}
+
+insertCell :: Cell -> (Int,Int) -> Dir -> Frame -> Frame
+insertCell cell pos dir frame@Frame{frameCells = cells}
+  | not (A.inRange (A.bounds cells) pos) = undefined
+  | otherwise = undefined
 
 insnMove :: Insn
 insnMove prog frame@Frame{frameDir = dir} cellXForm inp =

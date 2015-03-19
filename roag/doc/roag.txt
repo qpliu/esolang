@@ -55,15 +55,19 @@ instruction is horizontally centered and the direction is horizontal.
 
 *: move the current frame relative to the calling frame in the
 direction of the instruction pointer.  If the instruction at the
-destination is a built-in instruction, it is executed, then replaced
-with the current procedure.  The former position of the current frame
-is becomes a space.  If the destination is a procedure, then a new
-call frame is inserted in the call stack with the destination
-procedure between the current frame and the calling frame.  If the
-current frame leaves the calling frame, the calling current frame
-moves into the calling frame's calling frame, with the destination as
-treated as specified above.  If the initial stack frame is exited, the
-exiting frame becomes the new initial stack frame.
+destination is a built-in instruction or a procedure call with no
+entry in the relevant direction or otherwise returns immediately, it
+is replaced by a procedure call to the procedure of the current frame.
+The former position of the current frame is becomes a space.
+Otherwise, the destination is a procedure, and a new call frame is
+inserted in the call stack between the current frame and the calling
+frame, and the procedure is repeated with the destination cell being
+entry point of the new frame.  If the current frame leaves the calling
+frame, the calling current frame moves into the calling frame's
+calling frame, with the destination as treated as specified above.  If
+the initial stack frame is exited, the exiting frame becomes the new
+initial stack frame, and leave frame in the relevant direction is
+output.
 
 ~: flip the current frame horizontally if the instruction pointer is
 moving horizontally, or flip the current frame vertically if the
