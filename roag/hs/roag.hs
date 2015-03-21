@@ -270,11 +270,12 @@ adjustCaller :: Prog -> Frame -> Data -> [Data] -> (Frame,[Data],[Data])
 adjustCaller prog frame@Frame{frameCaller = caller} dat inp
   | isNothing caller = (frame,inp,[dat])
   | otherwise = case dat of
-      DDir dir -> (moveCallerCell (xform dir cellXForm),inp,[])
+      DDir dir ->
+        moveCallerCell (newPos (xform dir cellXForm)) (xform dir cellXForm)
       DRot cw -> (adjCallerCell ((if cw then xf90 else xf270) &),inp,[])
       DFlip horiz ->
         (adjCallerCell ((if horiz then xfhflip else xfvflip) &),inp,[])
-      DRet dir -> (retCallerCell (xform dir cellXForm),inp,[])
+      DRet dir -> moveCallerCell (-1,-1) (xform dir cellXForm)
   where
     Just callerFrame@Frame{framePos = pos@(x,y), frameCells = cells} = caller
     curCell@(Cell cellCh cellXForm cellInsn) = cells A.! pos
@@ -284,14 +285,19 @@ adjustCaller prog frame@Frame{frameCaller = caller} dat inp
         newCaller = callerFrame{frameCells = cells A.// [(pos,cell)]}
     newPos dir | dir == Dn = (x,y+1) | dir == Rt = (x+1,y)
                | dir == Up = (x,y-1) | dir == Lt = (x-1,y)
-    moveCallerCell dir = frame{frameCaller = Just (insCell (newPos dir) dir)}
-    retCallerCell dir = frame{frameCaller = Just (insCell (-1,-1) dir)}
-    insCell insPos dir =
-        insertCell curCell insPos dir
-            callerFrame{frameCells = cells A.// [(pos,Cell ' ' xf0 insnNop)]}
+    moveCallerCell newCallerPos dir =
+        (frame{frameCaller = newCallerFrame},inp,output)
+      where
+        (newCallerFrame,output) =
+            insertCell prog curCell newCallerPos dir curCallerFrame
+        curCallerFrame =
+            callerFrame{framePos = newCallerPos,
+                        frameCells = cells A.// [(pos,Cell ' ' xf0 insnNop)]}
 
-insertCell :: Cell -> (Int,Int) -> Dir -> Frame -> Frame
-insertCell cell pos dir frame@Frame{frameCells = cells}
+insertCell :: Prog -> Cell -> (Int,Int) -> Dir -> Frame -> (Maybe Frame,[Data])
+insertCell prog cell pos dir frame@Frame{frameCaller = caller, frameCells = cells}
+  | not (A.inRange (A.bounds cells) pos) && isNothing caller =
+      (Nothing,[DRet dir])
   | not (A.inRange (A.bounds cells) pos) = undefined
   | otherwise = undefined
 
