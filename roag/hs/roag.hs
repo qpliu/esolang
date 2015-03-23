@@ -298,7 +298,13 @@ insertCell :: Prog -> Cell -> (Int,Int) -> Dir -> Frame -> (Maybe Frame,[Data])
 insertCell prog cell pos dir frame@Frame{frameCaller = caller, frameCells = cells}
   | not (A.inRange (A.bounds cells) pos) && isNothing caller =
       (Nothing,[DRet dir])
-  | not (A.inRange (A.bounds cells) pos) = undefined
+  | not (A.inRange (A.bounds cells) pos) =
+      let Just callerFrame@Frame{frameCells = callerCells, framePos = callerPos@(x,y)} = caller
+          Cell _ cellXForm _ = callerCells A.! callerPos
+          newDir = xform dir cellXForm
+          newCallerPos | newDir == Dn = (x,y+1) | newDir == Rt = (x+1,y)
+                       | newDir == Up = (x,y-1) | newDir == Lt = (x-1,y)
+      in  insertCell prog cell newCallerPos newDir callerFrame{framePos = newCallerPos}
   | otherwise = undefined
 
 insnMove :: Insn
