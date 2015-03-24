@@ -313,11 +313,13 @@ insertCell prog cell pos dir frame@Frame{frameCaller = caller, frameCells = cell
     Cell destCellCh destCellXForm _ = cells A.! pos
     destIsBuiltin = destCellCh `elem` " @*~/?_"
     destIsPassthru = not (A.inRange (A.bounds destCells) destPos)
-    destDir = xform dir (inverse destCellXForm)
     destPos | destDir == Dn = (destX,destY+1) | destDir == Rt = (destX+1,destY)
             | destDir == Up = (destX,destY-1) | destDir == Lt = (destX-1,destY)
-    destFrame@Frame{framePos = (destX,destY), frameCells = destCells} =
-        undefined
+    destFrame@Frame{framePos = (destX,destY), frameDir = destDir, frameCells = destCells} =
+        call prog (Just frame) dir (destXForm & destCellXForm) destProc
+    (destXForm,destProc) =
+        maybe (error ("undefined procedure: " ++ show destCellCh))
+              id (M.lookup destCellCh prog)
 
 insnMove :: Insn
 insnMove prog frame@Frame{frameDir = dir} cellXForm inp =
