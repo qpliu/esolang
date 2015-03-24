@@ -305,7 +305,19 @@ insertCell prog cell pos dir frame@Frame{frameCaller = caller, frameCells = cell
           newCallerPos | newDir == Dn = (x,y+1) | newDir == Rt = (x+1,y)
                        | newDir == Up = (x,y-1) | newDir == Lt = (x-1,y)
       in  insertCell prog cell newCallerPos newDir callerFrame{framePos = newCallerPos}
-  | otherwise = undefined
+  | destIsBuiltin || destIsPassthru =
+      (Just frame{frameCells = cells A.// [(pos,cell)]},[])
+  | otherwise =
+      (Just destFrame{framePos = destPos, frameCells = cells A.// [(destPos,cell)]},[])
+  where
+    Cell destCellCh destCellXForm _ = cells A.! pos
+    destIsBuiltin = destCellCh `elem` " @*~/?_"
+    destIsPassthru = not (A.inRange (A.bounds destCells) destPos)
+    destDir = xform dir (inverse destCellXForm)
+    destPos | destDir == Dn = (destX,destY+1) | destDir == Rt = (destX+1,destY)
+            | destDir == Up = (destX,destY-1) | destDir == Lt = (destX-1,destY)
+    destFrame@Frame{framePos = (destX,destY), frameCells = destCells} =
+        undefined
 
 insnMove :: Insn
 insnMove prog frame@Frame{frameDir = dir} cellXForm inp =
