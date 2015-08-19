@@ -1,0 +1,47 @@
+:_
+
+In the :_ programming language, the only datatype is the list.  The only operations are function calls and list concatenation.
+
+:_ is a stripped down version of 01_.  In 01_, the only datatype is the list of bits.  Fittingly, just as 01_ is 2 (little-endian) in 01_, :_ is 1 in :_.
+
+Syntax
+
+The characters :, ., _, and = are special tokens.  Uninterrupted sequences of all other non-space characters are symbols.  A double equals (==) indicates that the rest of the line is a comment.
+
+A program in :_ consists of 1 or more definitions.
+
+A definition consists of a symbol, followed by 0 or more patterns, followed by an equals (=) followed by 1 or more expressions, followed by a dot (.).
+
+A pattern consists of 0 or more : characters, followed by either a symbol, a dot (.) or a nil (_), and corresponds to an argument.  A symbol that ends a pattern is a bound argument.  Optionally, if the final argument has 1 or more : characters and ends with a dot (.), the dot may be omitted.
+
+An expression is either a bound argument (a single symbol), or a literal (0 or more : characters followed by a nil (_)), or a function call.  A function call is a symbol followed an expression for each argument it takes.  The final nil (_) may be dropped from a literal expression with 1 or more : characters unless it is followed by another literal expression.
+
+It is an error if there are definitions with differing numbers of arguments for a symbol.
+
+It is an error for an expression to end with a function call without all its arguments.
+
+Evaluation
+
+A function consists of one or more definition.  Evaluation of a function call starts by attempting to match its arguments with the patterns in each definition starting with the first.  If all the arguments match their respective patterns in a definition, the function evaluates to the concatenation of the expressions in the definition body.  It is a run-time error if none of the definitions are matched.
+
+Argument matching is done from left to right.  If an argument fails to match, the entire definition does not match and matching continues with the next definition.
+
+For an argument to match a pattern, it must have at least as many items as the number of : characters in the pattern.  If the pattern ends with a nil (_), the length of the argument must be exactly equal to the number of : characters in the pattern, otherwise argument does not match.  If the pattern ends with a dot (.), the pattern is wild and the remainder of the argument is ignored.  If the pattern ends with a symbol, the symbol is bound to the remainder of the argument in the body of the definition.
+
+Examples
+
+Identity:
+ id x = x.
+
+Sum:
+ + x y = x y.
+
+Difference:
+ - x _ = x.
+ - :x :y = - x y.
+ == Negative differences result in run-time errors.
+
+Product:
+ * _ . = _.
+ * . _ = _.
+ * :x y = y * x y.
