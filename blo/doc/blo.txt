@@ -1,0 +1,269 @@
+blo
+
+The blo programming language is a stripped-down programming language largely based on Go.  Types in blo are user defined structs, whose fields can be either a bit or a non-recursive user defined struct.
+
+A blo program consists of type definitions and function definitions.  Execution begins with the main function.
+
+Syntactically, blo resembles Go.
+
+blo is statically typed.  Unlike Go, and like Java, all values are reference values.  However, references are never null -- values are allocated with all bits initialized to false when unassigned variables are first used.  Unreferenced values should be garbage collected.  Unlike Java, and like Go, struct fields are by value, not by reference, which is why recursive (including indirectly recursive) structs are not allowed.
+
+Lexical structure
+
+blo has a few keywords:
+
+  type func var if else for break return set clear import
+
+blo recognizes a few symbolic tokens:
+
+  = { } ( ) . , ;
+
+As with Go, newlines will be interpreted as semicolons when a semicolon is syntactically valid.
+
+Whitespace separates tokens.
+
+Comments can be non-nested block comments, delimited by /* and */, or line comments, starting with // and ending at the end of the line.
+
+Non-keyword sequences of all other characters are identifier tokens.
+
+Syntax
+
+EBNF:
+
+  program = { import-decl | type-decl | func-decl } ;
+
+  import-decl = "import", ( type-decl | "func", identifier, "(", func-args, ")", [ identifier ], ";" ) ;
+
+  type-decl = "type", identifier, "{", { struct-fields }, "}" ;
+
+  struct-fields = identifier, { ",", identifier }, [ identifier ], ";" ;
+
+  func-decl = "func", identifier, "(", func-args, ")", [ identifier ], statement-block ;
+
+  func-args = [ func-arg, { ",", func-arg } ];
+
+  func-arg = identifier, { ",", identifier }, identifier ;
+
+  statment-block = "{", { statement }, "}" ;
+
+  statement = statement-block | var-stmt | if-stmt | for-stmt | break-stmt | return-stmt | set-stmt | clear-stmt | assignment-stmt | expr-stmt ;
+
+  var-stmt = "var", identifier, identifier, { "=", expression }, ";" ;
+
+  if-stmt = "if", expression, statement-block, [ "else", ( if-stmt | statement-block ) ] ;
+
+  for-stmt = "for", [ identifier ], statement-block ;
+
+  break-stmt = "break", [ identifier ], ";" ;
+
+  return-stmt = "return", [ expression ], ";" ;
+
+  set-stmt = "set", expression, ";" ;
+
+  clear-stmt = "clear", expression, ";" ;
+
+  assignment-stmt = expression, "=", expression, ";" ;
+
+  expr-stmt = expression, ";" ;
+
+  expression = funcall-expr | identifier | ( expression, ".", identifier ) ;
+
+  funcall-expr = identifier, "(", [ expression, { ",", expression } ], ")" ;
+
+Import declarations
+
+Import declaration: "import", ( type-decl | "func", identifier, "(", func-args, ")", [ identifier ], ";" ) ;
+
+Import declarations are used to access types and functions in the run-time libarary, for, for example, doing I/O.
+
+Type declarations
+
+Type declaration: "type", identifier, "{", { struct-fields }, "}" ;
+
+The identifier is the type name.  The type is a struct with 0 or more fields.
+
+The struct fields: identifier1, { ",", identifier2 }, [ identifier3 ], ";" ;
+
+The identifier1 is the field name.  The identifier2s are optional additional field name of additional fields with the same type.  The optional identifier3 is the type of the field.  If the type is not specified, the fields are single bits.
+
+Function declarations
+
+Function declaration: "func", identifier1, "(", func-args, ")", [ identifier2 ], statement-block ;
+
+The identifier1 is the name of the function.  The optional identifier2 is the return type.  If the return type is not specified, the function returns no value and the function may only be used at the top level of an expr-statement.
+
+Function declaration arguments: [ func-arg, { ",", func-arg } ]
+
+A function may be declared to take 0 or more arguments.
+
+Function declaration arguments: identifier1, { ",", identifier2 }, identifier3 ;
+
+The identifier1 is the name of the argument.  The identifer2s are the names of optional additional arguments with the same type.  The identifier3 is the type of the argument(s).
+
+Statements
+
+Statement block: "{", { statement }, "}" ;
+
+A statement block introduces a new scope for local variable declarations.
+
+Variable declaration statement: "var", identifier1, identifier2, { "=", expression }, ";" ;
+
+The identifier1 is the name of the variable.  The identifier2 is the type of the variable.  The variable may optionally be initialized to refer to the value of the expression.  Otherwise, the variable is a null reference until it is either assigned to refer to a value, or the variable is dereferenced, at which time it is automatically set to a reference to a newly allocated value with all its bits cleared.
+
+If statement: "if", expression, statement-block1, [ "else", ( if-stmt | statement-block2 ) ] ;
+
+The expression must ultimately be a field of unnamed (bit) type.  If the expression evaluates to true, the statement-block1 is executed, otherwise, the optional else clause is executed.
+
+For statement: "for", [ identifier ], statement-block ;
+
+The identifier is an optional label for break statements.  The statement-block is executed in an infinite loop, unless exited with a break or return statement.
+
+Break statement: "break", [ identifier ], ";" ;
+
+The optional identifier is the label of an enclosing for statement to exit.  If the label is absent, the innermost for statement is exited.
+
+Return statment: "return", [ expression ], ";" ;
+
+The return returns a reference to the value of the expression, the type of which must be the same as the declared return type of the enclosing func.  If the func does not return a value, the expression must be omitted.
+
+If the end of the main statement block of a func is reachable, then the func returns when execution reaches the end of the block.  This is only permitted if the func does not return a value.  A func that has a declared return type must return a value of the return type or loop forever.
+
+Set statement: "set", expression, ";" ;
+
+The expression must ultimately be a field of unnamed (bit) type, which is set to true.
+
+Clear statement: "clear", expression, ";" ;
+
+The expression must ultimately be a field of unnamed (bit) type, which is cleared to false.
+
+Assignment statment: expression, "=", expression, ";" ;
+
+If the left expression is a single identifier, it is a local variable and the local variable will be set to a reference to the value of the right expression, with no bits being copied.
+
+If the left expression is function call or ultimately a field reference, then the bits of the value of the right expression are copied into the value of the left expression.  Due to the type system, partial overlap of the left and right values are not possible -- the bits would either completely overlap or be completely disjoint.
+
+Example illustrating the different assignment statements:
+
+  type flag {
+      f
+  }
+
+  func f() {
+      var a flag
+      var b flag
+      var c flag
+      set a.f
+      b = a // b references the same bit as a
+      c.f = a.f // c references a different bit than a
+      clear a.f
+      if b.f {
+          // not reached
+      }
+      if c.f {
+          // reached
+      }
+  }
+
+Expression statement: expression, ";" ;
+
+An expression statements evaluates the expression.  Its value is discarded.
+
+Expressions
+
+Expression: funcall-expr | identifier1 | ( expression, ".", identifier2 ) ;
+
+An expression can be a function call, a local variable (the identifier2 is the name of the local variable), or field access of an expression (the identifier2 is the name of the field).
+
+Function call: identifier, "(", [ expression, { ",", expression } ], ")" ;
+
+The identifier is the name of the function being called.
+
+Runtime libarary
+
+Imported types may include opaque data that is not directly accessible, which could be used for holding and manipulating strings and other variable-length data.  User defined structs may have fields of such (or any other) imported types, provided that they are non-recursive.
+
+Functions
+
+  // putByte outputs one byte to standard output.  Takes one argument of
+  // which may be declared as any type, from which it interprets the first
+  // 8 bits as a little-endian byte.  If the type has fewer than 8 bits,
+  // the higher bits are set to 0.
+  func putByte(b anytype)
+
+  // getByte reads one byte from standard input.  Returns a values which
+  // may be declared as any type, into which it stores the byte in the
+  // first 8 bits as little-endian and stores the EOF flag in the 9th bit.
+  // If the type has fewer than 9 bits, then the remaining data are discarded.
+  func getByte() anytype
+
+Example
+
+Hello world:
+
+  import func putByte(b byte)
+
+  type byte { 1, 2, 4, 8, 10, 20, 40, 80 }
+
+  func main() {
+      var b byte
+      set b.40
+      set b.8
+      putByte(b) // H = 48
+      clear b.8
+      set b.20
+      set b.4
+      set b.1
+      putByte(b) // e = 65
+      clear b.1
+      set b.8
+      putByte(b) // l = 6c
+      putByte(b)
+      set b.1
+      set b.2
+      putByte(b) // o = 6f
+      var c byte
+      set c.20
+      putByte(c) // SPC = 20
+      set b.10
+      clear b.8
+      putByte(b) // w = 77
+      clear b.10
+      set b.8
+      putByte(b) // o = 6f
+      set b.10
+      clear b.8
+      clear b.4
+      clear b.1
+      putByte(b) // r = 72
+      clear b.10
+      clear b.2
+      set b.8
+      set b.4
+      putByte(b) // l = 6c
+      clear b.8
+      putByte(b) // d = 64
+      set c.1
+      putByte(c) // ! = 21
+      clear c.20
+      clear c.1
+      set c.8
+      set c.2
+      putByte(c) // \n = 0a
+  }
+
+Cat:
+
+  import func putByte(b byte)
+  import func getByte() byte
+
+  type byte { 1, 2, 4, 8, 10, 20, 40, 80, EOF }
+
+  func main() {
+      for {
+          var b byte = getByte()
+          if b.EOF {
+              break
+          }
+          putByte(b)
+      }
+  }

@@ -1,0 +1,50 @@
+import func putByte(b byte)
+
+type byte { 1, 2, 4, 8, 10, 20, 40, 80 }
+
+func main() {
+    var b byte
+    set b.40
+    set b.8
+    putByte(b) // H = 48
+    clear b.8
+    set b.20
+    set b.4
+    set b.1
+    putByte(b) // e = 65
+    clear b.1
+    set b.8
+    putByte(b) // l = 6c
+    putByte(b)
+    set b.1
+    set b.2
+    putByte(b) // o = 6f
+    var c byte
+    set c.20
+    putByte(c) // SPC = 20
+    set b.10
+    clear b.8
+    putByte(b) // w = 77
+    clear b.10
+    set b.8
+    putByte(b) // o = 6f
+    clear b.8
+    clear b.4
+    clear b.1
+    set b.10
+    putByte(b) // r = 72
+    clear b.10
+    clear b.2
+    set b.8
+    set b.4
+    putByte(b) // l = 6c
+    clear b.8
+    putByte(b) // d = 64
+    set c.1
+    putByte(c) // ! = 21
+    clear c.20
+    clear c.1
+    set c.8
+    set c.2
+    putByte(c) // \n = 0a
+}
