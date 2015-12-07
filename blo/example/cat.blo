@@ -1,11 +1,12 @@
 import func putByte(b byte)
-import func getByte() byte
+import func getByte(b byte)
 
 type byte { 1, 2, 4, 8, 10, 20, 40, 80, EOF }
 
 func main() {
     for {
-        var b byte = getByte()
+        var b byte
+        getByte(b)
         if b.EOF {
             break
         }

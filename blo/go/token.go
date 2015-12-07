@@ -8,6 +8,17 @@ import (
 
 type Token string
 
+func (t Token) IsIdentifier() bool {
+	switch t {
+	case "", "type", "func", "var", "if", "else", "for", "break",
+		"return", "set", "clear", "import", "=", "{", "}", "(", ")",
+		".", ",", ";", "\n":
+		return false
+	default:
+		return true
+	}
+}
+
 func Tokenize(reader io.Reader, out chan<- Token) {
 	var buf bytes.Buffer
 	in := bufio.NewReader(reader)

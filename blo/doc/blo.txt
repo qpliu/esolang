@@ -110,6 +110,8 @@ Variable declaration statement: "var", identifier1, identifier2, { "=", expressi
 
 The identifier1 is the name of the variable.  The identifier2 is the type of the variable.  The variable may optionally be initialized to refer to the value of the expression.  Otherwise, the variable is a null reference until it is either assigned to refer to a value, or the variable is dereferenced, at which time it is automatically set to a reference to a newly allocated value with all its bits cleared.
 
+A variable name must be unique in its scope-- shadowing is not allowed.
+
 If statement: "if", expression, statement-block1, [ "else", ( if-stmt | statement-block2 ) ] ;
 
 The expression must ultimately be a field of unnamed (bit) type.  If the expression evaluates to true, the statement-block1 is executed, otherwise, the optional else clause is executed.
@@ -184,17 +186,18 @@ Imported types may include opaque data that is not directly accessible, which co
 
 Functions
 
-  // putByte outputs one byte to standard output.  Takes one argument of
+  // putByte outputs one byte to standard output.  Takes one argument,
   // which may be declared as any type, from which it interprets the first
   // 8 bits as a little-endian byte.  If the type has fewer than 8 bits,
   // the higher bits are set to 0.
   func putByte(b anytype)
 
-  // getByte reads one byte from standard input.  Returns a values which
-  // may be declared as any type, into which it stores the byte in the
-  // first 8 bits as little-endian and stores the EOF flag in the 9th bit.
-  // If the type has fewer than 9 bits, then the remaining data are discarded.
-  func getByte() anytype
+  // getByte reads one byte from standard input.  Takes one argument,
+  // which may be declared as any type, into which it stores the read
+  // byte in the first 8 bits as little-endian and stores the EOF flag
+  // in the 9th bit.  If the type has fewer than 9 bits, then the
+  // remaining data are discarded.
+  func getByte(b anytype)
 
 Example
 
@@ -254,13 +257,14 @@ Hello world:
 Cat:
 
   import func putByte(b byte)
-  import func getByte() byte
+  import func getByte(b byte)
 
   type byte { 1, 2, 4, 8, 10, 20, 40, 80, EOF }
 
   func main() {
       for {
-          var b byte = getByte()
+          var b byte
+          getByte(b)
           if b.EOF {
               break
           }
