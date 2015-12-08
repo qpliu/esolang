@@ -83,6 +83,12 @@ func parseImport(tokenStream *tokenStream, ast *Ast) error {
 		} else {
 			funcDecl.Imported = true
 		}
+		switch tok := tokenStream.peek(); tok {
+		case ";", "\n":
+			tokenStream.next()
+		default:
+			return errors.New("Expected ';', got:" + string(tok))
+		}
 	default:
 		return errors.New("Expected 'type' or 'func', got:" + string(tok))
 	}
@@ -97,7 +103,7 @@ func parseType(tokenStream *tokenStream, ast *Ast) (*Type, error) {
 	tokenStream.skipNewlines()
 	name := tokenStream.next()
 	if !name.IsIdentifier() {
-		return nil, errors.New("Expected func name identifier, got:" + string(name))
+		return nil, errors.New("Expected function name identifier, got:" + string(name))
 	}
 	tokenStream.skipNewlines()
 	if tok := tokenStream.next(); tok != "{" {
@@ -166,7 +172,7 @@ func parseFunc(tokenStream *tokenStream, ast *Ast) (*Func, error) {
 	tokenStream.skipNewlines()
 	name := tokenStream.next()
 	if !name.IsIdentifier() {
-		return nil, errors.New("Expected func name identifier, got:" + string(name))
+		return nil, errors.New("Expected function name identifier, got:" + string(name))
 	}
 	tokenStream.skipNewlines()
 	if tok := tokenStream.next(); tok != "(" {
@@ -209,7 +215,6 @@ func parseFunc(tokenStream *tokenStream, ast *Ast) (*Func, error) {
 			}
 		}
 	}
-	tokenStream.skipNewlines()
 	if tok := tokenStream.peek(); tok.IsIdentifier() {
 		tokenStream.next()
 		funcDecl.TypeName = string(tok)
@@ -310,7 +315,7 @@ func parseStmtVar(tokenStream *tokenStream) (*StmtVar, error) {
 	switch tok := tokenStream.peek(); tok {
 	case "=":
 		tokenStream.next()
-		if expr, err := parseExpr(tokenStream); err != nil {
+		if expr, err := parseExpr(tokenStream, false); err != nil {
 			return nil, err
 		} else {
 			stmt.Expr = expr
@@ -334,7 +339,7 @@ func parseStmtIf(tokenStream *tokenStream) (*StmtIf, error) {
 		panic("Expected 'if', got:" + string(tok))
 	}
 	stmt := &StmtIf{}
-	if expr, err := parseExpr(tokenStream); err != nil {
+	if expr, err := parseExpr(tokenStream, true); err != nil {
 		return nil, err
 	} else {
 		stmt.Expr = expr
@@ -348,6 +353,7 @@ func parseStmtIf(tokenStream *tokenStream) (*StmtIf, error) {
 	if tokenStream.peek() != "else" {
 		return stmt, nil
 	}
+	tokenStream.next()
 	tokenStream.skipNewlines()
 	switch tok := tokenStream.peek(); tok {
 	case "if":
@@ -416,7 +422,7 @@ func parseStmtReturn(tokenStream *tokenStream) (*StmtReturn, error) {
 	case ";", "\n":
 	default:
 		if tok.IsIdentifier() {
-			if expr, err := parseExpr(tokenStream); err != nil {
+			if expr, err := parseExpr(tokenStream, false); err != nil {
 				return nil, err
 			} else {
 				stmt.Expr = expr
@@ -442,7 +448,7 @@ func parseStmtSetClear(tokenStream *tokenStream) (*StmtSetClear, error) {
 	}
 	tokenStream.skipNewlines()
 	stmt := &StmtSetClear{Value: stmtTok == "set"}
-	if expr, err := parseExpr(tokenStream); err != nil {
+	if expr, err := parseExpr(tokenStream, false); err != nil {
 		return nil, err
 	} else {
 		stmt.Expr = expr
@@ -459,7 +465,7 @@ func parseStmtSetClear(tokenStream *tokenStream) (*StmtSetClear, error) {
 func parseStmtExprOrAssign(tokenStream *tokenStream) (Stmt, error) {
 	tokenStream.skipNewlines()
 	var lvalue Expr
-	if expr, err := parseExpr(tokenStream); err != nil {
+	if expr, err := parseExpr(tokenStream, false); err != nil {
 		return nil, err
 	} else {
 		lvalue = expr
@@ -475,7 +481,7 @@ func parseStmtExprOrAssign(tokenStream *tokenStream) (Stmt, error) {
 	}
 	stmt := &StmtAssign{LValue: lvalue}
 	tokenStream.skipNewlines()
-	if expr, err := parseExpr(tokenStream); err != nil {
+	if expr, err := parseExpr(tokenStream, false); err != nil {
 		return nil, err
 	} else {
 		stmt.Expr = expr
@@ -489,6 +495,72 @@ func parseStmtExprOrAssign(tokenStream *tokenStream) (Stmt, error) {
 	return stmt, nil
 }
 
-func parseExpr(tokenStream *tokenStream) (Expr, error) {
-	panic("Not yet implemented") //...
+func parseExpr(tokenStream *tokenStream, ignoreNewlines bool) (Expr, error) {
+	name := tokenStream.next()
+	if !name.IsIdentifier() {
+		return nil, errors.New("Expected function name identifier or local variable identifier, got:" + string(name))
+	}
+	if ignoreNewlines {
+		tokenStream.skipNewlines()
+	}
+	switch tok := tokenStream.peek(); tok {
+	case ".":
+		return parseExprField(tokenStream, ignoreNewlines, &ExprVar{Name: string(name)})
+	case "(":
+		if expr, err := parseExprFuncParams(tokenStream, string(name)); err != nil {
+			return nil, err
+		} else {
+			return parseExprField(tokenStream, ignoreNewlines, expr)
+		}
+	default:
+		return &ExprVar{Name: string(name)}, nil
+	}
+}
+
+func parseExprField(tokenStream *tokenStream, ignoreNewlines bool, expr Expr) (Expr, error) {
+	for {
+		if ignoreNewlines {
+			tokenStream.skipNewlines()
+		}
+		switch tok := tokenStream.peek(); tok {
+		case ".":
+			tokenStream.next()
+			tokenStream.skipNewlines()
+			fieldName := tokenStream.next()
+			if !fieldName.IsIdentifier() {
+				return nil, errors.New("Expected field name identifier, got:" + string(fieldName))
+			}
+			expr = &ExprField{Name: string(fieldName), Expr: expr}
+		default:
+			return expr, nil
+		}
+	}
+}
+
+func parseExprFuncParams(tokenStream *tokenStream, name string) (*ExprFunc, error) {
+	if tok := tokenStream.next(); tok != "(" {
+		panic("Expected '(', got:" + string(tok))
+	}
+	tokenStream.skipNewlines()
+	expr := &ExprFunc{Name: name}
+	if tokenStream.peek() == ")" {
+		tokenStream.next()
+		return expr, nil
+	}
+	for {
+		tokenStream.skipNewlines()
+		if param, err := parseExpr(tokenStream, true); err != nil {
+			return nil, err
+		} else {
+			expr.Params = append(expr.Params, param)
+		}
+		tokenStream.skipNewlines()
+		switch tok := tokenStream.next(); tok {
+		case ")":
+			return expr, nil
+		case ",":
+		default:
+			return nil, errors.New("Expected ')' or ',', got:" + string(tok))
+		}
+	}
 }

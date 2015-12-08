@@ -136,3 +136,46 @@ func (s *StmtExpr) CanFallThru() bool {
 type Expr interface {
 	Type() *Type
 }
+
+type ExprVar struct {
+	Name string
+	Var  *Var
+}
+
+func (e *ExprVar) Type() *Type {
+	if e.Var == nil {
+		return nil
+	}
+	return e.Var.Type
+}
+
+type ExprField struct {
+	Name string
+	Expr Expr
+}
+
+func (e *ExprField) Type() *Type {
+	t := e.Expr.Type()
+	if t == nil {
+		return nil
+	}
+	for _, field := range t.Fields {
+		if field.Name == e.Name {
+			return field.Type
+		}
+	}
+	return nil
+}
+
+type ExprFunc struct {
+	Name   string
+	Params []Expr
+	Func   *Func
+}
+
+func (e *ExprFunc) Type() *Type {
+	if e.Func == nil {
+		return nil
+	}
+	return e.Func.Type
+}
