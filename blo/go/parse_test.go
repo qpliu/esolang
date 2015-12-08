@@ -129,8 +129,8 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 		if !ok {
 			t.Errorf("%s: Did not get expected for statement", label)
 		}
-		if ex.Label.Token != actual.Label.Token {
-			t.Errorf("%s: Expected for label %s, got %s", ex.Label.Token, actual.Label.Token)
+		if ex.Label != actual.Label {
+			t.Errorf("%s: Expected for label %s, got %s", ex.Label, actual.Label)
 		}
 		checkStmt(t, label, actual.Stmts, ex.Stmts)
 	case *StmtBreak:
@@ -138,8 +138,8 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 		if !ok {
 			t.Errorf("%s: Did not get expected break statement", label)
 		}
-		if ex.Label.Token != actual.Label.Token {
-			t.Errorf("%s: Expected break label %s, got %s", ex.Label.Token, actual.Label.Token)
+		if ex.Label != actual.Label {
+			t.Errorf("%s: Expected break label %s, got %s", ex.Label, actual.Label)
 		}
 	case *StmtReturn:
 		actual, ok := stmt.(*StmtReturn)
@@ -216,7 +216,7 @@ func checkExpr(t *testing.T, label string, expr, expected Expr) {
 func TestParse(t *testing.T) {
 	testParse(t, "empty", "", "", []string{}, []string{})
 
-	testParse(t, "immdiate error", "foo", "Expected 'import', 'type', or 'func', got:foo", []string{}, []string{})
+	testParse(t, "immdiate error", "foo", "(stdin):1:1: Expected 'import', 'type', or 'func', got:foo", []string{}, []string{})
 
 	ast := testParse(t, "single type", `
 type a {
@@ -297,13 +297,13 @@ func main() {
 	checkStmt(t, "various statements", ast.Funcs["main"].Body, &StmtBlock{
 		Stmts: []Stmt{
 			&StmtFor{
-				Label: Token{Token: "label"},
+				Label: "label",
 				Stmts: &StmtBlock{
 					Stmts: []Stmt{
 						&StmtFor{
 							Stmts: &StmtBlock{
 								Stmts: []Stmt{
-									&StmtBreak{Label: Token{Token: "label"}},
+									&StmtBreak{Label: "label"},
 								},
 							},
 						},

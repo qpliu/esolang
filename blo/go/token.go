@@ -3,12 +3,17 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 )
 
 type Location struct {
 	Filename     string
 	Line, Column int
+}
+
+func (l Location) String() string {
+	return fmt.Sprintf("%s:%d:%d", l.Filename, l.Line, l.Column)
 }
 
 type Token struct {

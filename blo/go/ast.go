@@ -13,12 +13,14 @@ func newAst() *Ast {
 }
 
 type Type struct {
+	Location Location
 	Name     string
 	Imported bool
 	Fields   []*Var
 }
 
 type Func struct {
+	Location Location
 	Name     string
 	Imported bool
 	Params   []*Var
@@ -34,11 +36,17 @@ type Var struct {
 }
 
 type Stmt interface {
+	Location() Location
 	CanFallThru() bool
 }
 
 type StmtBlock struct {
-	Stmts []Stmt
+	location Location
+	Stmts    []Stmt
+}
+
+func (s *StmtBlock) Location() Location {
+	return s.location
 }
 
 func (s *StmtBlock) CanFallThru() bool {
@@ -51,10 +59,15 @@ func (s *StmtBlock) CanFallThru() bool {
 }
 
 type StmtVar struct {
+	location Location
 	Name     string
 	TypeName string
 	Type     *Type
 	Expr     Expr
+}
+
+func (s *StmtVar) Location() Location {
+	return s.location
 }
 
 func (s *StmtVar) CanFallThru() bool {
@@ -62,10 +75,15 @@ func (s *StmtVar) CanFallThru() bool {
 }
 
 type StmtIf struct {
-	Expr   Expr
-	Stmts  *StmtBlock
-	ElseIf *StmtIf
-	Else   *StmtBlock
+	location Location
+	Expr     Expr
+	Stmts    *StmtBlock
+	ElseIf   *StmtIf
+	Else     *StmtBlock
+}
+
+func (s *StmtIf) Location() Location {
+	return s.location
 }
 
 func (s *StmtIf) CanFallThru() bool {
@@ -84,8 +102,13 @@ func (s *StmtIf) CanFallThru() bool {
 }
 
 type StmtFor struct {
-	Label Token
-	Stmts *StmtBlock
+	location Location
+	Label    string
+	Stmts    *StmtBlock
+}
+
+func (s *StmtFor) Location() Location {
+	return s.location
 }
 
 func (s *StmtFor) CanFallThru() bool {
@@ -93,7 +116,12 @@ func (s *StmtFor) CanFallThru() bool {
 }
 
 type StmtBreak struct {
-	Label Token
+	location Location
+	Label    string
+}
+
+func (s *StmtBreak) Location() Location {
+	return s.location
 }
 
 func (s *StmtBreak) CanFallThru() bool {
@@ -101,7 +129,12 @@ func (s *StmtBreak) CanFallThru() bool {
 }
 
 type StmtReturn struct {
-	Expr Expr
+	location Location
+	Expr     Expr
+}
+
+func (s *StmtReturn) Location() Location {
+	return s.location
 }
 
 func (s *StmtReturn) CanFallThru() bool {
@@ -109,8 +142,13 @@ func (s *StmtReturn) CanFallThru() bool {
 }
 
 type StmtSetClear struct {
-	Value bool
-	Expr  Expr
+	location Location
+	Value    bool
+	Expr     Expr
+}
+
+func (s *StmtSetClear) Location() Location {
+	return s.location
 }
 
 func (s *StmtSetClear) CanFallThru() bool {
@@ -121,6 +159,10 @@ type StmtAssign struct {
 	LValue, Expr Expr
 }
 
+func (s *StmtAssign) Location() Location {
+	return s.LValue.Location()
+}
+
 func (s *StmtAssign) CanFallThru() bool {
 	return true
 }
@@ -129,17 +171,27 @@ type StmtExpr struct {
 	Expr Expr
 }
 
+func (s *StmtExpr) Location() Location {
+	return s.Expr.Location()
+}
+
 func (s *StmtExpr) CanFallThru() bool {
 	return true
 }
 
 type Expr interface {
+	Location() Location
 	Type() *Type
 }
 
 type ExprVar struct {
-	Name string
-	Var  *Var
+	location Location
+	Name     string
+	Var      *Var
+}
+
+func (e *ExprVar) Location() Location {
+	return e.location
 }
 
 func (e *ExprVar) Type() *Type {
@@ -152,6 +204,10 @@ func (e *ExprVar) Type() *Type {
 type ExprField struct {
 	Name string
 	Expr Expr
+}
+
+func (e *ExprField) Location() Location {
+	return e.Expr.Location()
 }
 
 func (e *ExprField) Type() *Type {
@@ -168,9 +224,14 @@ func (e *ExprField) Type() *Type {
 }
 
 type ExprFunc struct {
-	Name   string
-	Params []Expr
-	Func   *Func
+	location Location
+	Name     string
+	Params   []Expr
+	Func     *Func
+}
+
+func (e *ExprFunc) Location() Location {
+	return e.location
 }
 
 func (e *ExprFunc) Type() *Type {
