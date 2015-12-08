@@ -84,7 +84,7 @@ func (s *StmtIf) CanFallThru() bool {
 }
 
 type StmtFor struct {
-	Label string
+	Label Token
 	Stmts *StmtBlock
 }
 
@@ -93,7 +93,7 @@ func (s *StmtFor) CanFallThru() bool {
 }
 
 type StmtBreak struct {
-	Label string
+	Label Token
 }
 
 func (s *StmtBreak) CanFallThru() bool {

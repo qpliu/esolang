@@ -8,7 +8,7 @@ import (
 func testParse(t *testing.T, label, input, expectedErr string, expectedFuncs, expectedTypes []string) *Ast {
 	tokens := make(chan Token)
 	go func() {
-		Tokenize(strings.NewReader(input), tokens)
+		Tokenize("(stdin)", strings.NewReader(input), tokens)
 		close(tokens)
 	}()
 	ast, err := Parse(tokens)
@@ -129,8 +129,8 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 		if !ok {
 			t.Errorf("%s: Did not get expected for statement", label)
 		}
-		if ex.Label != actual.Label {
-			t.Errorf("%s: Expected for label %s, got %s", ex.Label, actual.Label)
+		if ex.Label.Token != actual.Label.Token {
+			t.Errorf("%s: Expected for label %s, got %s", ex.Label.Token, actual.Label.Token)
 		}
 		checkStmt(t, label, actual.Stmts, ex.Stmts)
 	case *StmtBreak:
@@ -138,8 +138,8 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 		if !ok {
 			t.Errorf("%s: Did not get expected break statement", label)
 		}
-		if ex.Label != actual.Label {
-			t.Errorf("%s: Expected break label %s, got %s", ex.Label, actual.Label)
+		if ex.Label.Token != actual.Label.Token {
+			t.Errorf("%s: Expected break label %s, got %s", ex.Label.Token, actual.Label.Token)
 		}
 	case *StmtReturn:
 		actual, ok := stmt.(*StmtReturn)
@@ -297,13 +297,13 @@ func main() {
 	checkStmt(t, "various statements", ast.Funcs["main"].Body, &StmtBlock{
 		Stmts: []Stmt{
 			&StmtFor{
-				Label: "label",
+				Label: Token{Token: "label"},
 				Stmts: &StmtBlock{
 					Stmts: []Stmt{
 						&StmtFor{
 							Stmts: &StmtBlock{
 								Stmts: []Stmt{
-									&StmtBreak{Label: "label"},
+									&StmtBreak{Label: Token{Token: "label"}},
 								},
 							},
 						},

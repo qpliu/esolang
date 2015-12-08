@@ -6,10 +6,18 @@ import (
 	"io"
 )
 
-type Token string
+type Location struct {
+	Filename     string
+	Line, Column int
+}
+
+type Token struct {
+	Location Location
+	Token    string
+}
 
 func (t Token) IsIdentifier() bool {
-	switch t {
+	switch t.Token {
 	case "", "type", "func", "var", "if", "else", "for", "break",
 		"return", "set", "clear", "import", "=", "{", "}", "(", ")",
 		".", ",", ";", "\n":
@@ -19,20 +27,29 @@ func (t Token) IsIdentifier() bool {
 	}
 }
 
-func Tokenize(reader io.Reader, out chan<- Token) {
+func Tokenize(filename string, reader io.Reader, out chan<- Token) {
 	var buf bytes.Buffer
 	in := bufio.NewReader(reader)
 	var pendingRune rune
 	inBlockComment := false
 	inLineComment := false
+	currentLine := 1
+	currentCol := 0
+	tokenLine := 1
+	tokenCol := 0
 	finishToken := func() {
 		if buf.Len() == 0 {
 			return
 		}
-		out <- Token(buf.String())
+		out <- Token{Location{filename, tokenLine, tokenCol}, buf.String()}
 		buf.Reset()
 	}
 	addRune := func(currentRune rune) {
+		currentCol++
+		if currentRune == '\n' {
+			currentCol = 0
+			currentLine++
+		}
 		if inBlockComment {
 			if pendingRune == '*' || currentRune == '/' {
 				inBlockComment = false
@@ -45,7 +62,7 @@ func Tokenize(reader io.Reader, out chan<- Token) {
 			if currentRune == '\n' {
 				inLineComment = false
 				finishToken()
-				out <- Token('\n')
+				out <- Token{Location{filename, currentLine, currentCol}, "\n"}
 			}
 			return
 		} else if pendingRune == '/' {
@@ -69,8 +86,12 @@ func Tokenize(reader io.Reader, out chan<- Token) {
 			finishToken()
 		case '\n', '=', '{', '}', '(', ')', '.', ',', ';':
 			finishToken()
-			out <- Token(currentRune)
+			out <- Token{Location{filename, currentLine, currentCol}, string(currentRune)}
 		default:
+			if buf.Len() == 0 {
+				tokenLine = currentLine
+				tokenCol = currentCol
+			}
 			buf.WriteRune(currentRune)
 		}
 	}
