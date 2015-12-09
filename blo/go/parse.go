@@ -139,7 +139,7 @@ func parseType(tokenStream *tokenStream, ast *Ast) (*Type, error) {
 				}
 				tokenStream.next()
 				break
-			} else if tok.Token == ";" || tok.Token == "\n" {
+			} else if tok.Token == ";" || tok.Token == "\n" || tok.Token == "}" {
 				break
 			} else if tok.Token == "," {
 				tokenStream.next()

@@ -19,6 +19,31 @@ type Type struct {
 	Fields   []*Var
 }
 
+func (t *Type) BitSize() int {
+	if t == nil {
+		return 1
+	}
+	bitSize := 0
+	for _, field := range t.Fields {
+		bitSize += field.Type.BitSize()
+	}
+	return bitSize
+}
+
+func (t *Type) OpaqueSize() int {
+	if t == nil {
+		return 0
+	}
+	opaqueSize := 0
+	if t.Imported {
+		opaqueSize++
+	}
+	for _, field := range t.Fields {
+		opaqueSize += field.Type.OpaqueSize()
+	}
+	return opaqueSize
+}
+
 type Func struct {
 	Location Location
 	Name     string
