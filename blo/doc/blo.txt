@@ -182,22 +182,24 @@ The identifier is the name of the function being called.
 
 Runtime libarary
 
+The runtime libarary may provide implementation-dependent types and functions that programs may access by using import statements.
+
 Imported types may include opaque data that is not directly accessible, which could be used for holding and manipulating strings and other variable-length data.  User defined structs may have fields of such (or any other) imported types, provided that they are non-recursive.
 
-Functions
+Reference runtine library
 
   // putByte outputs one byte to standard output.  Takes one argument,
   // which may be declared as any type, from which it interprets the first
   // 8 bits as a little-endian byte.  If the type has fewer than 8 bits,
   // the higher bits are set to 0.
-  func putByte(b anytype)
+  import func putByte(b anytype)
 
   // getByte reads one byte from standard input.  Takes one argument,
   // which may be declared as any type, into which it stores the read
   // byte in the first 8 bits as little-endian and stores the EOF flag
   // in the 9th bit.  If the type has fewer than 9 bits, then the
   // remaining data are discarded.
-  func getByte(b anytype)
+  import func getByte(b anytype)
 
 Example
 

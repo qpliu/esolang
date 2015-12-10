@@ -94,10 +94,10 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 	case *StmtVar:
 		actual, ok := stmt.(*StmtVar)
 		if !ok {
-			t.Errorf("%s: Did not get expected var statement declaring %s %s", label, ex.Name, ex.TypeName)
+			t.Errorf("%s: Did not get expected var statement declaring %s %s", label, ex.Var.Name, ex.Var.TypeName)
 		}
-		if ex.Name != actual.Name || ex.TypeName != actual.TypeName {
-			t.Errorf("%s: Expected var %s %s, got var %s %s", ex.Name, ex.TypeName, actual.Name, actual.TypeName)
+		if ex.Var.Name != actual.Var.Name || ex.Var.TypeName != actual.Var.TypeName {
+			t.Errorf("%s: Expected var %s %s, got var %s %s", ex.Var.Name, ex.Var.TypeName, actual.Var.Name, actual.Var.TypeName)
 		}
 		checkExpr(t, label, actual.Expr, ex.Expr)
 	case *StmtIf:
@@ -311,7 +311,7 @@ func main() {
 					},
 				},
 			},
-			&StmtVar{Name: "a", TypeName: "t"},
+			&StmtVar{Var: Var{Name: "a", TypeName: "t"}},
 			&StmtIf{
 				Expr: &ExprField{
 					Name: "b",
@@ -320,9 +320,8 @@ func main() {
 				Stmts: &StmtBlock{
 					Stmts: []Stmt{
 						&StmtVar{
-							Name:     "b",
-							TypeName: "t",
-							Expr:     &ExprVar{Name: "a"},
+							Var:  Var{Name: "b", TypeName: "t"},
+							Expr: &ExprVar{Name: "a"},
 						},
 						&StmtExpr{
 							Expr: &ExprFunc{Name: "main"},
@@ -332,9 +331,8 @@ func main() {
 				},
 			},
 			&StmtVar{
-				Name:     "b",
-				TypeName: "t",
-				Expr:     &ExprVar{Name: "a"},
+				Var:  Var{Name: "b", TypeName: "t"},
+				Expr: &ExprVar{Name: "a"},
 			},
 			&StmtSetClear{
 				Value: true,

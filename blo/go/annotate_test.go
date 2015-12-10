@@ -42,6 +42,26 @@ func checkAnnotatedType(t *testing.T, label string, typeDecl *Type, expectedFiel
 	}
 }
 
+func checkAnnotatedFuncDecl(t *testing.T, label string, funcDecl *Func, expectedType *Type, expectedParams []*Var) {
+	if funcDecl.Type != expectedType {
+		if expectedType == nil {
+			t.Errorf("%s: Function `%s' expected no return type, got `%s'", funcDecl.Type.Name)
+		} else if funcDecl.Type == nil {
+			t.Errorf("%s: Function `%s' expected to return type `%s', got no return type", expectedType.Name)
+		} else {
+			t.Errorf("%s: Function `%s' expected to return type `%s', got `%s'", expectedType.Name, funcDecl.Type.Name)
+		}
+	}
+	if len(funcDecl.Params) != len(expectedParams) {
+		t.Errorf("%s: Expected %d parameters, got %d", len(expectedParams), len(funcDecl.Params))
+	}
+	for i, param := range funcDecl.Params {
+		if param.Name != expectedParams[i].Name || param.TypeName != expectedParams[i].TypeName || param.Type != expectedParams[i].Type {
+			t.Errorf("%s: Expected field %d `%s %s', got `%s %s'", label, i, expectedParams[i].Name, expectedParams[i].TypeName, param.Name, param.TypeName)
+		}
+	}
+}
+
 func TestAnnotate(t *testing.T) {
 	ast := testAnnotate(t, "single type", `type a { a, b }`, "")
 	checkAnnotatedType(t, "single type", ast.Types["a"], []*Var{
@@ -59,4 +79,16 @@ func TestAnnotate(t *testing.T) {
 		&Var{Name: "1", TypeName: "a", Type: ast.Types["a"]},
 		&Var{Name: "2", TypeName: "a", Type: ast.Types["a"]},
 	}, 2, 0)
+
+	ast = testAnnotate(t, "func no params", `func main() {}`, "")
+	checkAnnotatedFuncDecl(t, "func no params:main", ast.Funcs["main"], nil, []*Var{})
+
+	ast = testAnnotate(t, "func with type", `
+type a {
+  a
+}
+func a(a a) a {
+}
+`, "")
+	checkAnnotatedFuncDecl(t, "func with type", ast.Funcs["a"], ast.Types["a"], []*Var{&Var{Name: "a", TypeName: "a", Type: ast.Types["a"]}})
 }

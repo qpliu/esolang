@@ -85,9 +85,7 @@ func (s *StmtBlock) CanFallThru() bool {
 
 type StmtVar struct {
 	location Location
-	Name     string
-	TypeName string
-	Type     *Type
+	Var      Var
 	Expr     Expr
 }
 
@@ -207,6 +205,7 @@ func (s *StmtExpr) CanFallThru() bool {
 type Expr interface {
 	Location() Location
 	Type() *Type
+	IsBit() bool
 }
 
 type ExprVar struct {
@@ -224,6 +223,10 @@ func (e *ExprVar) Type() *Type {
 		return nil
 	}
 	return e.Var.Type
+}
+
+func (e *ExprVar) IsBit() bool {
+	return false
 }
 
 type ExprField struct {
@@ -248,6 +251,23 @@ func (e *ExprField) Type() *Type {
 	return nil
 }
 
+func (e *ExprField) IsBit() bool {
+	return e.IsValid() && e.Type() == nil
+}
+
+func (e *ExprField) IsValid() bool {
+	t := e.Expr.Type()
+	if t == nil {
+		return false
+	}
+	for _, field := range t.Fields {
+		if field.Name == e.Name {
+			return true
+		}
+	}
+	return false
+}
+
 type ExprFunc struct {
 	location Location
 	Name     string
@@ -264,4 +284,8 @@ func (e *ExprFunc) Type() *Type {
 		return nil
 	}
 	return e.Func.Type
+}
+
+func (e *ExprFunc) IsBit() bool {
+	return false
 }

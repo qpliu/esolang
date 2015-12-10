@@ -318,12 +318,12 @@ func parseStmtVar(tokenStream *tokenStream) (*StmtVar, error) {
 	if tok := tokenStream.next(); !tok.IsIdentifier() {
 		return nil, errors.New(tok.Location.String() + ": Expected variable name identifier, got:" + tok.Token)
 	} else {
-		stmt.Name = tok.Token
+		stmt.Var.Name = tok.Token
 	}
 	if tok := tokenStream.next(); !tok.IsIdentifier() {
 		return nil, errors.New(tok.Location.String() + ": Expected type name identifier, got:" + tok.Token)
 	} else {
-		stmt.TypeName = tok.Token
+		stmt.Var.TypeName = tok.Token
 	}
 	switch tok := tokenStream.peek(); tok.Token {
 	case "=":
