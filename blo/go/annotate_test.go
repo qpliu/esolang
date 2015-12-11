@@ -166,6 +166,71 @@ func checkAnnotatedExpr(t *testing.T, label string, expr, expected Expr) {
 	}
 }
 
+func checkAnnotatedFlow(t *testing.T, label string, body Stmt, expected map[string]string) {
+	nexts := make(map[string]string)
+	checkNext := func(stmt, next Stmt) {
+		loc := stmt.Location().String()
+		var nextLoc string
+		if next != nil {
+			nextLoc = next.Location().String()
+		}
+		nexts[loc] = nextLoc
+
+		if expectedNext, ok := expected[loc]; !ok || expectedNext != nextLoc {
+			t.Errorf("%s: Expected flow from %s to %s, got %s", label, loc, expected[loc], nextLoc)
+		}
+	}
+	var checkStmt func(Stmt)
+
+	checkStmt = func(stmt Stmt) {
+		switch st := stmt.(type) {
+		case nil:
+		case *StmtBlock:
+			if st == nil {
+				return
+			}
+			for _, s := range st.Stmts {
+				checkStmt(s)
+			}
+			if st.Next != nil {
+				checkNext(st, st.Next)
+			}
+		case *StmtVar:
+			checkNext(st, st.Next)
+		case *StmtIf:
+			if st == nil {
+				return
+			}
+			checkStmt(st.Stmts)
+			checkStmt(st.ElseIf)
+			checkStmt(st.Else)
+			if st.Next != nil {
+				checkNext(st, st.Next)
+			}
+		case *StmtFor:
+			checkStmt(st.Stmts)
+		case *StmtBreak:
+			checkNext(st, st.Next)
+		case *StmtReturn:
+			checkNext(st, nil)
+		case *StmtSetClear:
+			checkNext(st, st.Next)
+		case *StmtAssign:
+			checkNext(st, st.Next)
+		case *StmtExpr:
+			checkNext(st, st.Next)
+		default:
+			panic("Unknown statement type")
+		}
+	}
+	checkStmt(body)
+	for loc, nextLoc := range expected {
+		if _, ok := nexts[loc]; !ok {
+			t.Errorf("%s: Expected flow from %s to %s", label, loc, nextLoc)
+		}
+	}
+}
+
 func TestAnnotate(t *testing.T) {
 	ast := testAnnotate(t, "single type", `type a { a, b }`, "")
 	checkAnnotatedType(t, "single type", ast.Types["a"], []*Var{
@@ -324,6 +389,16 @@ func a(b b) a {
 			},
 		},
 	})
+	checkAnnotatedFlow(t, "func flow", ast.Funcs["a"].Body, map[string]string{
+		"(stdin):10:3": "(stdin):11:3",
+		"(stdin):11:3": "(stdin):12:3",
+		"(stdin):13:5": "",
+		"(stdin):15:5": "(stdin):16:5",
+		"(stdin):16:5": "(stdin):17:5",
+		"(stdin):17:5": "(stdin):18:5",
+		"(stdin):18:5": "(stdin):19:5",
+		"(stdin):19:5": "",
+	})
 
 	testAnnotate(t, "type error in var", `
 type a {
@@ -436,4 +511,96 @@ func a(a a) a {
   return a
 }
 `, "(stdin):6:3: set/clear expression is not a bit field")
+
+	testAnnotate(t, "missing return", `
+type a {
+  a
+}
+func a(a a) a {
+  for {
+    set a.a
+    break
+  }
+}
+`, "(stdin):5:1: Missing required return statement")
+
+	testAnnotate(t, "unreachable statement", `
+type a {
+  a
+}
+func a(a a) a {
+  for {
+    set a.a
+  }
+  return a
+}
+`, "(stdin):9:3: Unreachable")
+
+	testAnnotate(t, "invalid break", `
+type a {
+  a
+}
+func a(a a) a {
+  break
+}
+`, "(stdin):6:3: Invalid break statement")
+
+	testAnnotate(t, "unreachable 2", `
+type a {
+  a
+}
+func a(a a) {
+  for loop {
+    if a.a {
+      for {
+        break loop
+      }
+      clear a.a
+    }
+  }
+}
+`, "(stdin):11:7: Unreachable")
+
+	ast = testAnnotate(t, "break flow", `
+type a { a }
+func main() {
+  var a a
+  for loop {
+    if a.a {
+      break
+    } else {
+      for {
+        break loop
+      }
+    }
+  }
+  if a.a {
+    for loop {
+      if a.a {
+        for {
+          if a.a {
+            return
+          }
+          break loop
+        }
+      }
+    }
+  } else {
+    return
+  }
+  for loop {
+    break loop
+  }
+}
+`, "")
+	checkAnnotatedFlow(t, "func flow", ast.Funcs["main"].Body, map[string]string{
+		"(stdin):4:3":   "(stdin):5:3",
+		"(stdin):7:7":   "(stdin):14:3",
+		"(stdin):10:9":  "(stdin):14:3",
+		"(stdin):19:13": "",
+		"(stdin):18:11": "(stdin):21:11",
+		"(stdin):21:11": "(stdin):28:3",
+		"(stdin):26:5":  "",
+		"(stdin):29:5":  "",
+	})
 }
