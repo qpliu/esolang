@@ -242,7 +242,170 @@ func annotateTypesInExpr(ast *Ast, scope *lexicalScope, expr Expr) error {
 	return nil
 }
 
+type flowScope struct {
+	label  string
+	next   Stmt
+	parent *flowScope
+}
+
+func (f *flowScope) lookup(label string) *flowScope {
+	if f == nil {
+		return nil
+	}
+	if label == "" || label == f.label {
+		return f
+	}
+	return f.parent.lookup(label)
+}
+
 func annotateStatementFlows(ast *Ast) error {
-	//... panic("Not yet implemented") //...
+	for _, funcDecl := range ast.Funcs {
+		if err := annotateStmtFlow(nil, funcDecl.Body, nil); err != nil {
+			return err
+		}
+		if funcDecl.Type != nil && canFallThru(funcDecl.Body) {
+			return errors.New(funcDecl.Location.String() + ": Missing required return statement")
+		}
+	}
 	return nil
+}
+
+func annotateStmtFlow(scope *flowScope, stmt, next Stmt) error {
+	switch st := stmt.(type) {
+	case nil:
+	case *StmtBlock:
+		if st == nil {
+			return nil
+		}
+		if len(st.Stmts) == 0 {
+			st.Next = next
+			return nil
+		}
+		for i := 1; i < len(st.Stmts); i++ {
+			if err := annotateStmtFlow(scope, st.Stmts[i-1], st.Stmts[i]); err != nil {
+				return err
+			} else if !canReach(st.Stmts[i-1], st.Stmts[i]) {
+				return errors.New(st.Stmts[i].Location().String() + ": Unreachable")
+			}
+		}
+		if err := annotateStmtFlow(scope, st.Stmts[len(st.Stmts)-1], next); err != nil {
+			return err
+		}
+	case *StmtVar:
+		st.Next = next
+	case *StmtIf:
+		if st == nil {
+			return nil
+		}
+		if err := annotateStmtFlow(scope, st.Stmts, next); err != nil {
+			return err
+		}
+		if err := annotateStmtFlow(scope, st.ElseIf, next); err != nil {
+			return err
+		}
+		if err := annotateStmtFlow(scope, st.Else, next); err != nil {
+			return err
+		}
+		if st.ElseIf == nil && st.Else == nil {
+			st.Next = next
+		}
+	case *StmtFor:
+		if err := annotateStmtFlow(&flowScope{label: st.Label, next: next, parent: scope}, st.Stmts, nil); err != nil {
+			return err
+		}
+	case *StmtBreak:
+		flowScope := scope.lookup(st.Label)
+		if flowScope == nil {
+			return errors.New(st.Location().String() + ": Invalid break statement")
+		}
+		st.Next = flowScope.next
+	case *StmtReturn:
+	case *StmtSetClear:
+		st.Next = next
+	case *StmtAssign:
+		st.Next = next
+	case *StmtExpr:
+		st.Next = next
+	default:
+		panic("Unknown statement type")
+	}
+	return nil
+}
+
+func canReach(fromStmt, toStmt Stmt) bool {
+	if fromStmt == toStmt {
+		return true
+	}
+	switch stmt := fromStmt.(type) {
+	case nil:
+		return false
+	case *StmtBlock:
+		if len(stmt.Stmts) == 0 {
+			return canReach(stmt.Next, toStmt)
+		} else {
+			return canReach(stmt.Stmts[0], toStmt)
+		}
+	case *StmtVar:
+		return canReach(stmt.Next, toStmt)
+	case *StmtIf:
+		return canReach(stmt.Stmts, toStmt) || (stmt.ElseIf != nil && canReach(stmt.ElseIf, toStmt)) || (stmt.Else != nil && canReach(stmt.Else, toStmt)) || (stmt.Next != nil && canReach(stmt.Next, toStmt))
+	case *StmtFor:
+		return canReach(stmt.Stmts, toStmt)
+	case *StmtBreak:
+		return canReach(stmt.Next, toStmt)
+	case *StmtReturn:
+		return false
+	case *StmtSetClear:
+		return canReach(stmt.Next, toStmt)
+	case *StmtAssign:
+		return canReach(stmt.Next, toStmt)
+	case *StmtExpr:
+		return canReach(stmt.Next, toStmt)
+	default:
+		panic("Unknown statement type")
+	}
+}
+
+func canFallThru(fromStmt Stmt) bool {
+	switch stmt := fromStmt.(type) {
+	case *StmtBlock:
+		return len(stmt.Stmts) == 0 || canFallThru(stmt.Stmts[len(stmt.Stmts)-1])
+	case *StmtIf:
+		return (stmt.ElseIf == nil && stmt.Else == nil) || canFallThru(stmt.Stmts) || (stmt.ElseIf != nil && canFallThru(stmt.ElseIf)) || (stmt.Else != nil && canFallThru(stmt.Else))
+	case *StmtFor:
+		return canBreak(stmt.Label, true, stmt.Stmts)
+	case *StmtBreak, *StmtReturn:
+		return false
+	default:
+		return true
+	}
+}
+
+func canBreak(label string, unlabeled bool, fromStmt Stmt) bool {
+	switch stmt := fromStmt.(type) {
+	case *StmtBlock:
+		for _, st := range stmt.Stmts {
+			if canBreak(label, unlabeled, st) {
+				return true
+			}
+		}
+		return false
+	case *StmtIf:
+		return canBreak(label, unlabeled, stmt.Stmts) || (stmt.ElseIf != nil && canBreak(label, unlabeled, stmt.ElseIf)) || (stmt.Else != nil && canBreak(label, unlabeled, stmt.Else))
+	case *StmtFor:
+		if label == "" {
+			return false
+		}
+		return canBreak(label, false, stmt.Stmts)
+	case *StmtBreak:
+		if label != "" && stmt.Label == label {
+			return true
+		}
+		if unlabeled && stmt.Label == "" {
+			return true
+		}
+		return false
+	default:
+		return false
+	}
 }

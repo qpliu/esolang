@@ -62,39 +62,27 @@ type Var struct {
 
 type Stmt interface {
 	Location() Location
-	CanFallThru() bool
 }
 
 type StmtBlock struct {
 	location Location
 	Stmts    []Stmt
+	Next     Stmt
 }
 
 func (s *StmtBlock) Location() Location {
 	return s.location
 }
 
-func (s *StmtBlock) CanFallThru() bool {
-	for _, stmt := range s.Stmts {
-		if !stmt.CanFallThru() {
-			return false
-		}
-	}
-	return true
-}
-
 type StmtVar struct {
 	location Location
 	Var      Var
 	Expr     Expr
+	Next     Stmt
 }
 
 func (s *StmtVar) Location() Location {
 	return s.location
-}
-
-func (s *StmtVar) CanFallThru() bool {
-	return true
 }
 
 type StmtIf struct {
@@ -103,52 +91,32 @@ type StmtIf struct {
 	Stmts    *StmtBlock
 	ElseIf   *StmtIf
 	Else     *StmtBlock
+	Next     Stmt
 }
 
 func (s *StmtIf) Location() Location {
 	return s.location
 }
 
-func (s *StmtIf) CanFallThru() bool {
-	if s.Stmts.CanFallThru() {
-		return true
-	} else if s.ElseIf != nil {
-		if s.Else != nil {
-			panic("StmtIf should not have both else if and else")
-		}
-		return s.ElseIf.CanFallThru()
-	} else if s.Else != nil {
-		return s.Else.CanFallThru()
-	} else {
-		return true
-	}
-}
-
 type StmtFor struct {
 	location Location
 	Label    string
 	Stmts    *StmtBlock
+	Next     Stmt
 }
 
 func (s *StmtFor) Location() Location {
 	return s.location
 }
 
-func (s *StmtFor) CanFallThru() bool {
-	panic("Not yet implemented")
-}
-
 type StmtBreak struct {
 	location Location
 	Label    string
+	Next     Stmt
 }
 
 func (s *StmtBreak) Location() Location {
 	return s.location
-}
-
-func (s *StmtBreak) CanFallThru() bool {
-	return false
 }
 
 type StmtReturn struct {
@@ -160,46 +128,33 @@ func (s *StmtReturn) Location() Location {
 	return s.location
 }
 
-func (s *StmtReturn) CanFallThru() bool {
-	return false
-}
-
 type StmtSetClear struct {
 	location Location
 	Value    bool
 	Expr     Expr
+	Next     Stmt
 }
 
 func (s *StmtSetClear) Location() Location {
 	return s.location
 }
 
-func (s *StmtSetClear) CanFallThru() bool {
-	return true
-}
-
 type StmtAssign struct {
 	LValue, Expr Expr
+	Next         Stmt
 }
 
 func (s *StmtAssign) Location() Location {
 	return s.LValue.Location()
 }
 
-func (s *StmtAssign) CanFallThru() bool {
-	return true
-}
-
 type StmtExpr struct {
 	Expr Expr
+	Next Stmt
 }
 
 func (s *StmtExpr) Location() Location {
 	return s.Expr.Location()
-}
-
-func (s *StmtExpr) CanFallThru() bool {
-	return true
 }
 
 type Expr interface {

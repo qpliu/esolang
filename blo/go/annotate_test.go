@@ -192,6 +192,7 @@ type a {
   a
 }
 func a(a a) a {
+  return a
 }
 `, "")
 	checkAnnotatedFuncDecl(t, "func with type", ast.Funcs["a"], ast.Types["a"], []*Var{&Var{Name: "a", TypeName: "a", Type: ast.Types["a"]}})
