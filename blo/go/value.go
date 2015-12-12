@@ -30,52 +30,33 @@ func (v *Value) Field(fieldName string, t *Type) *Value {
 
 func (v *Value) BitField(fieldName string, t *Type) bool {
 	bitIndex := 0
-	opaqueIndex := 0
 	for _, field := range t.Fields {
 		if field.Name == fieldName && field.Type == nil {
 			return v.Bits[bitIndex]
 		}
 		bitIndex += field.Type.BitSize()
-		opaqueIndex += field.Type.OpaqueSize()
 	}
 	panic("type '" + t.Name + "' does not have bit field '" + fieldName + "'")
 }
 
-type Scope struct {
-	Values map[string]*Value
-	Parent *Scope
+func (v *Value) SetBitField(fieldName string, t *Type, value bool) {
+	bitIndex := 0
+	for _, field := range t.Fields {
+		if field.Name == fieldName && field.Type == nil {
+			v.Bits[bitIndex] = value
+			return
+		}
+		bitIndex += field.Type.BitSize()
+	}
+	panic("type '" + t.Name + "' does not have bit field '" + fieldName + "'")
 }
 
-func NewScope(funcDecl *Func, args []*Value) *Scope {
-	scope := &Scope{Values: make(map[string]*Value)}
+type Scope map[string]*Value
+
+func NewScope(funcDecl *Func, args []*Value) Scope {
+	scope := Scope(make(map[string]*Value))
 	for i, param := range funcDecl.Params {
-		scope.Values[param.Name] = args[i]
+		scope[param.Name] = args[i]
 	}
 	return scope
-}
-
-func NestedScope(parent *Scope) *Scope {
-	return &Scope{Values: make(map[string]*Value), Parent: parent}
-}
-
-func (s *Scope) Lookup(name string) (*Value, bool) {
-	if value, ok := s.Values[name]; ok {
-		return value, true
-	} else if s.Parent != nil {
-		return s.Parent.Lookup(name)
-	} else {
-		return nil, false
-	}
-}
-
-func (s *Scope) Add(name string) {
-	s.Values[name] = nil
-}
-
-func (s *Scope) Set(name string, value *Value) {
-	if _, ok := s.Values[name]; ok {
-		s.Values[name] = value
-	} else {
-		s.Parent.Set(name, value)
-	}
 }

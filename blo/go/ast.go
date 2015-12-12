@@ -110,6 +110,14 @@ func (s *StmtFor) Location() Location {
 	return s.location
 }
 
+type StmtContinue struct {
+	Next *StmtFor
+}
+
+func (s StmtContinue) Location() Location {
+	return s.Next.location
+}
+
 type StmtBreak struct {
 	location Location
 	Label    string
@@ -132,7 +140,7 @@ func (s *StmtReturn) Location() Location {
 type StmtSetClear struct {
 	location Location
 	Value    bool
-	Expr     Expr
+	Expr     *ExprField
 	Next     Stmt
 }
 

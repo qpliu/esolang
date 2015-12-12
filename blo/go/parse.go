@@ -471,8 +471,10 @@ func parseStmtSetClear(tokenStream *tokenStream) (*StmtSetClear, error) {
 	stmt := &StmtSetClear{location: stmtTok.Location, Value: stmtTok.Token == "set"}
 	if expr, err := parseExpr(tokenStream, false); err != nil {
 		return nil, err
+	} else if exprField, ok := expr.(*ExprField); !ok {
+		return nil, errors.New(expr.Location().String() + ": set/clear expression is not a bit field")
 	} else {
-		stmt.Expr = expr
+		stmt.Expr = exprField
 	}
 	switch tok := tokenStream.peek(); tok.Token {
 	case ";", "\n":

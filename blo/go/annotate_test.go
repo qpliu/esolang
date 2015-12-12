@@ -101,6 +101,7 @@ func checkAnnotatedStmt(t *testing.T, label string, stmt, expected Stmt) {
 		} else {
 			checkAnnotatedStmt(t, label, s.Stmts, st.Stmts)
 		}
+	case StmtContinue:
 	case *StmtBreak:
 		if _, ok := stmt.(*StmtBreak); !ok {
 			t.Errorf("%s: %s: Expected break statement", label, stmt.Location().String())
@@ -209,6 +210,7 @@ func checkAnnotatedFlow(t *testing.T, label string, body Stmt, expected map[stri
 			}
 		case *StmtFor:
 			checkStmt(st.Stmts)
+		case StmtContinue:
 		case *StmtBreak:
 			checkNext(st, st.Next)
 		case *StmtReturn:
@@ -504,13 +506,16 @@ func a(a a) a {
 
 	testAnnotate(t, "type error in set", `
 type a {
-  a
+  a b
+}
+type b {
+  b
 }
 func a(a a) a {
-  set a
+  set a.a
   return a
 }
-`, "(stdin):6:3: set/clear expression is not a bit field")
+`, "(stdin):9:3: set/clear expression is not a bit field")
 
 	testAnnotate(t, "missing return", `
 type a {
@@ -597,6 +602,7 @@ func main() {
 		"(stdin):4:3":   "(stdin):5:3",
 		"(stdin):7:7":   "(stdin):14:3",
 		"(stdin):10:9":  "(stdin):14:3",
+		"(stdin):16:7":  "(stdin):15:5",
 		"(stdin):19:13": "",
 		"(stdin):18:11": "(stdin):21:11",
 		"(stdin):21:11": "(stdin):28:3",

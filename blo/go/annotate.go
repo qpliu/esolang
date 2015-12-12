@@ -310,7 +310,7 @@ func annotateStmtFlow(scope *flowScope, stmt, next Stmt) error {
 			st.Next = next
 		}
 	case *StmtFor:
-		if err := annotateStmtFlow(&flowScope{label: st.Label, next: next, parent: scope}, st.Stmts, nil); err != nil {
+		if err := annotateStmtFlow(&flowScope{label: st.Label, next: next, parent: scope}, st.Stmts, StmtContinue{st}); err != nil {
 			return err
 		}
 	case *StmtBreak:
@@ -351,6 +351,8 @@ func canReach(fromStmt, toStmt Stmt) bool {
 		return canReach(stmt.Stmts, toStmt) || (stmt.ElseIf != nil && canReach(stmt.ElseIf, toStmt)) || (stmt.Else != nil && canReach(stmt.Else, toStmt)) || (stmt.Next != nil && canReach(stmt.Next, toStmt))
 	case *StmtFor:
 		return canReach(stmt.Stmts, toStmt)
+	case StmtContinue:
+		return false
 	case *StmtBreak:
 		return canReach(stmt.Next, toStmt)
 	case *StmtReturn:
@@ -374,6 +376,8 @@ func canFallThru(fromStmt Stmt) bool {
 		return (stmt.ElseIf == nil && stmt.Else == nil) || canFallThru(stmt.Stmts) || (stmt.ElseIf != nil && canFallThru(stmt.ElseIf)) || (stmt.Else != nil && canFallThru(stmt.Else))
 	case *StmtFor:
 		return canBreak(stmt.Label, true, stmt.Stmts)
+	case StmtContinue:
+		return false
 	case *StmtBreak, *StmtReturn:
 		return false
 	default:
