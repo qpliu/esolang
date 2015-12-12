@@ -45,11 +45,11 @@ func checkAnnotatedType(t *testing.T, label string, typeDecl *Type, expectedFiel
 func checkAnnotatedFuncDecl(t *testing.T, label string, funcDecl *Func, expectedType *Type, expectedParams []*Var) {
 	if funcDecl.Type != expectedType {
 		if expectedType == nil {
-			t.Errorf("%s: Function `%s' expected no return type, got `%s'", label, funcDecl.Type.Name)
+			t.Errorf("%s: Function `%s' expected no return type, got `%s'", label, funcDecl.Name, funcDecl.Type.Name)
 		} else if funcDecl.Type == nil {
-			t.Errorf("%s: Function `%s' expected to return type `%s', got no return type", label, expectedType.Name)
+			t.Errorf("%s: Function `%s' expected to return type `%s', got no return type", label, funcDecl.Name, expectedType.Name)
 		} else {
-			t.Errorf("%s: Function `%s' expected to return type `%s', got `%s'", label, expectedType.Name, funcDecl.Type.Name)
+			t.Errorf("%s: Function `%s' expected to return type `%s', got `%s'", label, funcDecl.Name, expectedType.Name, funcDecl.Type.Name)
 		}
 	}
 	if len(funcDecl.Params) != len(expectedParams) {
@@ -73,7 +73,7 @@ func checkAnnotatedStmt(t *testing.T, label string, stmt, expected Stmt) {
 		} else if st == nil {
 			t.Errorf("%s: %s: Unexpected block statment", label, s.Location().String())
 		} else if len(st.Stmts) != len(s.Stmts) {
-			t.Errorf("%s: %s: Expected block statement size %d, got %d ", label, stmt.Location().String())
+			t.Errorf("%s: %s: Expected block statement size %d, got %d ", label, stmt.Location().String(), len(st.Stmts), len(s.Stmts))
 		} else {
 			for i, stmt := range s.Stmts {
 				checkAnnotatedStmt(t, label, stmt, st.Stmts[i])

@@ -52,6 +52,7 @@ type Func struct {
 	TypeName string
 	Type     *Type
 	Body     *StmtBlock
+	Runtime  func(*Func, []*Value) *Value
 }
 
 type Var struct {

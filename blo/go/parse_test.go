@@ -97,7 +97,7 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 			t.Errorf("%s: Did not get expected var statement declaring %s %s", label, ex.Var.Name, ex.Var.TypeName)
 		}
 		if ex.Var.Name != actual.Var.Name || ex.Var.TypeName != actual.Var.TypeName {
-			t.Errorf("%s: Expected var %s %s, got var %s %s", ex.Var.Name, ex.Var.TypeName, actual.Var.Name, actual.Var.TypeName)
+			t.Errorf("%s: Expected var %s %s, got var %s %s", label, ex.Var.Name, ex.Var.TypeName, actual.Var.Name, actual.Var.TypeName)
 		}
 		checkExpr(t, label, actual.Expr, ex.Expr)
 	case *StmtIf:
@@ -130,7 +130,7 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 			t.Errorf("%s: Did not get expected for statement", label)
 		}
 		if ex.Label != actual.Label {
-			t.Errorf("%s: Expected for label %s, got %s", ex.Label, actual.Label)
+			t.Errorf("%s: Expected for label %s, got %s", label, ex.Label, actual.Label)
 		}
 		checkStmt(t, label, actual.Stmts, ex.Stmts)
 	case *StmtBreak:
@@ -139,7 +139,7 @@ func checkStmt(t *testing.T, label string, stmt, expected Stmt) {
 			t.Errorf("%s: Did not get expected break statement", label)
 		}
 		if ex.Label != actual.Label {
-			t.Errorf("%s: Expected break label %s, got %s", ex.Label, actual.Label)
+			t.Errorf("%s: Expected break label %s, got %s", label, ex.Label, actual.Label)
 		}
 	case *StmtReturn:
 		actual, ok := stmt.(*StmtReturn)
@@ -203,7 +203,7 @@ func checkExpr(t *testing.T, label string, expr, expected Expr) {
 			t.Errorf("%s: Expected function name `%s', got `%s'", label, ex.Name, actual.Name)
 		}
 		if len(ex.Params) != len(actual.Params) {
-			t.Errorf("%s: Expected %d parameters for call of function `%s', got `%s'", label, len(ex.Params), ex.Name, len(actual.Params))
+			t.Errorf("%s: Expected %d parameters for call of function `%s', got %d", label, len(ex.Params), ex.Name, len(actual.Params))
 		}
 		for i, param := range actual.Params {
 			checkExpr(t, label+"/"+ex.Name+"()", param, ex.Params[i])
@@ -216,7 +216,7 @@ func checkExpr(t *testing.T, label string, expr, expected Expr) {
 func TestParse(t *testing.T) {
 	testParse(t, "empty", "", "", []string{}, []string{})
 
-	testParse(t, "immdiate error", "foo", "(stdin):1:1: Expected 'import', 'type', or 'func', got:foo", []string{}, []string{})
+	testParse(t, "immediate error", "foo", "(stdin):1:1: Expected 'import', 'type', or 'func', got:foo", []string{}, []string{})
 
 	ast := testParse(t, "single type", `
 type a {
