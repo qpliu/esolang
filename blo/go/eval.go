@@ -4,10 +4,9 @@ func EvalFunc(funcDecl *Func, args []*Value) *Value {
 	if funcDecl.Imported {
 		return funcDecl.Runtime(funcDecl, args)
 	}
-	return interpStmt(NewScope(funcDecl, args), funcDecl.Body)
-}
 
-func interpStmt(scope Scope, stmt Stmt) *Value {
+	scope := NewScope(funcDecl, args)
+	var stmt Stmt = funcDecl.Body
 	for {
 		switch st := stmt.(type) {
 		case nil:
@@ -48,7 +47,7 @@ func interpStmt(scope Scope, stmt Stmt) *Value {
 			}
 		case *StmtSetClear:
 			value := EvalExpr(scope, st.Expr.Expr)
-			value.SetBitField(st.Expr.Name, st.Expr.Type(), st.Value)
+			value.SetBitField(st.Expr.Name, st.Expr.Expr.Type(), st.Value)
 			stmt = st.Next
 		case *StmtAssign:
 			switch lExpr := st.LValue.(type) {
