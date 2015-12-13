@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func testEval(t *testing.T, label, input, funcName string, args []*Value, expected *Value) {
+func testCompile(input string) (*Ast, error) {
 	tokens := make(chan Token)
 	go func() {
 		Tokenize("(stdin)", strings.NewReader(input), tokens)
@@ -13,9 +13,19 @@ func testEval(t *testing.T, label, input, funcName string, args []*Value, expect
 	}()
 	ast, err := Parse(tokens)
 	if err != nil {
-		t.Errorf("%s: Unexpected parse error: %s", label, err.Error())
+		return nil, err
 	} else if err := ast.Annotate(); err != nil {
-		t.Errorf("%s: Unexpected annotate error: %s", label, err.Error())
+		return nil, err
+	} else if err := AnnotateRuntime(ast); err != nil {
+		return nil, err
+	}
+	return ast, nil
+}
+
+func testEval(t *testing.T, label, input, funcName string, args []*Value, expected *Value) {
+	ast, err := testCompile(input)
+	if err != nil {
+		t.Errorf("%s: Unexpected compile error: %s", label, err.Error())
 	}
 	funcDecl := ast.Funcs[funcName]
 	if funcDecl == nil {

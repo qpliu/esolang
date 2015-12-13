@@ -260,6 +260,9 @@ func (f *flowScope) lookup(label string) *flowScope {
 
 func annotateStatementFlows(ast *Ast) error {
 	for _, funcDecl := range ast.Funcs {
+		if funcDecl.Imported {
+			continue
+		}
 		if err := annotateStmtFlow(nil, funcDecl.Body, nil); err != nil {
 			return err
 		}

@@ -19,8 +19,11 @@ func AnnotateRuntime(ast *Ast) error {
 }
 
 var runtimeFuncs map[string]func(*Func, []*Value) *Value = map[string]func(*Func, []*Value) *Value{
-	"getByte": runtimeGetByte,
-	"putByte": runtimePutByte,
+	"getByte":      runtimeGetByte,
+	"putByte":      runtimePutByte,
+	"pushStack":    runtimePushStack,
+	"popStack":     runtimePopStack,
+	"isEmptyStack": runtimeIsEmptyStack,
 }
 
 func runtimeGetByte(funcDecl *Func, args []*Value) *Value {
@@ -62,5 +65,57 @@ func runtimePutByte(funcDecl *Func, args []*Value) *Value {
 		return nil
 	} else {
 		return NewValue(funcDecl.Type)
+	}
+}
+
+func runtimePushStack(funcDecl *Func, args []*Value) *Value {
+	if len(args) >= 2 && len(args[0].Opaque) > 0 {
+		stack, _ := args[0].Opaque[0].([]bool)
+		if len(args[1].Bits) > 0 {
+			stack = append(stack, args[1].Bits[0])
+			args[0].Opaque[0] = stack
+		}
+	}
+	if funcDecl.Type == nil {
+		return nil
+	} else {
+		return NewValue(funcDecl.Type)
+	}
+}
+
+func runtimePopStack(funcDecl *Func, args []*Value) *Value {
+	var popped bool
+	if len(args) > 0 && len(args[0].Opaque) > 0 {
+		stack, _ := args[0].Opaque[0].([]bool)
+		if len(stack) > 0 {
+			popped = stack[len(stack)-1]
+			args[0].Opaque[0] = stack[:len(stack)-1]
+		}
+	}
+	if funcDecl.Type == nil {
+		return nil
+	} else {
+		result := NewValue(funcDecl.Type)
+		if len(result.Bits) > 0 {
+			result.Bits[0] = popped
+		}
+		return result
+	}
+}
+
+func runtimeIsEmptyStack(funcDecl *Func, args []*Value) *Value {
+	var isEmpty bool
+	if len(args) > 0 && len(args[0].Opaque) > 0 {
+		stack, _ := args[0].Opaque[0].([]bool)
+		isEmpty = len(stack) == 0
+	}
+	if funcDecl.Type == nil {
+		return nil
+	} else {
+		result := NewValue(funcDecl.Type)
+		if len(result.Bits) > 0 {
+			result.Bits[0] = isEmpty
+		}
+		return result
 	}
 }
