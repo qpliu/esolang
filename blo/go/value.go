@@ -15,6 +15,9 @@ func NewValue(t *Type) *Value {
 func (v *Value) Field(fieldName string, t *Type) *Value {
 	bitIndex := 0
 	opaqueIndex := 0
+	if t.Imported {
+		opaqueIndex++
+	}
 	for _, field := range t.Fields {
 		if field.Name == fieldName && field.Type != nil {
 			return &Value{

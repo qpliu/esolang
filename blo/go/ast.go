@@ -6,10 +6,7 @@ type Ast struct {
 }
 
 func newAst() *Ast {
-	ast := &Ast{}
-	ast.Types = make(map[string]*Type)
-	ast.Funcs = make(map[string]*Func)
-	return ast
+	return &Ast{Types: make(map[string]*Type), Funcs: make(map[string]*Func)}
 }
 
 type Type struct {
