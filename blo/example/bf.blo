@@ -1,0 +1,472 @@
+import func putByte(b byte)
+import func getByte(b byte+bit)
+import func pushStack(s stack, b bit)
+import func popStack(s stack) bit
+import func isEmptyStack(s stack) bit
+
+import type stack {}
+
+type byte {
+    1, 2, 4, 8, 10, 20, 40, 80 bit
+}
+
+type bit {
+    b
+}
+
+type byte+bit {
+    byte byte
+    bit bit
+}
+
+type bit+bit {
+    1, 2 bit
+}
+
+//
+
+func +(left, right, carry bit) bit+bit {
+    var sum bit+bit
+    if left.b {
+        if right.b {
+            if carry.b { // 1 + 1 + 1
+                set sum.1.b
+                set sum.2.b
+            } else { // 1 + 1 + 0
+                set sum.2.b
+            }
+        } else {
+            if carry.b { // 1 + 0 + 1
+                set sum.2.b
+            } else { // 1 + 0 + 0
+                set sum.1.b
+            }
+        }
+    } else {
+        if right.b {
+            if carry.b { // 0 + 1 + 1
+                set sum.2.b
+            } else { // 0 + 1 + 0
+                set sum.1.b
+            }
+        } else {
+            if carry.b { // 0 + 0 + 1
+                set sum.1.b
+            } else { // 0 + 0 + 0
+            }
+        }
+    }
+    return sum
+}
+
+//
+
+type byteStack {
+    s stack
+}
+
+func pushByteStack(s byteStack, b byte) {
+    pushStack(s.s, b.1)
+    pushStack(s.s, b.2)
+    pushStack(s.s, b.4)
+    pushStack(s.s, b.8)
+    pushStack(s.s, b.10)
+    pushStack(s.s, b.20)
+    pushStack(s.s, b.40)
+    pushStack(s.s, b.80)
+}
+
+func popByteStack(s byteStack) byte {
+    var b byte
+    b.80 = popStack(s.s)
+    b.40 = popStack(s.s)
+    b.20 = popStack(s.s)
+    b.10 = popStack(s.s)
+    b.8 = popStack(s.s)
+    b.4 = popStack(s.s)
+    b.2 = popStack(s.s)
+    b.1 = popStack(s.s)
+    return b
+}
+
+func isEmptyByteStack(s byteStack) bit {
+    return isEmptyStack(s.s)
+}
+
+//
+
+type tape {
+    left, right byteStack
+    current byte
+}
+
+func </tape(t tape) {
+    pushByteStack(t.right, t.current)
+    if isEmptyByteStack(t.left).b {
+        clear t.current.1.b
+        clear t.current.2.b
+        clear t.current.4.b
+        clear t.current.8.b
+        clear t.current.10.b
+        clear t.current.20.b
+        clear t.current.40.b
+        clear t.current.80.b
+    } else {
+        t.current = popByteStack(t.left)
+    }
+}
+
+func >/tape(t tape) {
+    pushByteStack(t.left, t.current)
+    if isEmptyByteStack(t.right).b {
+        clear t.current.1.b
+        clear t.current.2.b
+        clear t.current.4.b
+        clear t.current.8.b
+        clear t.current.10.b
+        clear t.current.20.b
+        clear t.current.40.b
+        clear t.current.80.b
+    } else {
+        t.current = popByteStack(t.right)
+    }
+}
+
+func +/tape(t tape) {
+    var bit bit
+    var sum bit+bit
+    set bit.b
+    sum = +(t.current.1, bit, sum.2)
+    t.current.1 = sum.1
+    clear bit.b
+    sum = +(t.current.2, bit, sum.2)
+    t.current.2 = sum.1
+    sum = +(t.current.4, bit, sum.2)
+    t.current.4 = sum.1
+    sum = +(t.current.8, bit, sum.2)
+    t.current.8 = sum.1
+    sum = +(t.current.10, bit, sum.2)
+    t.current.10 = sum.1
+    sum = +(t.current.20, bit, sum.2)
+    t.current.20 = sum.1
+    sum = +(t.current.40, bit, sum.2)
+    t.current.40 = sum.1
+    sum = +(t.current.80, bit, sum.2)
+    t.current.80 = sum.1
+}
+
+func -/tape(t tape) {
+    var bit bit
+    var sum bit+bit
+    set bit.b
+    sum = +(t.current.1, bit, sum.2)
+    t.current.1 = sum.1
+    sum = +(t.current.2, bit, sum.2)
+    t.current.2 = sum.1
+    sum = +(t.current.4, bit, sum.2)
+    t.current.4 = sum.1
+    sum = +(t.current.8, bit, sum.2)
+    t.current.8 = sum.1
+    sum = +(t.current.10, bit, sum.2)
+    t.current.10 = sum.1
+    sum = +(t.current.20, bit, sum.2)
+    t.current.20 = sum.1
+    sum = +(t.current.40, bit, sum.2)
+    t.current.40 = sum.1
+    sum = +(t.current.80, bit, sum.2)
+    t.current.80 = sum.1
+}
+
+func i/tape(t tape) {
+    putByte(t.current)
+}
+
+func o/tape(t tape) {
+    var input byte+bit
+    getByte(input)
+    if input.bit.b { // EOF (or other error)
+    } else {
+        t.current = input.byte
+    }
+}
+
+func 0/tape(t tape) bit {
+    var result bit
+    if t.current.1.b {
+        set result.b
+    } else if t.current.2.b {
+        set result.b
+    } else if t.current.4.b {
+        set result.b
+    } else if t.current.8.b {
+        set result.b
+    } else if t.current.10.b {
+        set result.b
+    } else if t.current.20.b {
+        set result.b
+    } else if t.current.40.b {
+        set result.b
+    } else if t.current.80.b {
+        set result.b
+    }
+    return result
+}
+
+//
+
+type insn {
+    1, 2, 4 bit
+    // < 000 - 3c
+    // > 001 - 3e
+    // + 010 - 2b
+    // - 011 - 2d
+    // . 100 - 2e
+    // , 101 - 2c
+    // [ 110 - 5b
+    // ] 111 - 5d
+}
+
+type insnStack {
+    s stack
+}
+
+func pushInsnStack(s insnStack, i insn) {
+    pushStack(s.s, i.1)
+    pushStack(s.s, i.2)
+    pushStack(s.s, i.4)
+}
+
+func popInsnStack(s insnStack) insn {
+    var i insn
+    i.4 = popStack(s.s)
+    i.2 = popStack(s.s)
+    i.1 = popStack(s.s)
+    return i
+}
+
+func isEmptyInsnStack(s insnStack) bit {
+    return isEmptyStack(s.s)
+}
+
+//
+
+type insns {
+    left, right insnStack
+    current insn
+}
+
+func end/insns(i insns) bit {
+    return isEmptyInsnStack(i.right)
+}
+
+func start/insns(i insns) bit {
+    return isEmptyInsnStack(i.left)
+}
+
+func </insns(i insns) {
+    if isEmptyInsnStack(i.left).b {
+    } else {
+        pushInsnStack(i.right, i.current)
+        i.current = popInsnStack(i.left)
+    }
+}
+
+func >/insns(i insns) {
+    if isEmptyInsnStack(i.right).b {
+    } else {
+        pushInsnStack(i.left, i.current)
+        i.current = popInsnStack(i.right)
+    }
+}
+
+func [/insns(i insns) {
+    for {
+        >/insns(i)
+        if end/insns(i).b {
+            return
+        } else if i.current.1.b {
+            if i.current.2.b {
+                if i.current.4.b { // ]
+                    return
+                } else { // [
+                    [/insns(i)
+                }
+            }
+        }
+    }
+}
+
+func ]/insns(i insns) {
+    for {
+        </insns(i)
+        if start/insns(i).b {
+            return
+        } else if i.current.1.b {
+            if i.current.2.b {
+                if i.current.4.b { // ]
+                    ]/insns(i)
+                } else { // [
+                    return
+                }
+            }
+        }
+    }
+}
+
+//
+
+func run(prog insnStack) {
+    if isEmptyInsnStack(prog).b {
+        return
+    }
+    var i insns
+    i.current = popInsnStack(prog)
+    for {
+        if isEmptyInsnStack(prog).b {
+            break
+	}
+        pushInsnStack(i.right, i.current)
+        i.current = popInsnStack(prog)
+    }
+    var t tape
+    for {
+        if i.current.1.b {
+            if i.current.2.b {
+                if i.current.4.b { // 111 = ]
+                    ]/insns(i)
+                } else { // 110 = [
+                    if 0/tape(t).b {
+                        [/insns(i)
+                    }
+                }
+            } else {
+                if i.current.4.b { // 101 = ,
+                    i/tape(t)
+                } else { // 100 = .
+                    o/tape(t)
+                }
+            }
+        } else {
+            if i.current.2.b {
+                if i.current.4.b { // 011 = -
+                    -/tape(t)
+                } else { // 010 = +
+                    +/tape(t)
+                }
+            } else {
+                if i.current.4.b { // 001 = >
+                    >/tape(t)
+                } else { // 000 = <
+                    </tape(t)
+                }
+            }
+        }
+        if end/insns(i).b {
+            break
+        }
+        >/insns(i)
+    }
+}
+
+// ! (21) separates code from input
+
+func read() insnStack {
+    var prog insnStack
+    var < insn
+    var > insn
+    set >.4.b
+    var + insn
+    set +.2.b
+    var - insn
+    set -.2.b
+    set -.4.b
+    var o insn
+    set o.1.b
+    var i insn
+    set i.1.b
+    set i.4.b
+    var [ insn
+    set [.1.b
+    set [.2.b
+    var ] insn
+    set ].1.b
+    set ].2.b
+    set ].4.b
+
+    for {
+        var c byte+bit
+        getByte(c)
+        if c.bit.b {
+            break
+        }
+        if c.byte.80.b {
+        } else if c.byte.40.b {
+            if c.byte.20.b {
+            } else if c.byte.10.b {
+                // 5b, 5d
+                if c.byte.8.b {
+                    if c.byte.4.b {
+                        if c.byte.2.b {
+                        } else if c.byte.1.b {
+                            pushInsnStack(prog, ])
+                        }
+                    } else if c.byte.2.b {
+                        if c.byte.1.b {
+                            pushInsnStack(prog, [)
+                        }
+                    }
+                }
+            }
+        } else if c.byte.20.b {
+            if c.byte.10.b {
+                // 3c, 3e
+                if c.byte.8.b {
+                    if c.byte.4.b {
+                        if c.byte.2.b {
+                            if c.byte.1.b {
+                            } else {
+                                pushInsnStack(prog, >)
+                            }
+                        } else if c.byte.1.b {
+                        } else {
+                            pushInsnStack(prog, <)
+                        }
+                    }
+                }
+            } else {
+                // 21, 2b, 2c, 2d, 2e
+                if c.byte.8.b {
+                    if c.byte.4.b {
+                        if c.byte.2.b {
+                            if c.byte.1.b {
+                            } else {
+                                pushInsnStack(prog, o)
+                            }
+                        } else if c.byte.1.b {
+                            pushInsnStack(prog, -)
+                        } else {
+                            pushInsnStack(prog, i)
+                        }
+                    } else if c.byte.2.b {
+                        if c.byte.1.b {
+                            pushInsnStack(prog, +)
+                        }
+                    }
+                } else {
+                    if c.byte.4.b {
+                    } else if c.byte.2.b {
+                    } else if c.byte.1.b { 
+                        break
+                    }
+               }
+            }
+        }
+    }
+    return prog
+}
+
+//
+
+func main() {
+    run(read())
+}
