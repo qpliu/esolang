@@ -273,3 +273,7 @@ Cat:
           putByte(b)
       }
   }
+
+Implementation notes
+
+Since blo data structures cannot contain pointers, only local variables contain pointers.  Functions can also return pointers, but they can be implemented by having the caller allocate the return value and passing in a pointer for the return value.  So, while values can outlive the scope of the local variable that allocated them by being assigned to another local variable or by being returned from the function, by using caller allocation of return values, all allocations can be on the stack.

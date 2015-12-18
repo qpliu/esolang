@@ -17,6 +17,7 @@ func (ast *Ast) Annotate() error {
 	if err := annotateStatementFlows(ast); err != nil {
 		return err
 	}
+	annotateStatementScopes(ast)
 	return nil
 }
 
@@ -414,5 +415,86 @@ func canBreak(label string, unlabeled bool, fromStmt Stmt) bool {
 		return false
 	default:
 		return false
+	}
+}
+
+type stmtScope struct {
+	vars   map[string]*Var
+	parent *stmtScope
+}
+
+func newStmtScope(funcDecl *Func) *stmtScope {
+	vars := make(map[string]*Var)
+	for _, p := range funcDecl.Params {
+		vars[p.Name] = p
+	}
+	return &stmtScope{vars: vars}
+}
+
+func (s *stmtScope) addVar(v *Var) {
+	s.vars[v.Name] = v
+}
+
+func (s *stmtScope) newScope() *stmtScope {
+	return &stmtScope{vars: make(map[string]*Var), parent: s}
+}
+
+func (s *stmtScope) makeScope() map[string]*Var {
+	vars := make(map[string]*Var)
+	for scope := s; scope != nil; scope = scope.parent {
+		for n, v := range scope.vars {
+			vars[n] = v
+		}
+	}
+	return vars
+}
+
+func annotateStatementScopes(ast *Ast) {
+	for _, funcDecl := range ast.Funcs {
+		if funcDecl.Imported {
+			continue
+		}
+		annotateStmtScopes(newStmtScope(funcDecl), funcDecl.Body)
+	}
+}
+
+func annotateStmtScopes(scope *stmtScope, stmt Stmt) {
+	switch st := stmt.(type) {
+	case nil:
+	case *StmtBlock:
+		if st == nil {
+			return
+		}
+		st.scope = scope.makeScope()
+		stmtScope := scope.newScope()
+		for _, s := range st.Stmts {
+			annotateStmtScopes(stmtScope, s)
+		}
+	case *StmtVar:
+		st.scope = scope.makeScope()
+		scope.addVar(&st.Var)
+	case *StmtIf:
+		if st == nil {
+			return
+		}
+		st.scope = scope.makeScope()
+		annotateStmtScopes(scope, st.Stmts)
+		annotateStmtScopes(scope, st.ElseIf)
+		annotateStmtScopes(scope, st.Else)
+	case *StmtFor:
+		st.scope = scope.makeScope()
+		annotateStmtScopes(scope, st.Stmts)
+	case *StmtBreak:
+		st.scope = scope.makeScope()
+	case *StmtReturn:
+		st.scope = scope.makeScope()
+	case *StmtSetClear:
+		st.scope = scope.makeScope()
+	case *StmtAssign:
+		st.scope = scope.makeScope()
+	case *StmtExpr:
+		st.scope = scope.makeScope()
+	default:
+		panic("Unknown statement type")
 	}
 }

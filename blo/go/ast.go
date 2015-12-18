@@ -60,16 +60,22 @@ type Var struct {
 
 type Stmt interface {
 	Location() Location
+	Scope() map[string]*Var
 }
 
 type StmtBlock struct {
 	location Location
 	Stmts    []Stmt
 	Next     Stmt
+	scope    map[string]*Var
 }
 
 func (s *StmtBlock) Location() Location {
 	return s.location
+}
+
+func (s *StmtBlock) Scope() map[string]*Var {
+	return s.scope
 }
 
 type StmtVar struct {
@@ -77,10 +83,15 @@ type StmtVar struct {
 	Var      Var
 	Expr     Expr
 	Next     Stmt
+	scope    map[string]*Var
 }
 
 func (s *StmtVar) Location() Location {
 	return s.location
+}
+
+func (s *StmtVar) Scope() map[string]*Var {
+	return s.scope
 }
 
 type StmtIf struct {
@@ -90,10 +101,15 @@ type StmtIf struct {
 	ElseIf   *StmtIf
 	Else     *StmtBlock
 	Next     Stmt
+	scope    map[string]*Var
 }
 
 func (s *StmtIf) Location() Location {
 	return s.location
+}
+
+func (s *StmtIf) Scope() map[string]*Var {
+	return s.scope
 }
 
 type StmtFor struct {
@@ -101,10 +117,15 @@ type StmtFor struct {
 	Label    string
 	Stmts    *StmtBlock
 	Next     Stmt
+	scope    map[string]*Var
 }
 
 func (s *StmtFor) Location() Location {
 	return s.location
+}
+
+func (s *StmtFor) Scope() map[string]*Var {
+	return s.scope
 }
 
 type StmtContinue struct {
@@ -115,23 +136,37 @@ func (s StmtContinue) Location() Location {
 	return s.Next.location
 }
 
+func (s StmtContinue) Scope() map[string]*Var {
+	return s.Next.scope
+}
+
 type StmtBreak struct {
 	location Location
 	Label    string
 	Next     Stmt
+	scope    map[string]*Var
 }
 
 func (s *StmtBreak) Location() Location {
 	return s.location
 }
 
+func (s *StmtBreak) Scope() map[string]*Var {
+	return s.scope
+}
+
 type StmtReturn struct {
 	location Location
 	Expr     Expr
+	scope    map[string]*Var
 }
 
 func (s *StmtReturn) Location() Location {
 	return s.location
+}
+
+func (s *StmtReturn) Scope() map[string]*Var {
+	return s.scope
 }
 
 type StmtSetClear struct {
@@ -139,28 +174,43 @@ type StmtSetClear struct {
 	Value    bool
 	Expr     *ExprField
 	Next     Stmt
+	scope    map[string]*Var
 }
 
 func (s *StmtSetClear) Location() Location {
 	return s.location
 }
 
+func (s *StmtSetClear) Scope() map[string]*Var {
+	return s.scope
+}
+
 type StmtAssign struct {
 	LValue, Expr Expr
 	Next         Stmt
+	scope        map[string]*Var
 }
 
 func (s *StmtAssign) Location() Location {
 	return s.LValue.Location()
 }
 
+func (s *StmtAssign) Scope() map[string]*Var {
+	return s.scope
+}
+
 type StmtExpr struct {
-	Expr Expr
-	Next Stmt
+	Expr  Expr
+	Next  Stmt
+	scope map[string]*Var
 }
 
 func (s *StmtExpr) Location() Location {
 	return s.Expr.Location()
+}
+
+func (s *StmtExpr) Scope() map[string]*Var {
+	return s.scope
 }
 
 type Expr interface {
@@ -249,4 +299,15 @@ func (e *ExprFunc) Type() *Type {
 
 func (e *ExprFunc) IsBit() bool {
 	return false
+}
+
+func GoingOutOfScope(stmt, next Stmt) []*Var {
+	var vars []*Var
+	nextScope := next.Scope()
+	for name, v := range stmt.Scope() {
+		if _, ok := nextScope[name]; !ok {
+			vars = append(vars, v)
+		}
+	}
+	return vars
 }

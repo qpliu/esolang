@@ -233,6 +233,42 @@ func checkAnnotatedFlow(t *testing.T, label string, body Stmt, expected map[stri
 	}
 }
 
+func checkAnnotatedScope(t *testing.T, label string, stmt Stmt, expected map[string][]string) {
+	switch st := stmt.(type) {
+	case nil:
+		return
+	case *StmtBlock:
+		if st == nil {
+			return
+		}
+		for _, s := range st.Stmts {
+			checkAnnotatedScope(t, label, s, expected)
+		}
+	case *StmtIf:
+		if st == nil {
+			return
+		}
+		checkAnnotatedScope(t, label, st.Stmts, expected)
+		checkAnnotatedScope(t, label, st.ElseIf, expected)
+		checkAnnotatedScope(t, label, st.Else, expected)
+	case *StmtFor:
+		checkAnnotatedScope(t, label, st.Stmts, expected)
+	}
+	if _, ok := expected[stmt.Location().String()]; !ok {
+		t.Errorf("%s: Unexpected statement at %s", label, stmt.Location().String())
+	}
+	varNames := expected[stmt.Location().String()]
+	vars := stmt.Scope()
+	if len(varNames) != len(vars) {
+		t.Errorf("%s: Expected %d vars at %s, got %d", label, len(varNames), stmt.Location().String(), len(vars))
+	}
+	for _, varName := range varNames {
+		if _, ok := vars[varName]; !ok {
+			t.Errorf("%s: Did not get expected variable '%s' in scope at %s", label, varName, stmt.Location().String())
+		}
+	}
+}
+
 func TestAnnotate(t *testing.T) {
 	ast := testAnnotate(t, "single type", `type a { a, b }`, "")
 	checkAnnotatedType(t, "single type", ast.Types["a"], []*Var{
@@ -608,5 +644,37 @@ func main() {
 		"(stdin):21:11": "(stdin):28:3",
 		"(stdin):26:5":  "",
 		"(stdin):29:5":  "",
+	})
+
+	ast = testAnnotate(t, "scope", `
+type a { a }
+func a(p1, p2 a) {
+    var v1 a
+    {
+        var v2 a
+    }
+    for {
+        if v1.a {
+            var v2 a
+        } else {
+            var v2 a
+            break
+        }
+    }
+}
+`, "")
+	checkAnnotatedScope(t, "scope", ast.Funcs["a"].Body, map[string][]string{
+		"(stdin):3:18":  []string{"p1", "p2"},
+		"(stdin):4:5":   []string{"p1", "p2"},
+		"(stdin):5:5":   []string{"p1", "p2", "v1"},
+		"(stdin):6:9":   []string{"p1", "p2", "v1"},
+		"(stdin):8:5":   []string{"p1", "p2", "v1"},
+		"(stdin):8:9":   []string{"p1", "p2", "v1"},
+		"(stdin):9:9":   []string{"p1", "p2", "v1"},
+		"(stdin):9:17":  []string{"p1", "p2", "v1"},
+		"(stdin):10:13": []string{"p1", "p2", "v1"},
+		"(stdin):11:16": []string{"p1", "p2", "v1"},
+		"(stdin):12:13": []string{"p1", "p2", "v1"},
+		"(stdin):13:13": []string{"p1", "p2", "v1", "v2"},
 	})
 }
