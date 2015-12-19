@@ -277,3 +277,37 @@ Cat:
 Implementation notes
 
 Since blo data structures cannot contain pointers, only local variables contain pointers.  Functions can also return pointers, but they can be implemented by having the caller allocate the return value and passing in a pointer for the return value.  So, while values can outlive the scope of the local variable that allocated them by being assigned to another local variable or by being returned from the function, by using caller allocation of return values, all allocations can be on the stack.
+
+In the absence of loops and function calls, the space for all local variables can be allocated on the function entry, and each local variable can point to a single distinct location within that allocation.  However, loops and function calls means it is not that simple.  First, when looping, a local variable in the loop scope can be aliased by a local variable outside of the loop scope, so, on subsequent iterations, it may need to point to a different allocation.  However, the aliases are limited to the number of local variables of that type or of types that contain (perhaps indirectly) that type, so the size of the allocation needed is still statically bound.  Second, function call subexpressions will need allocations for the return values, which, if in a loop, may also be aliased in subsequent loop iterations.  Still, the size of the allocation is statically bound.
+
+A straightforward way handle local variable allocations is to allocate space for N copies of each local variable, including a reference count for each, where N is the number of possible aliases.  When a var statement is encountered, check the reference count of each allocated space until finding one with zero references, increment that reference, and use that space for the variable.  Similarly for the return values of function call subexpressions.
+
+Aliasing also complicate the handling of the return values of functions.  If the value being returned is a locally allocated value, there is no problem with simply copying the value to the caller-allocated return value.  However, if the value being returned aliases a parameter that was passed in, then the return value must also alias that parameter.  To illustrate, an example:
+
+  type a { a }
+  type b { a a }
+  func f(b b) a { return b.a }
+
+  func main() {
+    var v b
+    set f(v).a
+    if v.a.a {
+      // reached
+    } else {
+      // not reached
+    }
+  }
+
+If the return value f were copied into the caller allocated-space for the return value, then the if would erroneously take the else branch.
+
+So, functions that return a value would have a caller-allocated space for the return value passed in, and also return a pointer to the actual return value, which can either be the passed-in allocation for the return value, or an alias to one of the passed-in parameters.
+
+The implemention of the return statement will check if the return value aliases one of the passed in parameters, and if it does, return that alias, otherwise, copy the value into the caller-allocated space for the return value, and return the pointer to that space.
+
+Since subfields may be aliased, an implementation of local variables can be a pointer to the allocation of the reference count and the bit array plus an offset index to the first bit of the value.
+
+The reference count of passed in parameters should not require special handling, since the counts at exit should be the same at the counts on entry.
+
+Also, note that the reference counts need to be looked at only for var statements and function calls within loops to determine whether the space can be recycled.  One optimization could be to dispense with reference counting in functions without loops, or with only loops without var statements or function calls.
+
+Additionally, if escape analysis determines that a local variable value or a value returned from a function does not escape the loop, then only a single copy needs to be allocated, since its reference count would always be zero at the top of the loop for every iteration.
