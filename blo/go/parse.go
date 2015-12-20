@@ -333,13 +333,14 @@ func parseStmtVar(tokenStream *tokenStream) (*StmtVar, error) {
 		} else {
 			stmt.Expr = expr
 		}
-	case ";", "\n":
+	case ";", "\n", "}":
 	default:
 		return nil, errors.New(tok.Location.String() + ": Expected ';' or '=', got:" + tok.Token)
 	}
 	switch tok := tokenStream.peek(); tok.Token {
 	case ";", "\n":
 		tokenStream.next()
+	case "}":
 	default:
 		return nil, errors.New(tok.Location.String() + ": Expected ';', got:" + tok.Token)
 	}
@@ -425,6 +426,7 @@ func parseStmtBreak(tokenStream *tokenStream) (*StmtBreak, error) {
 	switch tok := tokenStream.peek(); tok.Token {
 	case ";", "\n":
 		tokenStream.next()
+	case "}":
 	default:
 		return nil, errors.New(tok.Location.String() + ": Expected ';', got:" + tok.Token)
 	}
@@ -440,7 +442,7 @@ func parseStmtReturn(tokenStream *tokenStream) (*StmtReturn, error) {
 		stmt.location = tok.Location
 	}
 	switch tok := tokenStream.peek(); tok.Token {
-	case ";", "\n":
+	case ";", "\n", "}":
 	default:
 		if tok.IsIdentifier() {
 			if expr, err := parseExpr(tokenStream, false); err != nil {
@@ -455,6 +457,7 @@ func parseStmtReturn(tokenStream *tokenStream) (*StmtReturn, error) {
 	switch tok := tokenStream.peek(); tok.Token {
 	case ";", "\n":
 		tokenStream.next()
+	case "}":
 	default:
 		return nil, errors.New(tok.Location.String() + ": Expected ';', got:" + tok.Token)
 	}
@@ -479,6 +482,7 @@ func parseStmtSetClear(tokenStream *tokenStream) (*StmtSetClear, error) {
 	switch tok := tokenStream.peek(); tok.Token {
 	case ";", "\n":
 		tokenStream.next()
+	case "}":
 	default:
 		return nil, errors.New(tok.Location.String() + ": Expected ';', got:" + tok.Token)
 	}
@@ -512,6 +516,7 @@ func parseStmtExprOrAssign(tokenStream *tokenStream) (Stmt, error) {
 	switch tok := tokenStream.peek(); tok.Token {
 	case ";", "\n":
 		tokenStream.next()
+	case "}":
 	default:
 		return nil, errors.New(tok.Location.String() + ": Expected ';', got:" + tok.Token)
 	}
