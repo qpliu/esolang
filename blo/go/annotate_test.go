@@ -269,6 +269,18 @@ func checkAnnotatedScope(t *testing.T, label string, stmt Stmt, expected map[str
 	}
 }
 
+func checkAnnotatedMax(t *testing.T, label string, ast *Ast, expectedMaxBitIndex, expectedMaxOffset, expectedMaxLocalRefs int) {
+	if ast.MaxBitIndex != expectedMaxBitIndex {
+		t.Errorf("%s: Expected MaxBitIndex of %d, got %d", label, expectedMaxBitIndex, ast.MaxBitIndex)
+	}
+	if ast.MaxOffset != expectedMaxOffset {
+		t.Errorf("%s: Expected MaxOffset of %d, got %d", label, expectedMaxOffset, ast.MaxOffset)
+	}
+	if ast.MaxLocalRefs != expectedMaxLocalRefs {
+		t.Errorf("%s: Expected MaxLocalRefs of %d, got %d", label, expectedMaxLocalRefs, ast.MaxLocalRefs)
+	}
+}
+
 func TestAnnotate(t *testing.T) {
 	ast := testAnnotate(t, "single type", `type a { a, b }`, "")
 	checkAnnotatedType(t, "single type", ast.Types["a"], []*Var{
@@ -437,6 +449,7 @@ func a(b b) a {
 		"(stdin):18:5": "(stdin):19:5",
 		"(stdin):19:5": "",
 	})
+	checkAnnotatedMax(t, "func flow", ast, 2, 1, 0)
 
 	testAnnotate(t, "type error in var", `
 type a {
@@ -665,16 +678,17 @@ func a(p1, p2 a) {
 `, "")
 	checkAnnotatedScope(t, "scope", ast.Funcs["a"].Body, map[string][]string{
 		"(stdin):3:18":  []string{"p1", "p2"},
-		"(stdin):4:5":   []string{"p1", "p2"},
+		"(stdin):4:5":   []string{"p1", "p2", "v1"},
 		"(stdin):5:5":   []string{"p1", "p2", "v1"},
-		"(stdin):6:9":   []string{"p1", "p2", "v1"},
+		"(stdin):6:9":   []string{"p1", "p2", "v1", "v2"},
 		"(stdin):8:5":   []string{"p1", "p2", "v1"},
 		"(stdin):8:9":   []string{"p1", "p2", "v1"},
 		"(stdin):9:9":   []string{"p1", "p2", "v1"},
 		"(stdin):9:17":  []string{"p1", "p2", "v1"},
-		"(stdin):10:13": []string{"p1", "p2", "v1"},
+		"(stdin):10:13": []string{"p1", "p2", "v1", "v2"},
 		"(stdin):11:16": []string{"p1", "p2", "v1"},
-		"(stdin):12:13": []string{"p1", "p2", "v1"},
+		"(stdin):12:13": []string{"p1", "p2", "v1", "v2"},
 		"(stdin):13:13": []string{"p1", "p2", "v1", "v2"},
 	})
+	checkAnnotatedMax(t, "scope", ast, 0, 0, 4)
 }

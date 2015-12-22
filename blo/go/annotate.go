@@ -18,6 +18,9 @@ func (ast *Ast) Annotate() error {
 		return err
 	}
 	annotateStatementScopes(ast)
+	annotateMaxBitIndex(ast)
+	annotateMaxOffset(ast)
+	annotateMaxLocalRefs(ast)
 	return nil
 }
 
@@ -471,8 +474,8 @@ func annotateStmtScopes(scope *stmtScope, stmt Stmt) {
 			annotateStmtScopes(stmtScope, s)
 		}
 	case *StmtVar:
-		st.scope = scope.makeScope()
 		scope.addVar(&st.Var)
+		st.scope = scope.makeScope()
 	case *StmtIf:
 		if st == nil {
 			return
@@ -496,5 +499,84 @@ func annotateStmtScopes(scope *stmtScope, stmt Stmt) {
 		st.scope = scope.makeScope()
 	default:
 		panic("Unknown statement type")
+	}
+}
+
+func annotateMaxBitIndex(ast *Ast) {
+	for _, typeDecl := range ast.Types {
+		if typeDecl.BitSize()-1 > ast.MaxBitIndex {
+			ast.MaxBitIndex = typeDecl.BitSize() - 1
+		}
+	}
+}
+
+func getMaxOffset(typeDecl *Type) int {
+	offset := 0
+	maxOffset := 0
+	for _, field := range typeDecl.Fields {
+		if field.Type != nil {
+			maxOffset = offset + getMaxOffset(field.Type)
+		}
+		offset += field.Type.BitSize()
+	}
+	return maxOffset
+}
+
+func annotateMaxOffset(ast *Ast) {
+	for _, typeDecl := range ast.Types {
+		max := getMaxOffset(typeDecl)
+		if max > ast.MaxOffset {
+			ast.MaxOffset = max
+		}
+	}
+}
+
+func getMaxLocalRefs(funcDecl *Func) int {
+	maxRefs := 0
+	var checkStmt func(Stmt, bool)
+	checkStmt = func(stmt Stmt, inLoop bool) {
+		switch st := stmt.(type) {
+		case *StmtBlock:
+			if st == nil {
+				return
+			}
+			for _, s := range st.Stmts {
+				checkStmt(s, inLoop)
+			}
+		case *StmtVar:
+			if !inLoop {
+				return
+			}
+			refs := 0
+			for _, v := range st.Scope() {
+				if st.Var.Type == v.Type || st.Var.Type.Contains(v.Type) {
+					refs++
+				}
+			}
+			if refs > maxRefs {
+				maxRefs = refs
+			}
+		case *StmtIf:
+			if st == nil {
+				return
+			}
+			checkStmt(st.Stmts, inLoop)
+			checkStmt(st.ElseIf, inLoop)
+			checkStmt(st.Else, inLoop)
+		case *StmtFor:
+			checkStmt(st.Stmts, true)
+		default:
+		}
+	}
+	checkStmt(funcDecl.Body, false)
+	return maxRefs
+}
+
+func annotateMaxLocalRefs(ast *Ast) {
+	for _, funcDecl := range ast.Funcs {
+		max := getMaxLocalRefs(funcDecl)
+		if max > ast.MaxLocalRefs {
+			ast.MaxLocalRefs = max
+		}
 	}
 }

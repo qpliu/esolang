@@ -1,8 +1,11 @@
 package main
 
 type Ast struct {
-	Types map[string]*Type
-	Funcs map[string]*Func
+	Types        map[string]*Type
+	Funcs        map[string]*Func
+	MaxBitIndex  int
+	MaxOffset    int
+	MaxLocalRefs int
 }
 
 func newAst() *Ast {
@@ -39,6 +42,15 @@ func (t *Type) OpaqueSize() int {
 		opaqueSize += field.Type.OpaqueSize()
 	}
 	return opaqueSize
+}
+
+func (t *Type) Contains(typeDecl *Type) bool {
+	for _, field := range t.Fields {
+		if field.Type == typeDecl || field.Type.Contains(typeDecl) {
+			return true
+		}
+	}
+	return false
 }
 
 type Func struct {
@@ -303,10 +315,16 @@ func (e *ExprFunc) IsBit() bool {
 
 func GoingOutOfScope(stmt, next Stmt) []*Var {
 	var vars []*Var
-	nextScope := next.Scope()
-	for name, v := range stmt.Scope() {
-		if _, ok := nextScope[name]; !ok {
+	if next == nil {
+		for _, v := range stmt.Scope() {
 			vars = append(vars, v)
+		}
+	} else {
+		nextScope := next.Scope()
+		for name, v := range stmt.Scope() {
+			if _, ok := nextScope[name]; !ok {
+				vars = append(vars, v)
+			}
 		}
 	}
 	return vars
