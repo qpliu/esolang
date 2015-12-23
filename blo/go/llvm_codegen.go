@@ -43,6 +43,18 @@ func LLVMCanonicalName(name string) string {
 	return buf.String()
 }
 
+type LLVMStmtAnnotation struct {
+	startBlock bool
+	blockLabel int
+	comesFrom  []Stmt
+	locals     map[string]int
+	allocas    []int
+}
+
+type LLVMExprAnnotation struct {
+	allocas []int
+}
+
 func LLVMCodeGen(ast *Ast, w io.Writer) error {
 	if err := AnnotateRuntimeLLVM(ast); err != nil {
 		return err
@@ -59,45 +71,59 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	if funcDecl.Imported {
 		return funcDecl.RuntimeLLVM(ast, funcDecl, w)
 	}
-	breakTarget := make(map[Stmt]bool)
-	WalkStmts(funcDecl.Body, func(stmt Stmt) {
-		if st, ok := stmt.(*StmtBreak); ok {
-			breakTarget[st.Next] = true
-		}
-	})
-	i := 1
-	label := make(map[Stmt]int)
-	WalkStmts(funcDecl.Body, func(stmt Stmt) {
-		if breakTarget[stmt] {
-			if _, ok := label[stmt]; !ok {
-				label[stmt] = i
-				i++
-			}
-		}
+	WalkStmts(funcDecl.Body, func(stmt Stmt, inLoop bool) {
+		stmt.LLVMAnnotation().locals = make(map[string]int)
 		switch st := stmt.(type) {
 		case *StmtIf:
-			label[st.Stmts] = i
-			i++
+			st.Stmts.LLVMAnnotation().startBlock = true
+			st.Stmts.LLVMAnnotation().comesFrom = append(st.Stmts.LLVMAnnotation().comesFrom, stmt)
 			if st.ElseIf != nil {
-				label[st.ElseIf] = i
-				i++
+				st.ElseIf.LLVMAnnotation().startBlock = true
+				st.ElseIf.LLVMAnnotation().comesFrom = append(st.ElseIf.LLVMAnnotation().comesFrom, stmt)
 			}
 			if st.Else != nil {
-				label[st.Else] = i
-				i++
+				st.Else.LLVMAnnotation().startBlock = true
+				st.Else.LLVMAnnotation().comesFrom = append(st.Else.LLVMAnnotation().comesFrom, stmt)
 			}
 			if st.Next != nil {
-				if _, ok := label[st.Next]; !ok {
-					label[st.Next] = i
-					i++
-				}
+				st.Next.LLVMAnnotation().startBlock = true
 			}
 		case *StmtFor:
-			if _, ok := label[stmt]; !ok {
-				label[stmt] = i
-				i++
+			st.LLVMAnnotation().startBlock = true
+		case *StmtBreak:
+			if st.Next != nil {
+				st.Next.LLVMAnnotation().startBlock = true
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
 		}
+	})
+	WalkStmts(funcDecl.Body, func(stmt Stmt, inLoop bool) {
+		switch st := stmt.(type) {
+		case *StmtVar:
+			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
+			}
+		case *StmtSetClear:
+			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
+			}
+		case *StmtAssign:
+			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
+			}
+		case *StmtExpr:
+			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
+			}
+		}
+	})
+	blockLabel := 0
+	WalkStmts(funcDecl.Body, func(stmt Stmt, inLoop bool) {
+		ann := stmt.LLVMAnnotation()
+		if ann.startBlock {
+			blockLabel++
+		}
+		ann.blockLabel = blockLabel
 	})
 	//...
 	return nil

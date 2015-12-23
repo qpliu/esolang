@@ -78,6 +78,7 @@ type Var struct {
 type Stmt interface {
 	Location() Location
 	Scope() map[string]*Var
+	LLVMAnnotation() *LLVMStmtAnnotation
 }
 
 type StmtBlock struct {
@@ -85,6 +86,7 @@ type StmtBlock struct {
 	Stmts    []Stmt
 	Next     Stmt
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtBlock) Location() Location {
@@ -95,12 +97,17 @@ func (s *StmtBlock) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtBlock) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtVar struct {
 	location Location
 	Var      Var
 	Expr     Expr
 	Next     Stmt
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtVar) Location() Location {
@@ -111,6 +118,10 @@ func (s *StmtVar) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtVar) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtIf struct {
 	location Location
 	Expr     Expr
@@ -119,6 +130,7 @@ type StmtIf struct {
 	Else     *StmtBlock
 	Next     Stmt
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtIf) Location() Location {
@@ -129,12 +141,17 @@ func (s *StmtIf) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtIf) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtFor struct {
 	location Location
 	Label    string
 	Stmts    *StmtBlock
 	Next     Stmt
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtFor) Location() Location {
@@ -143,6 +160,10 @@ func (s *StmtFor) Location() Location {
 
 func (s *StmtFor) Scope() map[string]*Var {
 	return s.scope
+}
+
+func (s *StmtFor) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
 }
 
 type StmtContinue struct {
@@ -157,11 +178,16 @@ func (s StmtContinue) Scope() map[string]*Var {
 	return s.Next.scope
 }
 
+func (s StmtContinue) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.Next.llvmAnn
+}
+
 type StmtBreak struct {
 	location Location
 	Label    string
 	Next     Stmt
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtBreak) Location() Location {
@@ -172,10 +198,15 @@ func (s *StmtBreak) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtBreak) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtReturn struct {
 	location Location
 	Expr     Expr
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtReturn) Location() Location {
@@ -186,12 +217,17 @@ func (s *StmtReturn) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtReturn) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtSetClear struct {
 	location Location
 	Value    bool
 	Expr     *ExprField
 	Next     Stmt
 	scope    map[string]*Var
+	llvmAnn  LLVMStmtAnnotation
 }
 
 func (s *StmtSetClear) Location() Location {
@@ -202,10 +238,15 @@ func (s *StmtSetClear) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtSetClear) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtAssign struct {
 	LValue, Expr Expr
 	Next         Stmt
 	scope        map[string]*Var
+	llvmAnn      LLVMStmtAnnotation
 }
 
 func (s *StmtAssign) Location() Location {
@@ -216,10 +257,15 @@ func (s *StmtAssign) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtAssign) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type StmtExpr struct {
-	Expr  Expr
-	Next  Stmt
-	scope map[string]*Var
+	Expr    Expr
+	Next    Stmt
+	scope   map[string]*Var
+	llvmAnn LLVMStmtAnnotation
 }
 
 func (s *StmtExpr) Location() Location {
@@ -230,16 +276,22 @@ func (s *StmtExpr) Scope() map[string]*Var {
 	return s.scope
 }
 
+func (s *StmtExpr) LLVMAnnotation() *LLVMStmtAnnotation {
+	return &s.llvmAnn
+}
+
 type Expr interface {
 	Location() Location
 	Type() *Type
 	IsBit() bool
+	LLVMAnnotation() *LLVMExprAnnotation
 }
 
 type ExprVar struct {
 	location Location
 	Name     string
 	Var      *Var
+	llvmAnn  LLVMExprAnnotation
 }
 
 func (e *ExprVar) Location() Location {
@@ -257,9 +309,14 @@ func (e *ExprVar) IsBit() bool {
 	return false
 }
 
+func (e *ExprVar) LLVMAnnotation() *LLVMExprAnnotation {
+	return &e.llvmAnn
+}
+
 type ExprField struct {
-	Name string
-	Expr Expr
+	Name    string
+	Expr    Expr
+	llvmAnn LLVMExprAnnotation
 }
 
 func (e *ExprField) Location() Location {
@@ -283,6 +340,10 @@ func (e *ExprField) IsBit() bool {
 	return e.IsValid() && e.Type() == nil
 }
 
+func (e *ExprField) LLVMAnnotation() *LLVMExprAnnotation {
+	return &e.llvmAnn
+}
+
 func (e *ExprField) IsValid() bool {
 	t := e.Expr.Type()
 	if t == nil {
@@ -301,6 +362,7 @@ type ExprFunc struct {
 	Name     string
 	Params   []Expr
 	Func     *Func
+	llvmAnn  LLVMExprAnnotation
 }
 
 func (e *ExprFunc) Location() Location {
@@ -316,6 +378,10 @@ func (e *ExprFunc) Type() *Type {
 
 func (e *ExprFunc) IsBit() bool {
 	return false
+}
+
+func (e *ExprFunc) LLVMAnnotation() *LLVMExprAnnotation {
+	return &e.llvmAnn
 }
 
 func GoingOutOfScope(stmt, next Stmt) []*Var {
@@ -335,27 +401,30 @@ func GoingOutOfScope(stmt, next Stmt) []*Var {
 	return vars
 }
 
-func WalkStmts(stmt Stmt, f func(Stmt)) {
-	switch st := stmt.(type) {
-	case nil:
-	case *StmtBlock:
-		if st != nil {
-			f(stmt)
-			for _, s := range st.Stmts {
-				WalkStmts(s, f)
+func WalkStmts(stmt Stmt, f func(Stmt, bool)) {
+	var walk func(Stmt, bool)
+	walk = func(stmt Stmt, inLoop bool) {
+		switch st := stmt.(type) {
+		case nil:
+		case *StmtBlock:
+			if st != nil {
+				f(stmt, inLoop)
+				for _, s := range st.Stmts {
+					walk(s, inLoop)
+				}
 			}
+		case *StmtIf:
+			if st != nil {
+				f(stmt, inLoop)
+				walk(st.Stmts, inLoop)
+				walk(st.ElseIf, inLoop)
+				walk(st.Else, inLoop)
+			}
+		case *StmtFor:
+			f(stmt, inLoop)
+			walk(st.Stmts, true)
+		default:
+			f(stmt, inLoop)
 		}
-	case *StmtIf:
-		if st != nil {
-			f(stmt)
-			WalkStmts(st.Stmts, f)
-			WalkStmts(st.ElseIf, f)
-			WalkStmts(st.Else, f)
-		}
-	case *StmtFor:
-		f(stmt)
-		WalkStmts(st.Stmts, f)
-	default:
-		f(stmt)
 	}
 }
