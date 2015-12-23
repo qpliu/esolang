@@ -5,6 +5,22 @@ import (
 )
 
 func testRuntime(t *testing.T, label string, funcDecl *Func, args []*Value, expected *Value) {
+	result := EvalFunc(funcDecl, args)
+	if result == nil {
+		if expected != nil {
+			t.Errorf("%s: unexpected nil result", label)
+		}
+	} else if expected == nil {
+		t.Errorf("%s: unexpected non-nil result", label)
+	} else if len(result.Bits) != len(expected.Bits) {
+		t.Errorf("%s: unexpected result size %d, expected %d", label, len(result.Bits), len(expected.Bits))
+	} else {
+		for i, b := range expected.Bits {
+			if b != result.Bits[i] {
+				t.Errorf("%s: unexpected result bit %d %v, expected %v", label, i, result.Bits[i], b)
+			}
+		}
+	}
 }
 
 func TestRuntime(t *testing.T) {
@@ -56,6 +72,9 @@ func test() result {
 `)
 	if err != nil {
 		t.Errorf("compile error: %s", err.Error())
+	}
+	if err := AnnotateRuntime(ast); err != nil {
+		t.Errorf("AnnotateRuntime error: %s", err.Error())
 	}
 
 	testRuntime(t, "test", ast.Funcs["test"], []*Value{}, &Value{Bits: []bool{false, false, false, false, false, false, true}})

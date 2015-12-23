@@ -1,5 +1,9 @@
 package main
 
+import (
+	"io"
+)
+
 type Ast struct {
 	Types        map[string]*Type
 	Funcs        map[string]*Func
@@ -54,14 +58,15 @@ func (t *Type) Contains(typeDecl *Type) bool {
 }
 
 type Func struct {
-	Location Location
-	Name     string
-	Imported bool
-	Params   []*Var
-	TypeName string
-	Type     *Type
-	Body     *StmtBlock
-	Runtime  func(*Func, []*Value) *Value
+	Location    Location
+	Name        string
+	Imported    bool
+	Params      []*Var
+	TypeName    string
+	Type        *Type
+	Body        *StmtBlock
+	Runtime     func(*Func, []*Value) *Value
+	RuntimeLLVM func(*Ast, *Func, io.Writer) error
 }
 
 type Var struct {
@@ -328,4 +333,29 @@ func GoingOutOfScope(stmt, next Stmt) []*Var {
 		}
 	}
 	return vars
+}
+
+func WalkStmts(stmt Stmt, f func(Stmt)) {
+	switch st := stmt.(type) {
+	case nil:
+	case *StmtBlock:
+		if st != nil {
+			f(stmt)
+			for _, s := range st.Stmts {
+				WalkStmts(s, f)
+			}
+		}
+	case *StmtIf:
+		if st != nil {
+			f(stmt)
+			WalkStmts(st.Stmts, f)
+			WalkStmts(st.ElseIf, f)
+			WalkStmts(st.Else, f)
+		}
+	case *StmtFor:
+		f(stmt)
+		WalkStmts(st.Stmts, f)
+	default:
+		f(stmt)
+	}
 }
