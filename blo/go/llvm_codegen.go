@@ -37,7 +37,7 @@ func LLVMCanonicalName(name string) string {
 		if rune <= unicode.MaxASCII && (unicode.IsDigit(rune) || unicode.IsLetter(rune)) {
 			buf.WriteRune(rune)
 		} else {
-			buf.WriteString(fmt.Sprintf("_%x", rune))
+			buf.WriteString(fmt.Sprintf("_%x_", rune))
 		}
 	}
 	return buf.String()
@@ -73,7 +73,7 @@ func LLVMCodeGen(ast *Ast, w io.Writer) error {
 func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 	refCountType := LLVMRefcountType(ast)
 	offsetType := LLVMOffsetType(ast)
-	if _, err := io.WriteString(w, fmt.Sprintf("declare void @llvm.memset.p0i8.%s(i8*,i8,%s,i32,i1)", offsetType, offsetType)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__clear({%s, [0 x i1]}* %%v, %s %%bitsize) { 0: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 store %s 0, %s* %%1 br label %%2 2: %%3 = phi %s [0, %%0], [%%7, %%5] %%4 = icmp lt %s %%3, %%bitsize br i1 %%4, label %%5, label %%8 5: %%6 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 1, %s %%3 store i1 0, i1* %%6 %%7 = add %s, %%3, 1 br label %%2 8: ret void }", refCountType, offsetType, refCountType, refCountType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
 		return err
 	}
 	for i := 2; i <= ast.MaxLocalRefs; i++ {
@@ -103,7 +103,7 @@ func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 				return err
 			}
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s 0 %%%d = bitcast i1* %%%d to i8* %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* null, i32 0, i32 1, %s 0 %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* null, i32 0, i32 1, %s %%bitsize %%%d = ptrtoint i1* %%%d to %s %%%d = ptrtoint i1* %%%d to %s %%%d = sub %s %%%d, %%%d call void @llvm.memset.p0i8.%s(i8* %%%d,i8 0, %s %%%d, i32 0, i1 0) ret {%s, [0 x i1]}* %%%d }", v+1, refCountType, refCountType, v, offsetType, v+2, v+1, v+3, offsetType, refCountType, offsetType, v+4, refCountType, refCountType, offsetType, v+5, v+3, offsetType, v+6, v+4, offsetType, v+7, offsetType, v+6, v+5, offsetType, v+2, offsetType, v+7, refCountType, v)); err != nil {
+		if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%%v, %%bitsize) ret {%s, [0 x i1]}* %%%d }", refCountType, v, refCountType, v)); err != nil {
 			return err
 		}
 	}
