@@ -427,4 +427,5 @@ func WalkStmts(stmt Stmt, f func(Stmt, bool)) {
 			f(stmt, inLoop)
 		}
 	}
+	walk(stmt, false)
 }

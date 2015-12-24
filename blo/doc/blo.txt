@@ -6,7 +6,7 @@ A blo program consists of type definitions and function definitions.  Execution 
 
 Syntactically, blo resembles Go.
 
-blo is statically typed.  Unlike Go, and like Java, all values are reference values.  However, references are never null -- values are allocated with all bits initialized to false when unassigned variables are first used.  Unreferenced values should be garbage collected.  Unlike Java, and like Go, struct fields are by value, not by reference, which is why recursive (including indirectly recursive) structs are not allowed.
+blo is statically typed.  Unlike Go, and like Java, all values are reference values.  However, references are never null -- values are allocated with all bits initialized to false before unassigned variables are first used.  Unreferenced values should be garbage collected.  Unlike Java, and like Go, struct fields are by value, not by reference, which is why recursive (including indirectly recursive) structs are not allowed.
 
 Lexical structure
 

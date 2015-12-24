@@ -533,20 +533,8 @@ func annotateMaxOffset(ast *Ast) {
 
 func getMaxLocalRefs(funcDecl *Func) int {
 	maxRefs := 0
-	var checkStmt func(Stmt, bool)
-	checkStmt = func(stmt Stmt, inLoop bool) {
-		switch st := stmt.(type) {
-		case *StmtBlock:
-			if st == nil {
-				return
-			}
-			for _, s := range st.Stmts {
-				checkStmt(s, inLoop)
-			}
-		case *StmtVar:
-			if !inLoop {
-				return
-			}
+	WalkStmts(funcDecl.Body, func(stmt Stmt, inLoop bool) {
+		if st, ok := stmt.(*StmtVar); ok && inLoop {
 			refs := 0
 			for _, v := range st.Scope() {
 				if st.Var.Type == v.Type || st.Var.Type.Contains(v.Type) {
@@ -556,19 +544,8 @@ func getMaxLocalRefs(funcDecl *Func) int {
 			if refs > maxRefs {
 				maxRefs = refs
 			}
-		case *StmtIf:
-			if st == nil {
-				return
-			}
-			checkStmt(st.Stmts, inLoop)
-			checkStmt(st.ElseIf, inLoop)
-			checkStmt(st.Else, inLoop)
-		case *StmtFor:
-			checkStmt(st.Stmts, true)
-		default:
 		}
-	}
-	checkStmt(funcDecl.Body, false)
+	})
 	return maxRefs
 }
 
