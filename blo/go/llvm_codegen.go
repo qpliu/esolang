@@ -76,6 +76,15 @@ func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 	if _, err := io.WriteString(w, fmt.Sprintf("define void @__clear({%s, [0 x i1]}* %%v, %s %%bitsize) { 0: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 store %s 0, %s* %%1 br label %%2 2: %%3 = phi %s [0, %%0], [%%7, %%5] %%4 = icmp lt %s %%3, %%bitsize br i1 %%4, label %%5, label %%8 5: %%6 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 1, %s %%3 store i1 0, i1* %%6 %%7 = add %s, %%3, 1 br label %%2 8: ret void }", refCountType, offsetType, refCountType, refCountType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
 		return err
 	}
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__ref({%s, [0 x i1]}* %%v) { %%0 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%1 = load %s* %%0 %%2 = add %s %%1, 1 store %s %%2, %s* %%0 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__unref({%s, [0 x i1]}* %%v) { %%0 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%1 = load %s* %%0 %%2 = sub %s %%1, 1 store %s %%2, %s* %%0 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__copy({%s, [0 x i1]}* %%srcval, %s %%srcoffset, {%s, [0 x i1]}* %%destval, %s %%destoffset, %s %%bitsize) { 0: br label %%1 1: %%2 = phi %s [0, %%0], [%%10, %%4] %%3 = icmp lt %s %%2, %%bitsize br i1 %%3, label %%4, label %%11 4: %%5 = add %s %%2, %%srcoffset %%6 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%srcval, i32 0, i32 1, %s %%5 %%7 = load i1* %%6 %%8 = add %s %%2, %%destoffset %%9 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%destval, i32 0, i32 1, %s %%8 store i1 %%7, i1* %%9 %%10 = add %s %%2, 1 br label %%1 11: ret void }", refCountType, offsetType, refCountType, offsetType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
+		return err
+	}
 	for i := 2; i <= ast.MaxLocalRefs; i++ {
 		if _, err := io.WriteString(w, fmt.Sprintf("define {%s, [0 x i1]}* @__alloc%d(%s %%bitsize", refCountType, i, offsetType)); err != nil {
 			return err
@@ -111,6 +120,8 @@ func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 }
 
 func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
+	refCountType := LLVMRefcountType(ast)
+	offsetType := LLVMOffsetType(ast)
 	if funcDecl.Imported {
 		return funcDecl.RuntimeLLVM(ast, funcDecl, w)
 	}
@@ -169,5 +180,44 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		ann.blockLabel = blockLabel
 	})
 	//...
+	if funcDecl.Type == nil {
+		if _, err := io.WriteString(w, "define void "); err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.WriteString(w, fmt.Sprintf("define {{%s, [0 x i1]}*, %s} ", refCountType, offsetType)); err != nil {
+			return err
+		}
+	}
+	if _, err := io.WriteString(w, fmt.Sprintf("@%s(", LLVMCanonicalName(funcDecl.Name))); err != nil {
+		return err
+	}
+	for i, param := range funcDecl.Params {
+		if i > 0 {
+			if _, err := io.WriteString(w, ","); err != nil {
+				return err
+			}
+		}
+		if _, err := io.WriteString(w, fmt.Sprintf("{%s, [0 x i1]}* %%pv.%s,%s %%po.%s", refCountType, LLVMCanonicalName(param.Name), offsetType, LLVMCanonicalName(param.Name))); err != nil {
+			return err
+		}
+	}
+	if funcDecl.Type != nil {
+		if len(funcDecl.Params) > 0 {
+			if _, err := io.WriteString(w, ","); err != nil {
+				return err
+			}
+		}
+		if _, err := io.WriteString(w, fmt.Sprintf("{%s, [0 x i1]}* %%rv", refCountType)); err != nil {
+			return err
+		}
+	}
+	if _, err := io.WriteString(w, ") {"); err != nil {
+		return err
+	}
+	//...
+	if _, err := io.WriteString(w, "}"); err != nil {
+		return err
+	}
 	return nil
 }
