@@ -55,8 +55,7 @@ func TestEmpty(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := `define void @a() { ret void }`
-	t.SkipNow()
+	expected := `define void @a() { entry: ret void }`
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
@@ -93,6 +92,91 @@ func TestSimple2(t *testing.T) {
 	}
 	expected := `define {{i8, [0 x i1]}*, i8} @a({i8, [0 x i1]}* %pv.a,i8 %po.a,{i8, [0 x i1]}* %rv) { %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 ret {{i8, [0 x i1]}* %pv.a, i8 %po.a} }`
 	t.SkipNow()
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestInfiniteLoop(t *testing.T) {
+	ast, err := testCompile(`func a() { for {} }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @a() { entry: br label %block1 block1: br label %block1 }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestBreak(t *testing.T) {
+	ast, err := testCompile(`func a() { for { break } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @a() { entry: br label %block1 block1: ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestBreak2(t *testing.T) {
+	ast, err := testCompile(`func a() { for { for { break } } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @a() { entry: br label %block1 block1: br label %block2 block2: br label %block1 }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestBreak3(t *testing.T) {
+	ast, err := testCompile(`func a() { for a { for { break a } } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @a() { entry: br label %block1 block1: br label %block2 block2: ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestBreak4(t *testing.T) {
+	ast, err := testCompile(`func a() { for a { for { break a } } for {} }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @a() { entry: br label %block1 block1: br label %block2 block2: br label %block3 block3: br label %block3 }`
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
