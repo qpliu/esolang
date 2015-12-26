@@ -533,7 +533,7 @@ func annotateMaxOffset(ast *Ast) {
 
 func getMaxLocalRefs(funcDecl *Func) int {
 	maxRefs := 0
-	WalkStmts(funcDecl.Body, func(stmt Stmt, inLoop bool) {
+	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		if st, ok := stmt.(*StmtVar); ok && inLoop {
 			refs := 0
 			for _, v := range st.Scope() {
@@ -545,6 +545,7 @@ func getMaxLocalRefs(funcDecl *Func) int {
 				maxRefs = refs
 			}
 		}
+		return nil
 	})
 	return maxRefs
 }

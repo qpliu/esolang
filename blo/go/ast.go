@@ -401,31 +401,100 @@ func GoingOutOfScope(stmt, next Stmt) []*Var {
 	return vars
 }
 
-func WalkStmts(stmt Stmt, f func(Stmt, bool)) {
-	var walk func(Stmt, bool)
-	walk = func(stmt Stmt, inLoop bool) {
+func WalkStmts(funcDecl *Func, f func(Stmt, bool) error) error {
+	var walk func(Stmt, bool) error
+	walk = func(stmt Stmt, inLoop bool) error {
 		switch st := stmt.(type) {
 		case nil:
 		case *StmtBlock:
 			if st != nil {
-				f(stmt, inLoop)
+				if err := f(stmt, inLoop); err != nil {
+					return err
+				}
 				for _, s := range st.Stmts {
-					walk(s, inLoop)
+					if err := walk(s, inLoop); err != nil {
+						return err
+					}
 				}
 			}
 		case *StmtIf:
 			if st != nil {
-				f(stmt, inLoop)
-				walk(st.Stmts, inLoop)
-				walk(st.ElseIf, inLoop)
-				walk(st.Else, inLoop)
+				if err := f(stmt, inLoop); err != nil {
+					return err
+				}
+				if err := walk(st.Stmts, inLoop); err != nil {
+					return err
+				}
+				if err := walk(st.ElseIf, inLoop); err != nil {
+					return err
+				}
+				if err := walk(st.Else, inLoop); err != nil {
+					return err
+				}
 			}
 		case *StmtFor:
-			f(stmt, inLoop)
-			walk(st.Stmts, true)
+			if err := f(stmt, inLoop); err != nil {
+				return err
+			}
+			if err := walk(st.Stmts, true); err != nil {
+				return err
+			}
 		default:
-			f(stmt, inLoop)
+			if err := f(stmt, inLoop); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walk(funcDecl.Body, false)
+}
+
+func WalkExprs(funcDecl *Func, f func(Stmt, bool, Expr, bool) error) error {
+	var walk func(Stmt, bool, Expr, bool) error
+	walk = func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
+		switch ex := expr.(type) {
+		case *ExprField:
+			if err := walk(stmt, inLoop, ex.Expr, inAssign); err != nil {
+				return err
+			}
+			return f(stmt, inLoop, expr, inAssign)
+		case *ExprFunc:
+			for _, param := range ex.Params {
+				if err := walk(stmt, inLoop, param, inAssign); err != nil {
+					return err
+				}
+			}
+			return f(stmt, inLoop, expr, inAssign)
+		default:
+			return f(stmt, inLoop, expr, inAssign)
 		}
 	}
-	walk(stmt, false)
+	return WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
+		switch st := stmt.(type) {
+		case *StmtVar:
+			if st.Expr == nil {
+				return nil
+			}
+			return walk(stmt, inLoop, st.Expr, true)
+		case *StmtIf:
+			return walk(stmt, inLoop, st.Expr, false)
+		case *StmtReturn:
+			if st.Expr == nil {
+				return nil
+			}
+			return walk(stmt, inLoop, st.Expr, false)
+		case *StmtSetClear:
+			return walk(stmt, inLoop, st.Expr, false)
+		case *StmtAssign:
+			if err := walk(stmt, inLoop, st.LValue, false); err != nil {
+				return err
+			}
+			_, ok := st.LValue.(*ExprVar)
+			return walk(stmt, inLoop, st.Expr, ok)
+		case *StmtExpr:
+			return walk(stmt, inLoop, st.Expr, false)
+		default:
+			return nil
+		}
+	})
 }

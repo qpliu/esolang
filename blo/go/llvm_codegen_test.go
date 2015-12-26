@@ -50,6 +50,7 @@ func TestEmpty(t *testing.T) {
 		t.Errorf("testCompile error: %s", err.Error())
 	}
 
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
 	var buf bytes.Buffer
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
@@ -67,11 +68,12 @@ func TestSimple(t *testing.T) {
 		t.Errorf("testCompile error: %s", err.Error())
 	}
 
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
 	var buf bytes.Buffer
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := `define {{i8, [0 x i1]}*, i8} @a({i8, [0 x i1]}* %rv) { ...sizeof... %a0.r = alloca/bitcast... call void @__clear({i8, [0 x i1]}* %a0.r, i8 1) call void @__ref({i8, [0 x i1]}* %a0.r) call void @__copy({i8, [0 x i1]}* %a0.r, i8 0, {i8, [0 x i1]}* %rv, i8 0, i8 1) call void @__unref({i8, [0 x i1]}* %a0.r) ret {{i8, [0 x i1]}* %rv, i8 0} }`
+	expected := `define {{i8, [0 x i1]}*, i8} @a({i8, [0 x i1]}* %rv) { %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 ... %a0.r = alloca/bitcast... call void @__clear({i8, [0 x i1]}* %a0.r, i8 1) call void @__ref({i8, [0 x i1]}* %a0.r) call void @__copy({i8, [0 x i1]}* %a0.r, i8 0, {i8, [0 x i1]}* %rv, i8 0, i8 1) call void @__unref({i8, [0 x i1]}* %a0.r) ret {{i8, [0 x i1]}* %rv, i8 0} }`
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
@@ -84,11 +86,12 @@ func TestSimple2(t *testing.T) {
 		t.Errorf("testCompile error: %s", err.Error())
 	}
 
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
 	var buf bytes.Buffer
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := `define {{i8, [0 x i1]}*, i8} @a({i8, [0 x i1]}* %pv.a,i8 %po.a,{i8, [0 x i1]}* %rv) { ret {{i8, [0 x i1]}* %pv.a, i8 %po.a} }`
+	expected := `define {{i8, [0 x i1]}*, i8} @a({i8, [0 x i1]}* %pv.a,i8 %po.a,{i8, [0 x i1]}* %rv) { %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 ret {{i8, [0 x i1]}* %pv.a, i8 %po.a} }`
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
