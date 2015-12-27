@@ -418,7 +418,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			var unrefs []int
 			for name, ref := range ann.localsOnExit {
 				if next != nil {
-					if _, ok := next.Scope()[name]; !ok {
+					if _, ok := next.LLVMAnnotation().localsOnEntry[name]; !ok {
 						continue
 					}
 				}
