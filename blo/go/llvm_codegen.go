@@ -592,8 +592,27 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtAssign:
-			io.WriteString(w, " ; assign\n")
-			//... depends on whether local variable alias or copy value
+			if lvalue, ok := st.LValue.(*ExprVar); ok {
+				val, offs, err := writeExpr(st.Expr)
+				if err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__unref({%s, [0 x i1]}* %%value%d) %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0 call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnEntry[lvalue.Var.Name], ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType, refCountType, ann.localsOnExit[lvalue.Var.Name])); err != nil {
+					return err
+				}
+			} else {
+				lval, loffs, lerr := writeExpr(st.LValue)
+				if lerr != nil {
+					return lerr
+				}
+				val, offs, err := writeExpr(st.Expr)
+				if err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize())); err != nil {
+					return err
+				}
+			}
 			if err := writeUnrefs(st.Next); err != nil {
 				return err
 			}
