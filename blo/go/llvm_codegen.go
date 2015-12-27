@@ -209,9 +209,10 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 				varName = st.Var.Name
 			}
 			for name, _ := range stmt.Scope() {
-				if prev, ok := ann.comesFrom[0].LLVMAnnotation().localsOnExit[name]; ok {
+				if name == varName {
+				} else if prev, ok := ann.comesFrom[0].LLVMAnnotation().localsOnExit[name]; ok {
 					ann.localsOnEntry[name] = prev
-				} else if name != varName {
+				} else {
 					panic("Mysteriously appearing in scope:" + name)
 				}
 			}
@@ -418,7 +419,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			var unrefs []int
 			for name, ref := range ann.localsOnExit {
 				if next != nil {
-					if _, ok := next.LLVMAnnotation().localsOnEntry[name]; !ok {
+					if _, ok := next.LLVMAnnotation().localsOnEntry[name]; ok {
 						continue
 					}
 				}
@@ -467,6 +468,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			case 1:
 				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%alloca%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], refCountType, ann.allocas[0], refCountType, ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
 					return err
+				}
+				if inLoop {
+					if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnExit[st.Var.Name])); err != nil {
+						return err
+					}
 				}
 			default:
 				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = call {%s, [0 x i1]}* @__alloc%d(", ann.localsOnExit[st.Var.Name], refCountType, len(ann.allocas))); err != nil {
