@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sort"
 	"unicode"
 )
 
@@ -44,13 +45,13 @@ func LLVMCanonicalName(name string) string {
 }
 
 type LLVMStmtAnnotation struct {
-	startBlock        bool
-	blockLabel        int
-	comesFrom         []Stmt
-	locals            map[string]int
-	oldLocalForAssign int
-	allocas           []int
-	allocaType        *Type
+	startBlock    bool
+	blockLabel    int
+	comesFrom     []Stmt
+	localsOnEntry map[string]int
+	localsOnExit  map[string]int
+	allocas       []int
+	allocaType    *Type
 }
 
 type LLVMExprAnnotation struct {
@@ -68,8 +69,13 @@ func LLVMCodeGen(ast *Ast, w io.Writer) error {
 	if err := LLVMCodeGenPrologue(ast, w); err != nil {
 		return err
 	}
-	for _, funcDecl := range ast.Funcs {
-		if err := LLVMCodeGenFunc(ast, funcDecl, w); err != nil {
+	var funcNames []string
+	for funcName, _ := range ast.Funcs {
+		funcNames = append(funcNames, funcName)
+	}
+	sort.Strings(funcNames)
+	for _, funcName := range funcNames {
+		if err := LLVMCodeGenFunc(ast, ast.Funcs[funcName], w); err != nil {
 			return err
 		}
 	}
@@ -135,7 +141,7 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		switch st := stmt.(type) {
 		case *StmtIf:
-			st.LLVMAnnotation().startBlock = true
+			st.Stmts.LLVMAnnotation().startBlock = true
 			st.Stmts.LLVMAnnotation().comesFrom = append(st.Stmts.LLVMAnnotation().comesFrom, stmt)
 			if st.ElseIf != nil {
 				st.ElseIf.LLVMAnnotation().startBlock = true
@@ -192,34 +198,59 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 	local := len(funcDecl.Params)
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
-		ann.locals = make(map[string]int)
+		ann.localsOnEntry = make(map[string]int)
 		if len(ann.comesFrom) == 0 {
 			for i, param := range funcDecl.Params {
-				ann.locals[param.Name] = i
+				ann.localsOnEntry[param.Name] = i
 			}
 		} else if len(ann.comesFrom) == 1 {
+			varName := ""
+			if st, ok := stmt.(*StmtVar); ok {
+				varName = st.Var.Name
+			}
 			for name, _ := range stmt.Scope() {
-				if prev, ok := ann.comesFrom[0].LLVMAnnotation().locals[name]; ok {
-					ann.locals[name] = prev
-				} else {
-					ann.locals[name] = local
-					local++
+				if prev, ok := ann.comesFrom[0].LLVMAnnotation().localsOnExit[name]; ok {
+					ann.localsOnEntry[name] = prev
+				} else if name != varName {
+					panic("Mysteriously appearing in scope:" + name)
 				}
 			}
 		} else {
 			if !ann.startBlock {
 				panic("Block with multiple come froms needs startBlock")
 			}
+			varName := ""
+			if st, ok := stmt.(*StmtVar); ok {
+				varName = st.Var.Name
+			}
+			var names []string
 			for name, _ := range stmt.Scope() {
-				ann.locals[name] = local
+				if name != varName {
+					names = append(names, name)
+				}
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				ann.localsOnEntry[name] = local
 				local++
 			}
 		}
+		ann.localsOnExit = ann.localsOnEntry
 		switch st := stmt.(type) {
+		case *StmtVar:
+			ann.localsOnExit = make(map[string]int)
+			for k, v := range ann.localsOnEntry {
+				ann.localsOnExit[k] = v
+			}
+			ann.localsOnExit[st.Var.Name] = local
+			local++
 		case *StmtAssign:
 			if lvalue, ok := st.LValue.(*ExprVar); ok {
-				ann.oldLocalForAssign = ann.locals[lvalue.Name]
-				ann.locals[lvalue.Name] = local
+				ann.localsOnExit = make(map[string]int)
+				for k, v := range ann.localsOnEntry {
+					ann.localsOnExit[k] = v
+				}
+				ann.localsOnExit[lvalue.Name] = local
 				local++
 			}
 		}
@@ -310,30 +341,35 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	if _, err := io.WriteString(w, ") { entry:"); err != nil {
 		return err
 	}
-	ssaName := 0
-	for _, typeDecl := range ast.Types {
-		if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* null, i32 0, i32 1, %s %d %%sizeof.%s = ptrtoint i1* %%%d to %s", ssaName, refCountType, refCountType, offsetType, typeDecl.BitSize(), LLVMCanonicalName(typeDecl.Name), ssaName, offsetType)); err != nil {
+	ssaTemp := 0
+	var typeNames []string
+	for typeName, _ := range ast.Types {
+		typeNames = append(typeNames, typeName)
+	}
+	sort.Strings(typeNames)
+	for _, typeName := range typeNames {
+		if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* null, i32 0, i32 1, %s %d %%sizeof.%s = ptrtoint i1* %%%d to %s", ssaTemp, refCountType, refCountType, offsetType, ast.Types[typeName].BitSize(), LLVMCanonicalName(typeName), ssaTemp, offsetType)); err != nil {
 			return err
 		}
-		ssaName += 1
+		ssaTemp += 1
 	}
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %d to {%s, [0 x i1]}*", ssaName, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaName, refCountType)); err != nil {
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
 				return err
 			}
-			ssaName += 1
+			ssaTemp += 1
 		}
 		return nil
 	})
 	WalkExprs(funcDecl, func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
 		ann := expr.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %d to {%s, [0 x i1]}*", ssaName, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaName, refCountType)); err != nil {
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
 				return err
 			}
-			ssaName += 1
+			ssaTemp += 1
 		}
 		return nil
 	})
@@ -360,6 +396,16 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			return err
 		}
 	}
+	var writeExpr func(Expr) (int, int, error)
+	writeExpr = func(expr Expr) (int, int, error) {
+		//...
+		value := ssaTemp
+		ssaTemp++
+		offset := ssaTemp
+		ssaTemp++
+		io.WriteString(w, fmt.Sprintf(" ; expr\n %%%d = expr value %%%d = expr offset", value, offset))
+		return value, offset, nil
+	}
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		if ann.startBlock {
@@ -369,7 +415,21 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			//... phis
 		}
 		writeUnrefs := func(next Stmt) error {
-			//...
+			var unrefs []int
+			for name, ref := range ann.localsOnExit {
+				if next != nil {
+					if _, ok := next.Scope()[name]; !ok {
+						continue
+					}
+				}
+				unrefs = append(unrefs, ref)
+			}
+			sort.Ints(unrefs)
+			for _, unref := range unrefs {
+				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__unref({%s, [0 x i1]}* %%value%d)", refCountType, unref)); err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 		writeGotoNext := func(next Stmt) error {
@@ -401,8 +461,31 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 			}
 		case *StmtVar:
-			io.WriteString(w, " ; var\n")
-			//...
+			switch len(ann.allocas) {
+			case 0:
+				panic("No allocations for var statement")
+			case 1:
+				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%alloca%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], refCountType, ann.allocas[0], refCountType, ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
+					return err
+				}
+			default:
+				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = call {%s, [0 x i1]}* @__alloc%d(", ann.localsOnExit[st.Var.Name], refCountType, len(ann.allocas))); err != nil {
+					return err
+				}
+				comma := ""
+				for _, alloca := range ann.allocas {
+					if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca)); err != nil {
+						return err
+					}
+					comma = ","
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(") %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
+					return err
+				}
+			}
+			if _, err := io.WriteString(w, fmt.Sprintf(" call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnExit[st.Var.Name])); err != nil {
+				return err
+			}
 			if err := writeUnrefs(st.Next); err != nil {
 				return err
 			}
@@ -410,8 +493,45 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtIf:
-			io.WriteString(w, " ; if\n")
-			//...
+			val, offs, err := writeExpr(st.Expr)
+			if err != nil {
+				return err
+			}
+			addr := ssaTemp
+			cond := ssaTemp + 1
+			ssaTemp += 2
+			var elseBlock string
+			var elseBlockLabel int
+			writeElseReturn := false
+			if st.ElseIf != nil {
+				elseBlock = fmt.Sprintf("%%block%d", st.ElseIf.LLVMAnnotation().blockLabel)
+			} else if st.Else != nil {
+				elseBlock = fmt.Sprintf("%%block%d", st.Else.LLVMAnnotation().blockLabel)
+			} else if st.Next != nil {
+				elseBlock = fmt.Sprintf("%%block%d", st.Next.LLVMAnnotation().blockLabel)
+			} else {
+				elseBlock = fmt.Sprintf("%%%d", ssaTemp)
+				elseBlockLabel = ssaTemp
+				ssaTemp++
+				writeElseReturn = true
+				if funcDecl.Type != nil {
+					panic("no return statement")
+				}
+			}
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s %%%d %%%d = load i1, i1* %%%d br i1 %%%d, label %%block%d, label %s", addr, refCountType, refCountType, val, offsetType, offs, cond, addr, cond, st.Stmts.LLVMAnnotation().blockLabel, elseBlock)); err != nil {
+				return err
+			}
+			if writeElseReturn {
+				if _, err := io.WriteString(w, fmt.Sprintf(" %d:", elseBlockLabel)); err != nil {
+					return err
+				}
+				if err := writeUnrefs(nil); err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, " ret void"); err != nil {
+					return err
+				}
+			}
 		case *StmtFor:
 		case StmtContinue:
 			// unrefs should be taken care of by previous stmt
@@ -426,14 +546,39 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtReturn:
-			io.WriteString(w, " ; return\n")
-			if err := writeUnrefs(nil); err != nil {
+			if st.Expr == nil {
+				if err := writeUnrefs(nil); err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, " ret void"); err != nil {
+					return err
+				}
+			} else {
+				val, offs, err := writeExpr(st.Expr)
+				if err != nil {
+					return err
+				}
+				if err := writeUnrefs(nil); err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(" ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%%d, %s %%%d", refCountType, offsetType, refCountType, val, offsetType, offs)); err != nil {
+					return err
+				}
+			}
+		case *StmtSetClear:
+			val, offs, err := writeExpr(st.Expr)
+			if err != nil {
 				return err
 			}
-			//...
-		case *StmtSetClear:
-			io.WriteString(w, " ; set/clear\n")
-			//...
+			addr := ssaTemp
+			ssaTemp++
+			bit := 0
+			if st.Value {
+				bit = 1
+			}
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s %%%d store i1 %d, i1* %%%d", addr, refCountType, refCountType, val, offsetType, offs, bit, addr)); err != nil {
+				return err
+			}
 			if err := writeUnrefs(st.Next); err != nil {
 				return err
 			}
@@ -442,7 +587,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 		case *StmtAssign:
 			io.WriteString(w, " ; assign\n")
-			//...
+			//... depends on whether local variable alias or copy value
 			if err := writeUnrefs(st.Next); err != nil {
 				return err
 			}
@@ -450,8 +595,9 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtExpr:
-			io.WriteString(w, " ; expr\n")
-			//...
+			if _, _, err := writeExpr(st.Expr); err != nil {
+				return err
+			}
 			if err := writeUnrefs(st.Next); err != nil {
 				return err
 			}
