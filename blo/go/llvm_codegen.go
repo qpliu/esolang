@@ -397,8 +397,8 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			return err
 		}
 	}
-	var writeExpr func(Stmt, Expr) (int, int, error)
-	writeExpr = func(stmt Stmt, expr Expr) (int, int, error) {
+	var writeExpr func(Stmt, Expr, bool) (int, int, error)
+	writeExpr = func(stmt Stmt, expr Expr, inLoop bool) (int, int, error) {
 		switch ex := expr.(type) {
 		case *ExprVar:
 			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%%d = select i1 1, %s %%offset%d, %s 0", ssaTemp, refCountType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], refCountType, ssaTemp+1, offsetType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], offsetType)); err != nil {
@@ -407,7 +407,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			ssaTemp += 2
 			return ssaTemp - 2, ssaTemp - 1, nil
 		case *ExprField:
-			val, offs, err := writeExpr(stmt, ex.Expr)
+			val, offs, err := writeExpr(stmt, ex.Expr, inLoop)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -419,7 +419,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		case *ExprFunc:
 			var args [][2]int
 			for _, param := range ex.Params {
-				val, offs, err := writeExpr(stmt, param)
+				val, offs, err := writeExpr(stmt, param, inLoop)
 				if err != nil {
 					return 0, 0, err
 				}
@@ -440,9 +440,10 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				retValAlloc = fmt.Sprintf("%%alloca%d", exprAnn.allocas[0])
 				retVal = ssaTemp
 				ssaTemp++
-				//... only call @__clear if inLoop
-				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, retValAlloc, offsetType, exprAnn.allocaType.BitSize())); err != nil {
-					return 0, 0, err
+				if inLoop {
+					if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, retValAlloc, offsetType, exprAnn.allocaType.BitSize())); err != nil {
+						return 0, 0, err
+					}
 				}
 				if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType)); err != nil {
 					return 0, 0, err
@@ -589,7 +590,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtIf:
-			val, offs, err := writeExpr(stmt, st.Expr)
+			val, offs, err := writeExpr(stmt, st.Expr, inLoop)
 			if err != nil {
 				return err
 			}
@@ -647,7 +648,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return err
 				}
 			} else {
-				val, offs, err := writeExpr(stmt, st.Expr)
+				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
@@ -671,7 +672,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				ssaTemp++
 			}
 		case *StmtSetClear:
-			val, offs, err := writeExpr(stmt, st.Expr)
+			val, offs, err := writeExpr(stmt, st.Expr, inLoop)
 			if err != nil {
 				return err
 			}
@@ -692,7 +693,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 		case *StmtAssign:
 			if lvalue, ok := st.LValue.(*ExprVar); ok {
-				val, offs, err := writeExpr(stmt, st.Expr)
+				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
@@ -700,11 +701,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return err
 				}
 			} else {
-				lval, loffs, lerr := writeExpr(stmt, st.LValue)
+				lval, loffs, lerr := writeExpr(stmt, st.LValue, inLoop)
 				if lerr != nil {
 					return lerr
 				}
-				val, offs, err := writeExpr(stmt, st.Expr)
+				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
@@ -719,7 +720,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtExpr:
-			if _, _, err := writeExpr(stmt, st.Expr); err != nil {
+			if _, _, err := writeExpr(stmt, st.Expr, inLoop); err != nil {
 				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
