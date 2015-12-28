@@ -167,19 +167,19 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		switch st := stmt.(type) {
 		case *StmtVar:
-			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+			if st.Next != nil {
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
 		case *StmtSetClear:
-			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+			if st.Next != nil {
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
 		case *StmtAssign:
-			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+			if st.Next != nil {
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
 		case *StmtExpr:
-			if st.Next != nil && st.Next.LLVMAnnotation().startBlock {
+			if st.Next != nil {
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
 		}
