@@ -73,6 +73,7 @@ func TestSimple(t *testing.T) {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
 	expected := ``
+	//... BUG: The @__unref calls are in the wrong place
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
@@ -90,8 +91,7 @@ func TestSimple2(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := ``
-	t.SkipNow()
+	expected := `define {{i8, [0 x i1]}*, i8} @a({i8, [0 x i1]}* %value0,i8 %offset0,{i8, [0 x i1]}* %retval) { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 call void @__ref({i8, [0 x i1]}* %value0) br label %block1 block1: %1 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %2 = select i1 1, i8 %offset0, i8 0 call void @__unref({i8, [0 x i1]}* %value0) %3 = icmp eq {i8, [0 x i1]}* %1, %value0 br i1 %3, label %4, label %5 4: ret {{i8, [0 x i1]}*, i8} {{i8, [0 x i1]}* %1, i8 %2} 5: call void @__copy({i8, [0 x i1]}* %1, i8 %2, {i8, [0 x i1]}* %retval, i8 0, i8 1) ret {{i8, [0 x i1]}*, i8} {{i8, [0 x i1]}* %retval, i8 0} }`
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}

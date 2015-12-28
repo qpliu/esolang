@@ -657,8 +657,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err := writeUnrefs(nil); err != nil {
 					return err
 				}
-				//... copy into retval unless val aliases one of params
-				if _, err := io.WriteString(w, fmt.Sprintf(" ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%%d, %s %%%d}", refCountType, offsetType, refCountType, val, offsetType, offs)); err != nil {
+				for i, _ := range funcDecl.Params {
+					if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%%d, label %%%d %d: ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%%d, %s %%%d} %d:", ssaTemp, refCountType, val, i, ssaTemp, ssaTemp+1, ssaTemp+2, ssaTemp+1, refCountType, offsetType, refCountType, val, offsetType, offs, ssaTemp+2)); err != nil {
+						return err
+					}
+					ssaTemp += 3
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%retval, %s 0}", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), refCountType, offsetType, refCountType, offsetType)); err != nil {
 					return err
 				}
 			}
