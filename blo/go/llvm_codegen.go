@@ -272,7 +272,7 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 			return nil
 		}
 		for name, v := range st.Scope() {
-			if name != st.Var.Name && st.Var.Type.Contains(v.Type) {
+			if name != st.Var.Name && (st.Var.Type == v.Type || st.Var.Type.Contains(v.Type)) {
 				ann.allocas = append(ann.allocas, alloca)
 				alloca++
 			}
@@ -292,7 +292,7 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 			return nil
 		}
 		for _, v := range stmt.Scope() {
-			if ex.Func.Type.Contains(v.Type) {
+			if ex.Func.Type == v.Type || ex.Func.Type.Contains(v.Type) {
 				ann.allocas = append(ann.allocas, alloca)
 				alloca++
 			}
@@ -357,7 +357,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %%%d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
 				return err
 			}
 			ssaTemp += 1
@@ -367,7 +367,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkExprs(funcDecl, func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
 		ann := expr.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %%%d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
 				return err
 			}
 			ssaTemp += 1
@@ -560,7 +560,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return err
 				}
 				if inLoop {
-					if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnExit[st.Var.Name])); err != nil {
+					if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%value%d, %s %d)", refCountType, ann.localsOnExit[st.Var.Name], offsetType, st.Var.Type.BitSize())); err != nil {
 						return err
 					}
 				}
@@ -597,7 +597,6 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			cond := ssaTemp + 1
 			ssaTemp += 2
 			var elseBlock string
-			var elseBlockLabel int
 			writeElseReturn := false
 			if st.ElseIf != nil {
 				elseBlock = fmt.Sprintf("%%block%d", st.ElseIf.LLVMAnnotation().blockLabel)
@@ -606,9 +605,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			} else if st.Next != nil {
 				elseBlock = fmt.Sprintf("%%block%d", st.Next.LLVMAnnotation().blockLabel)
 			} else {
-				elseBlock = fmt.Sprintf("%%%d", ssaTemp)
-				elseBlockLabel = ssaTemp
-				ssaTemp++
+				elseBlock = fmt.Sprintf("%%block%d.0", ann.blockLabel)
 				writeElseReturn = true
 				if funcDecl.Type != nil {
 					panic("no return statement")
@@ -618,7 +615,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 			if writeElseReturn {
-				if _, err := io.WriteString(w, fmt.Sprintf(" %d:", elseBlockLabel)); err != nil {
+				if _, err := io.WriteString(w, fmt.Sprintf(" block%d.0:", ann.blockLabel)); err != nil {
 					return err
 				}
 				if err := writeUnrefs(nil); err != nil {
@@ -657,15 +654,21 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err := writeUnrefs(nil); err != nil {
 					return err
 				}
-				for i, _ := range funcDecl.Params {
-					if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%%d, label %%%d %d: ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%%d, %s %%%d} %d:", ssaTemp, refCountType, val, i, ssaTemp, ssaTemp+1, ssaTemp+2, ssaTemp+1, refCountType, offsetType, refCountType, val, offsetType, offs, ssaTemp+2)); err != nil {
+				subblockLabel := 0
+				for i, param := range funcDecl.Params {
+					if param.Type != st.Expr.Type() && !param.Type.Contains(st.Expr.Type()) {
+						continue
+					}
+					if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%block%d.%d, label %%block%d.%d block%d.%d: %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%%d, 0 %%%d = insertvalue {{%s, [0 x i1]}*, %s} %%%d, %s %%%d, 1 ret {{%s, [0 x i1]}*, %s} %%%d block%d.%d:", ssaTemp, refCountType, val, i, ssaTemp, ann.blockLabel, subblockLabel, ann.blockLabel, subblockLabel+1, ann.blockLabel, subblockLabel, ssaTemp+1, refCountType, offsetType, refCountType, offsetType, refCountType, val, ssaTemp+2, refCountType, offsetType, ssaTemp+1, offsetType, offs, refCountType, offsetType, ssaTemp+2, ann.blockLabel, subblockLabel+1)); err != nil {
 						return err
 					}
+					subblockLabel += 2
 					ssaTemp += 3
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%retval, %s 0}", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), refCountType, offsetType, refCountType, offsetType)); err != nil {
+				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retval, 0 ret {{%s, [0 x i1]}*, %s} %%%d", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), ssaTemp, refCountType, offsetType, refCountType, offsetType, refCountType, refCountType, offsetType, ssaTemp)); err != nil {
 					return err
 				}
+				ssaTemp++
 			}
 		case *StmtSetClear:
 			val, offs, err := writeExpr(stmt, st.Expr)

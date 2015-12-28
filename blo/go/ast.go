@@ -50,7 +50,7 @@ func (t *Type) OpaqueSize() int {
 
 func (t *Type) Contains(typeDecl *Type) bool {
 	for _, field := range t.Fields {
-		if field.Type == typeDecl || field.Type.Contains(typeDecl) {
+		if field.Type != nil && (field.Type == typeDecl || field.Type.Contains(typeDecl)) {
 			return true
 		}
 	}
