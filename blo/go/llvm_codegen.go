@@ -85,16 +85,16 @@ func LLVMCodeGen(ast *Ast, w io.Writer) error {
 func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 	refCountType := LLVMRefcountType(ast)
 	offsetType := LLVMOffsetType(ast)
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__clear({%s, [0 x i1]}* %%v, %s %%bitsize) { 0: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 store %s 0, %s* %%1 br label %%2 2: %%3 = phi %s [0, %%0], [%%7, %%5] %%4 = icmp lt %s %%3, %%bitsize br i1 %%4, label %%5, label %%8 5: %%6 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 1, %s %%3 store i1 0, i1* %%6 %%7 = add %s, %%3, 1 br label %%2 8: ret void }", refCountType, offsetType, refCountType, refCountType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__clear({%s, [0 x i1]}* %%v, %s %%bitsize) { br label %%l0 l0: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 store %s 0, %s* %%1 br label %%l1 l1: %%2 = phi %s [0, %%l0], [%%5, %%l2] %%3 = icmp ult %s %%2, %%bitsize br i1 %%3, label %%l2, label %%l3 l2: %%4 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 1, %s %%2 store i1 0, i1* %%4 %%5 = add %s %%2, 1 br label %%l1 l3: ret void }", refCountType, offsetType, refCountType, refCountType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__ref({%s, [0 x i1]}* %%v) { %%0 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%1 = load %s* %%0 %%2 = add %s %%1, 1 store %s %%2, %s* %%0 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__ref({%s, [0 x i1]}* %%v) { %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = add %s %%2, 1 store %s %%3, %s* %%1 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__unref({%s, [0 x i1]}* %%v) { %%0 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%1 = load %s* %%0 %%2 = sub %s %%1, 1 store %s %%2, %s* %%0 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__unref({%s, [0 x i1]}* %%v) { %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = sub %s %%2, 1 store %s %%3, %s* %%1 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__copy({%s, [0 x i1]}* %%srcval, %s %%srcoffset, {%s, [0 x i1]}* %%destval, %s %%destoffset, %s %%bitsize) { 0: br label %%1 1: %%2 = phi %s [0, %%0], [%%10, %%4] %%3 = icmp lt %s %%2, %%bitsize br i1 %%3, label %%4, label %%11 4: %%5 = add %s %%2, %%srcoffset %%6 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%srcval, i32 0, i32 1, %s %%5 %%7 = load i1* %%6 %%8 = add %s %%2, %%destoffset %%9 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%destval, i32 0, i32 1, %s %%8 store i1 %%7, i1* %%9 %%10 = add %s %%2, 1 br label %%1 11: ret void }", refCountType, offsetType, refCountType, offsetType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @__copy({%s, [0 x i1]}* %%srcval, %s %%srcoffset, {%s, [0 x i1]}* %%destval, %s %%destoffset, %s %%bitsize) { br label %%l1 l1: %%1 = phi %s [0, %%0], [%%8, %%l2] %%2 = icmp ult %s %%1, %%bitsize br i1 %%2, label %%l2, label %%l3 l2: %%3 = add %s %%1, %%srcoffset %%4 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%srcval, i32 0, i32 1, %s %%3 %%5 = load i1, i1* %%4 %%6 = add %s %%1, %%destoffset %%7 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%destval, i32 0, i32 1, %s %%6 store i1 %%5, i1* %%7 %%8 = add %s %%1, 1 br label %%l1 l3: ret void }", refCountType, offsetType, refCountType, offsetType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
 		return err
 	}
 	for i := 2; i <= ast.MaxLocalRefs; i++ {
@@ -124,7 +124,7 @@ func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 				return err
 			}
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%%v, %%bitsize) ret {%s, [0 x i1]}* %%%d }", refCountType, v, refCountType, v)); err != nil {
+		if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%%v, %s %%bitsize) ret {%s, [0 x i1]}* %%%d }", refCountType, v, offsetType, refCountType, v)); err != nil {
 			return err
 		}
 	}
