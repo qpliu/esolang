@@ -57,6 +57,17 @@ func (t *Type) Contains(typeDecl *Type) bool {
 	return false
 }
 
+func (t *Type) BitOffset(fieldName string) int {
+	offset := 0
+	for _, field := range t.Fields {
+		if fieldName == field.Name {
+			return offset
+		}
+		offset += field.Type.BitSize()
+	}
+	panic("Unknown field " + fieldName)
+}
+
 type Func struct {
 	Location    Location
 	Name        string

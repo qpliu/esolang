@@ -397,15 +397,105 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			return err
 		}
 	}
-	var writeExpr func(Expr) (int, int, error)
-	writeExpr = func(expr Expr) (int, int, error) {
-		//...
-		value := ssaTemp
-		ssaTemp++
-		offset := ssaTemp
-		ssaTemp++
-		io.WriteString(w, fmt.Sprintf(" ; expr\n %%%d = expr value %%%d = expr offset", value, offset))
-		return value, offset, nil
+	var writeExpr func(Stmt, Expr) (int, int, error)
+	writeExpr = func(stmt Stmt, expr Expr) (int, int, error) {
+		switch ex := expr.(type) {
+		case *ExprVar:
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%%d = select i1 1, %s %%offset%d, %s 0", ssaTemp, refCountType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], refCountType, ssaTemp+1, offsetType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], offsetType)); err != nil {
+				return 0, 0, err
+			}
+			ssaTemp += 2
+			return ssaTemp - 2, ssaTemp - 1, nil
+		case *ExprField:
+			val, offs, err := writeExpr(stmt, ex.Expr)
+			if err != nil {
+				return 0, 0, err
+			}
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = add %s %%%d, %d", ssaTemp, offsetType, offs, ex.Expr.Type().BitOffset(ex.Name))); err != nil {
+				return 0, 0, err
+			}
+			ssaTemp += 1
+			return val, ssaTemp - 1, nil
+		case *ExprFunc:
+			var args [][2]int
+			for _, param := range ex.Params {
+				val, offs, err := writeExpr(stmt, param)
+				if err != nil {
+					return 0, 0, err
+				}
+				args = append(args, [2]int{val, offs})
+			}
+			exprAnn := expr.LLVMAnnotation()
+			retVal := 0
+			retValAlloc := ""
+			switch len(exprAnn.allocas) {
+			case 0:
+				if expr.Type() != nil {
+					panic("expr function")
+				}
+				if _, err := io.WriteString(w, " call void"); err != nil {
+					return 0, 0, err
+				}
+			case 1:
+				retValAlloc = fmt.Sprintf("%%alloca%d", exprAnn.allocas[0])
+				retVal = ssaTemp
+				ssaTemp++
+				//... only call @__clear if inLoop
+				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, retValAlloc, offsetType, exprAnn.allocaType.BitSize())); err != nil {
+					return 0, 0, err
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType)); err != nil {
+					return 0, 0, err
+				}
+			default:
+				retValAlloc = fmt.Sprintf("%%%d", ssaTemp)
+				retVal = ssaTemp + 1
+				ssaTemp += 2
+				if _, err := io.WriteString(w, fmt.Sprintf(" %s = call {%s, [0 x i1]}* @__alloc%d(", retValAlloc, refCountType, len(exprAnn.allocas))); err != nil {
+					return 0, 0, err
+				}
+				comma := ""
+				for _, alloca := range exprAnn.allocas {
+					if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca)); err != nil {
+						return 0, 0, err
+					}
+					comma = ","
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(") %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType)); err != nil {
+					return 0, 0, err
+				}
+			}
+			if _, err := io.WriteString(w, fmt.Sprintf(" @%s(", LLVMCanonicalName(ex.Name))); err != nil {
+				return 0, 0, err
+			}
+			comma := ""
+			for _, arg := range args {
+				if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%%d, %s %%%d", comma, refCountType, arg[0], offsetType, arg[1])); err != nil {
+					return 0, 0, err
+				}
+				comma = ","
+			}
+			if len(exprAnn.allocas) != 1 {
+				if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %s", comma, refCountType, retValAlloc)); err != nil {
+					return 0, 0, err
+				}
+			}
+			if _, err := io.WriteString(w, ")"); err != nil {
+				return 0, 0, err
+			}
+			if len(exprAnn.allocas) == 1 {
+				return 0, 0, nil
+			}
+			val := ssaTemp
+			offs := ssaTemp + 1
+			ssaTemp += 2
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, i32 0 %%%d = extractvalue {{%s [0 x i1]}*, %s} %%%d, i32 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal)); err != nil {
+				return 0, 0, err
+			}
+			return val, offs, nil
+		default:
+			panic("Unknown expr type")
+		}
 	}
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
@@ -499,7 +589,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtIf:
-			val, offs, err := writeExpr(st.Expr)
+			val, offs, err := writeExpr(stmt, st.Expr)
 			if err != nil {
 				return err
 			}
@@ -560,19 +650,20 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return err
 				}
 			} else {
-				val, offs, err := writeExpr(st.Expr)
+				val, offs, err := writeExpr(stmt, st.Expr)
 				if err != nil {
 					return err
 				}
 				if err := writeUnrefs(nil); err != nil {
 					return err
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%%d, %s %%%d", refCountType, offsetType, refCountType, val, offsetType, offs)); err != nil {
+				//... copy into retval unless val aliases one of params
+				if _, err := io.WriteString(w, fmt.Sprintf(" ret {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* %%%d, %s %%%d}", refCountType, offsetType, refCountType, val, offsetType, offs)); err != nil {
 					return err
 				}
 			}
 		case *StmtSetClear:
-			val, offs, err := writeExpr(st.Expr)
+			val, offs, err := writeExpr(stmt, st.Expr)
 			if err != nil {
 				return err
 			}
@@ -593,7 +684,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 		case *StmtAssign:
 			if lvalue, ok := st.LValue.(*ExprVar); ok {
-				val, offs, err := writeExpr(st.Expr)
+				val, offs, err := writeExpr(stmt, st.Expr)
 				if err != nil {
 					return err
 				}
@@ -601,11 +692,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return err
 				}
 			} else {
-				lval, loffs, lerr := writeExpr(st.LValue)
+				lval, loffs, lerr := writeExpr(stmt, st.LValue)
 				if lerr != nil {
 					return lerr
 				}
-				val, offs, err := writeExpr(st.Expr)
+				val, offs, err := writeExpr(stmt, st.Expr)
 				if err != nil {
 					return err
 				}
@@ -620,7 +711,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtExpr:
-			if _, _, err := writeExpr(st.Expr); err != nil {
+			if _, _, err := writeExpr(stmt, st.Expr); err != nil {
 				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
