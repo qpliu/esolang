@@ -504,7 +504,35 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			if _, err := io.WriteString(w, fmt.Sprintf(" block%d:", ann.blockLabel)); err != nil {
 				return err
 			}
-			//... phis
+			if len(ann.comesFrom) > 1 {
+				var vars []string
+				for name, _ := range ann.localsOnEntry {
+					vars = append(vars, name)
+				}
+				sort.Strings(vars)
+				for _, v := range vars {
+					if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = phi {%s, [0 x i1]}* ", ann.localsOnEntry[v], refCountType)); err != nil {
+						return err
+					}
+					comma := ""
+					for _, prev := range ann.comesFrom {
+						if _, err := io.WriteString(w, fmt.Sprintf("%s[%%value%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel)); err != nil {
+							return err
+						}
+						comma = ","
+					}
+					if _, err := io.WriteString(w, fmt.Sprintf(" %%offset%d = phi %s ", ann.localsOnEntry[v], offsetType)); err != nil {
+						return err
+					}
+					comma = ""
+					for _, prev := range ann.comesFrom {
+						if _, err := io.WriteString(w, fmt.Sprintf("%s[%%offset%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel)); err != nil {
+							return err
+						}
+						comma = ","
+					}
+				}
+			}
 		}
 		writeUnrefs := func(next Stmt) error {
 			var unrefs []int
