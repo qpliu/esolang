@@ -496,7 +496,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			val := ssaTemp
 			offs := ssaTemp + 1
 			ssaTemp += 2
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, i32 0 %%%d = extractvalue {{%s [0 x i1]}*, %s} %%%d, i32 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal)); err != nil {
+			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal)); err != nil {
 				return 0, 0, err
 			}
 			return val, offs, nil
