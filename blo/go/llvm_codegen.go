@@ -85,46 +85,46 @@ func LLVMCodeGen(ast *Ast, w io.Writer) error {
 func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 	refCountType := LLVMRefcountType(ast)
 	offsetType := LLVMOffsetType(ast)
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__clear({%s, [0 x i1]}* %%v, %s %%bitsize) { br label %%l0 l0: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 store %s 0, %s* %%1 br label %%l1 l1: %%2 = phi %s [0, %%l0], [%%5, %%l2] %%3 = icmp ult %s %%2, %%bitsize br i1 %%3, label %%l2, label %%l3 l2: %%4 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 1, %s %%2 store i1 0, i1* %%4 %%5 = add %s %%2, 1 br label %%l1 l3: ret void }", refCountType, offsetType, refCountType, refCountType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
+	if _, err := fmt.Fprintf(w, "define void @__clear({%s, [0 x i1]}* %%v, %s %%bitsize) { br label %%l0 l0: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 store %s 0, %s* %%1 br label %%l1 l1: %%2 = phi %s [0, %%l0], [%%5, %%l2] %%3 = icmp ult %s %%2, %%bitsize br i1 %%3, label %%l2, label %%l3 l2: %%4 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 1, %s %%2 store i1 0, i1* %%4 %%5 = add %s %%2, 1 br label %%l1 l3: ret void }", refCountType, offsetType, refCountType, refCountType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__ref({%s, [0 x i1]}* %%v) { %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = add %s %%2, 1 store %s %%3, %s* %%1 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
+	if _, err := fmt.Fprintf(w, "define void @__ref({%s, [0 x i1]}* %%v) { %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = add %s %%2, 1 store %s %%3, %s* %%1 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__unref({%s, [0 x i1]}* %%v) { %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = sub %s %%2, 1 store %s %%3, %s* %%1 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType)); err != nil {
+	if _, err := fmt.Fprintf(w, "define void @__unref({%s, [0 x i1]}* %%v) { %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%v, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = sub %s %%2, 1 store %s %%3, %s* %%1 ret void }", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("define void @__copy({%s, [0 x i1]}* %%srcval, %s %%srcoffset, {%s, [0 x i1]}* %%destval, %s %%destoffset, %s %%bitsize) { br label %%l1 l1: %%1 = phi %s [0, %%0], [%%8, %%l2] %%2 = icmp ult %s %%1, %%bitsize br i1 %%2, label %%l2, label %%l3 l2: %%3 = add %s %%1, %%srcoffset %%4 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%srcval, i32 0, i32 1, %s %%3 %%5 = load i1, i1* %%4 %%6 = add %s %%1, %%destoffset %%7 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%destval, i32 0, i32 1, %s %%6 store i1 %%5, i1* %%7 %%8 = add %s %%1, 1 br label %%l1 l3: ret void }", refCountType, offsetType, refCountType, offsetType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType)); err != nil {
+	if _, err := fmt.Fprintf(w, "define void @__copy({%s, [0 x i1]}* %%srcval, %s %%srcoffset, {%s, [0 x i1]}* %%destval, %s %%destoffset, %s %%bitsize) { br label %%l1 l1: %%1 = phi %s [0, %%0], [%%8, %%l2] %%2 = icmp ult %s %%1, %%bitsize br i1 %%2, label %%l2, label %%l3 l2: %%3 = add %s %%1, %%srcoffset %%4 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%srcval, i32 0, i32 1, %s %%3 %%5 = load i1, i1* %%4 %%6 = add %s %%1, %%destoffset %%7 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%destval, i32 0, i32 1, %s %%6 store i1 %%5, i1* %%7 %%8 = add %s %%1, 1 br label %%l1 l3: ret void }", refCountType, offsetType, refCountType, offsetType, offsetType, offsetType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType, refCountType, refCountType, offsetType, offsetType); err != nil {
 		return err
 	}
 	for i := 2; i <= ast.MaxLocalRefs; i++ {
-		if _, err := io.WriteString(w, fmt.Sprintf("define {%s, [0 x i1]}* @__alloc%d(%s %%bitsize", refCountType, i, offsetType)); err != nil {
+		if _, err := fmt.Fprintf(w, "define {%s, [0 x i1]}* @__alloc%d(%s %%bitsize", refCountType, i, offsetType); err != nil {
 			return err
 		}
 		for j := 0; j < i; j++ {
-			if _, err := io.WriteString(w, fmt.Sprintf(",{%s, [0 x i1]}* %%a%d", refCountType, j)); err != nil {
+			if _, err := fmt.Fprintf(w, ",{%s, [0 x i1]}* %%a%d", refCountType, j); err != nil {
 				return err
 			}
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf(") {")); err != nil {
+		if _, err := fmt.Fprintf(w, ") {"); err != nil {
 			return err
 		}
 		v := 0
 		for j := 0; j < i; j++ {
-			if _, err := io.WriteString(w, fmt.Sprintf(" l%d: %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%a%d, i32 0, i32 0 %%%d = load %s, %s* %%%d %%%d = icmp eq %s %%%d, 0 br i1 %%%d, label %%l%d, label %%l%d", j, v, refCountType, refCountType, j, v+1, refCountType, refCountType, v, v+2, refCountType, v+1, v+2, i+1, j+1)); err != nil {
+			if _, err := fmt.Fprintf(w, " l%d: %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%a%d, i32 0, i32 0 %%%d = load %s, %s* %%%d %%%d = icmp eq %s %%%d, 0 br i1 %%%d, label %%l%d, label %%l%d", j, v, refCountType, refCountType, j, v+1, refCountType, refCountType, v, v+2, refCountType, v+1, v+2, i+1, j+1); err != nil {
 				return err
 			}
 			v += 3
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf(" l%d: ret {%s, [0 x i1]}* null ; panic - this should not happen\nl%d: %%%d = phi {%s, [0 x i1]}* [%%a0, %%l0]", i, refCountType, i+1, v, refCountType)); err != nil {
+		if _, err := fmt.Fprintf(w, " l%d: ret {%s, [0 x i1]}* null ; panic - this should not happen\nl%d: %%%d = phi {%s, [0 x i1]}* [%%a0, %%l0]", i, refCountType, i+1, v, refCountType); err != nil {
 			return err
 		}
 		for j := 1; j < i; j++ {
-			if _, err := io.WriteString(w, fmt.Sprintf(", [%%a%d, %%l%d]", j, j)); err != nil {
+			if _, err := fmt.Fprintf(w, ", [%%a%d, %%l%d]", j, j); err != nil {
 				return err
 			}
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%%v, %s %%bitsize) ret {%s, [0 x i1]}* %%%d }", refCountType, v, offsetType, refCountType, v)); err != nil {
+		if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%%v, %s %%bitsize) ret {%s, [0 x i1]}* %%%d }", refCountType, v, offsetType, refCountType, v); err != nil {
 			return err
 		}
 	}
@@ -318,11 +318,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			return err
 		}
 	} else {
-		if _, err := io.WriteString(w, fmt.Sprintf("define {{%s, [0 x i1]}*, %s} ", refCountType, offsetType)); err != nil {
+		if _, err := fmt.Fprintf(w, "define {{%s, [0 x i1]}*, %s} ", refCountType, offsetType); err != nil {
 			return err
 		}
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("@%s(", LLVMCanonicalName(funcDecl.Name))); err != nil {
+	if _, err := fmt.Fprintf(w, "@%s(", LLVMCanonicalName(funcDecl.Name)); err != nil {
 		return err
 	}
 	for i, _ := range funcDecl.Params {
@@ -331,7 +331,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf("{%s, [0 x i1]}* %%value%d,%s %%offset%d", refCountType, i, offsetType, i)); err != nil {
+		if _, err := fmt.Fprintf(w, "{%s, [0 x i1]}* %%value%d,%s %%offset%d", refCountType, i, offsetType, i); err != nil {
 			return err
 		}
 	}
@@ -341,7 +341,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		}
-		if _, err := io.WriteString(w, fmt.Sprintf("{%s, [0 x i1]}* %%retval", refCountType)); err != nil {
+		if _, err := fmt.Fprintf(w, "{%s, [0 x i1]}* %%retval", refCountType); err != nil {
 			return err
 		}
 	}
@@ -355,7 +355,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	}
 	sort.Strings(typeNames)
 	for _, typeName := range typeNames {
-		if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* null, i32 0, i32 1, %s %d %%sizeof.%s = ptrtoint i1* %%%d to %s", ssaTemp, refCountType, refCountType, offsetType, ast.Types[typeName].BitSize(), LLVMCanonicalName(typeName), ssaTemp, offsetType)); err != nil {
+		if _, err := fmt.Fprintf(w, " %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* null, i32 0, i32 1, %s %d %%sizeof.%s = ptrtoint i1* %%%d to %s", ssaTemp, refCountType, refCountType, offsetType, ast.Types[typeName].BitSize(), LLVMCanonicalName(typeName), ssaTemp, offsetType); err != nil {
 			return err
 		}
 		ssaTemp += 1
@@ -363,7 +363,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %%%d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %%%d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType); err != nil {
 				return err
 			}
 			ssaTemp += 1
@@ -373,7 +373,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkExprs(funcDecl, func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
 		ann := expr.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %%%d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType)); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = alloca i8, %s %%sizeof.%s %%alloca%d = bitcast i8* %%%d to {%s, [0 x i1]}*", ssaTemp, offsetType, LLVMCanonicalName(ann.allocaType.Name), alloca, ssaTemp, refCountType); err != nil {
 				return err
 			}
 			ssaTemp += 1
@@ -383,7 +383,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%alloca%d, %s %d)", refCountType, alloca, offsetType, ann.allocaType.BitSize())); err != nil {
+			if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%alloca%d, %s %d)", refCountType, alloca, offsetType, ann.allocaType.BitSize()); err != nil {
 				return err
 			}
 		}
@@ -392,7 +392,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkExprs(funcDecl, func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
 		ann := expr.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%alloca%d, %s %d)", refCountType, alloca, offsetType, ann.allocaType.BitSize())); err != nil {
+			if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%alloca%d, %s %d)", refCountType, alloca, offsetType, ann.allocaType.BitSize()); err != nil {
 				return err
 			}
 		}
@@ -419,7 +419,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	writeExpr = func(stmt Stmt, expr Expr, inLoop bool) (int, int, error) {
 		switch ex := expr.(type) {
 		case *ExprVar:
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%%d = select i1 1, %s %%offset%d, %s 0", ssaTemp, refCountType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], refCountType, ssaTemp+1, offsetType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], offsetType)); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%%d = select i1 1, %s %%offset%d, %s 0", ssaTemp, refCountType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], refCountType, ssaTemp+1, offsetType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], offsetType); err != nil {
 				return 0, 0, err
 			}
 			ssaTemp += 2
@@ -429,7 +429,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			if err != nil {
 				return 0, 0, err
 			}
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = add %s %%%d, %d", ssaTemp, offsetType, offs, ex.Expr.Type().BitOffset(ex.Name))); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = add %s %%%d, %d", ssaTemp, offsetType, offs, ex.Expr.Type().BitOffset(ex.Name)); err != nil {
 				return 0, 0, err
 			}
 			ssaTemp += 1
@@ -459,43 +459,43 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				retVal = ssaTemp
 				ssaTemp++
 				if inLoop {
-					if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, retValAlloc, offsetType, exprAnn.allocaType.BitSize())); err != nil {
+					if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, retValAlloc, offsetType, exprAnn.allocaType.BitSize()); err != nil {
 						return 0, 0, err
 					}
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType)); err != nil {
+				if _, err := fmt.Fprintf(w, " %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType); err != nil {
 					return 0, 0, err
 				}
 			default:
 				retValAlloc = fmt.Sprintf("%%%d", ssaTemp)
 				retVal = ssaTemp + 1
 				ssaTemp += 2
-				if _, err := io.WriteString(w, fmt.Sprintf(" %s = call {%s, [0 x i1]}* @__alloc%d(", retValAlloc, refCountType, len(exprAnn.allocas))); err != nil {
+				if _, err := fmt.Fprintf(w, " %s = call {%s, [0 x i1]}* @__alloc%d(", retValAlloc, refCountType, len(exprAnn.allocas)); err != nil {
 					return 0, 0, err
 				}
 				comma := ""
 				for _, alloca := range exprAnn.allocas {
-					if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca)); err != nil {
+					if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca); err != nil {
 						return 0, 0, err
 					}
 					comma = ","
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(") %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType)); err != nil {
+				if _, err := fmt.Fprintf(w, ") %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType); err != nil {
 					return 0, 0, err
 				}
 			}
-			if _, err := io.WriteString(w, fmt.Sprintf(" @%s(", LLVMCanonicalName(ex.Name))); err != nil {
+			if _, err := fmt.Fprintf(w, " @%s(", LLVMCanonicalName(ex.Name)); err != nil {
 				return 0, 0, err
 			}
 			comma := ""
 			for _, arg := range args {
-				if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%%d, %s %%%d", comma, refCountType, arg[0], offsetType, arg[1])); err != nil {
+				if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %%%d, %s %%%d", comma, refCountType, arg[0], offsetType, arg[1]); err != nil {
 					return 0, 0, err
 				}
 				comma = ","
 			}
 			if len(exprAnn.allocas) > 0 {
-				if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %s", comma, refCountType, retValAlloc)); err != nil {
+				if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %s", comma, refCountType, retValAlloc); err != nil {
 					return 0, 0, err
 				}
 			}
@@ -508,7 +508,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			val := ssaTemp
 			offs := ssaTemp + 1
 			ssaTemp += 2
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal)); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal); err != nil {
 				return 0, 0, err
 			}
 			return val, offs, nil
@@ -519,7 +519,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		if ann.startBlock {
-			if _, err := io.WriteString(w, fmt.Sprintf(" block%d:", ann.blockLabel)); err != nil {
+			if _, err := fmt.Fprintf(w, " block%d:", ann.blockLabel); err != nil {
 				return err
 			}
 			if len(ann.comesFrom) > 1 {
@@ -529,22 +529,22 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 				sort.Strings(vars)
 				for _, v := range vars {
-					if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = phi {%s, [0 x i1]}* ", ann.localsOnEntry[v], refCountType)); err != nil {
+					if _, err := fmt.Fprintf(w, " %%value%d = phi {%s, [0 x i1]}* ", ann.localsOnEntry[v], refCountType); err != nil {
 						return err
 					}
 					comma := ""
 					for _, prev := range ann.comesFrom {
-						if _, err := io.WriteString(w, fmt.Sprintf("%s[%%value%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel)); err != nil {
+						if _, err := fmt.Fprintf(w, "%s[%%value%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel); err != nil {
 							return err
 						}
 						comma = ","
 					}
-					if _, err := io.WriteString(w, fmt.Sprintf(" %%offset%d = phi %s ", ann.localsOnEntry[v], offsetType)); err != nil {
+					if _, err := fmt.Fprintf(w, " %%offset%d = phi %s ", ann.localsOnEntry[v], offsetType); err != nil {
 						return err
 					}
 					comma = ""
 					for _, prev := range ann.comesFrom {
-						if _, err := io.WriteString(w, fmt.Sprintf("%s[%%offset%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel)); err != nil {
+						if _, err := fmt.Fprintf(w, "%s[%%offset%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel); err != nil {
 							return err
 						}
 						comma = ","
@@ -579,7 +579,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 			if next.LLVMAnnotation().startBlock {
-				_, err := io.WriteString(w, fmt.Sprintf(" br label %%block%d", next.LLVMAnnotation().blockLabel))
+				_, err := fmt.Fprintf(w, " br label %%block%d", next.LLVMAnnotation().blockLabel)
 				return err
 			}
 			return nil
@@ -604,7 +604,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err != nil {
 					return err
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[st.Var.Name], refCountType, val, refCountType, ann.localsOnExit[st.Var.Name], offsetType, offs, offsetType)); err != nil {
+				if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[st.Var.Name], refCountType, val, refCountType, ann.localsOnExit[st.Var.Name], offsetType, offs, offsetType); err != nil {
 					return err
 				}
 			} else {
@@ -612,26 +612,26 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				case 0:
 					panic("No allocations for var statement")
 				case 1:
-					if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%alloca%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], refCountType, ann.allocas[0], refCountType, ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
+					if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%alloca%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], refCountType, ann.allocas[0], refCountType, ann.localsOnExit[st.Var.Name], offsetType, offsetType); err != nil {
 						return err
 					}
 					if inLoop {
-						if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%value%d, %s %d)", refCountType, ann.localsOnExit[st.Var.Name], offsetType, st.Var.Type.BitSize())); err != nil {
+						if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%value%d, %s %d)", refCountType, ann.localsOnExit[st.Var.Name], offsetType, st.Var.Type.BitSize()); err != nil {
 							return err
 						}
 					}
 				default:
-					if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = call {%s, [0 x i1]}* @__alloc%d(", ann.localsOnExit[st.Var.Name], refCountType, len(ann.allocas))); err != nil {
+					if _, err := fmt.Fprintf(w, " %%value%d = call {%s, [0 x i1]}* @__alloc%d(", ann.localsOnExit[st.Var.Name], refCountType, len(ann.allocas)); err != nil {
 						return err
 					}
 					comma := ""
 					for _, alloca := range ann.allocas {
-						if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca)); err != nil {
+						if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca); err != nil {
 							return err
 						}
 						comma = ","
 					}
-					if _, err := io.WriteString(w, fmt.Sprintf(") %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
+					if _, err := fmt.Fprintf(w, ") %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], offsetType, offsetType); err != nil {
 						return err
 					}
 				}
@@ -668,11 +668,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					panic("no return statement")
 				}
 			}
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s %%%d %%%d = load i1, i1* %%%d br i1 %%%d, label %%block%d, label %s", addr, refCountType, refCountType, val, offsetType, offs, cond, addr, cond, st.Stmts.LLVMAnnotation().blockLabel, elseBlock)); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s %%%d %%%d = load i1, i1* %%%d br i1 %%%d, label %%block%d, label %s", addr, refCountType, refCountType, val, offsetType, offs, cond, addr, cond, st.Stmts.LLVMAnnotation().blockLabel, elseBlock); err != nil {
 				return err
 			}
 			if writeElseReturn {
-				if _, err := io.WriteString(w, fmt.Sprintf(" block%d.0:", ann.blockLabel)); err != nil {
+				if _, err := fmt.Fprintf(w, " block%d.0:", ann.blockLabel); err != nil {
 					return err
 				}
 				if err := writeUnrefs(nil); err != nil {
@@ -685,7 +685,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		case *StmtFor:
 		case StmtContinue:
 			// unrefs should be taken care of by previous stmt
-			if _, err := io.WriteString(w, fmt.Sprintf(" br label %%block%d", st.Next.LLVMAnnotation().blockLabel)); err != nil {
+			if _, err := fmt.Fprintf(w, " br label %%block%d", st.Next.LLVMAnnotation().blockLabel); err != nil {
 				return err
 			}
 		case *StmtBreak:
@@ -716,13 +716,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					if param.Type != st.Expr.Type() && !param.Type.Contains(st.Expr.Type()) {
 						continue
 					}
-					if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%block%d.%d, label %%block%d.%d block%d.%d: %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%%d, 0 %%%d = insertvalue {{%s, [0 x i1]}*, %s} %%%d, %s %%%d, 1 ret {{%s, [0 x i1]}*, %s} %%%d block%d.%d:", ssaTemp, refCountType, val, i, ssaTemp, ann.blockLabel, subblockLabel, ann.blockLabel, subblockLabel+1, ann.blockLabel, subblockLabel, ssaTemp+1, refCountType, offsetType, refCountType, offsetType, refCountType, val, ssaTemp+2, refCountType, offsetType, ssaTemp+1, offsetType, offs, refCountType, offsetType, ssaTemp+2, ann.blockLabel, subblockLabel+1)); err != nil {
+					if _, err := fmt.Fprintf(w, " %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%block%d.%d, label %%block%d.%d block%d.%d: %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%%d, 0 %%%d = insertvalue {{%s, [0 x i1]}*, %s} %%%d, %s %%%d, 1 ret {{%s, [0 x i1]}*, %s} %%%d block%d.%d:", ssaTemp, refCountType, val, i, ssaTemp, ann.blockLabel, subblockLabel, ann.blockLabel, subblockLabel+1, ann.blockLabel, subblockLabel, ssaTemp+1, refCountType, offsetType, refCountType, offsetType, refCountType, val, ssaTemp+2, refCountType, offsetType, ssaTemp+1, offsetType, offs, refCountType, offsetType, ssaTemp+2, ann.blockLabel, subblockLabel+1); err != nil {
 						return err
 					}
 					subblockLabel += 2
 					ssaTemp += 3
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retval, 0 ret {{%s, [0 x i1]}*, %s} %%%d", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), ssaTemp, refCountType, offsetType, refCountType, offsetType, refCountType, refCountType, offsetType, ssaTemp)); err != nil {
+				if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retval, 0 ret {{%s, [0 x i1]}*, %s} %%%d", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), ssaTemp, refCountType, offsetType, refCountType, offsetType, refCountType, refCountType, offsetType, ssaTemp); err != nil {
 					return err
 				}
 				ssaTemp++
@@ -738,7 +738,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			if st.Value {
 				bit = 1
 			}
-			if _, err := io.WriteString(w, fmt.Sprintf(" %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s %%%d store i1 %d, i1* %%%d", addr, refCountType, refCountType, val, offsetType, offs, bit, addr)); err != nil {
+			if _, err := fmt.Fprintf(w, " %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%%d, i32 0, i32 1, %s %%%d store i1 %d, i1* %%%d", addr, refCountType, refCountType, val, offsetType, offs, bit, addr); err != nil {
 				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
@@ -756,7 +756,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name]); err != nil {
 					return err
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType)); err != nil {
+				if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
 					return err
 				}
 				if err := writeRef(ann.localsOnExit[lvalue.Var.Name]); err != nil {
@@ -771,7 +771,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err != nil {
 					return err
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize())); err != nil {
+				if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
 					return err
 				}
 			}
