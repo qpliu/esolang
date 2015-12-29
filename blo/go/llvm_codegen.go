@@ -38,7 +38,7 @@ func LLVMCanonicalName(name string) string {
 		if rune <= unicode.MaxASCII && (unicode.IsDigit(rune) || unicode.IsLetter(rune)) {
 			buf.WriteRune(rune)
 		} else {
-			buf.WriteString(fmt.Sprintf("_%x_", rune))
+			fmt.Fprintf(&buf, "_%x_", rune)
 		}
 	}
 	return buf.String()
@@ -398,8 +398,20 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		}
 		return nil
 	})
+	writeRef := func(val int) error {
+		if _, err := fmt.Fprintf(w, " call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, val); err != nil {
+			return err
+		}
+		return nil
+	}
+	writeUnref := func(val int) error {
+		if _, err := fmt.Fprintf(w, " call void @__unref({%s, [0 x i1]}* %%value%d)", refCountType, val); err != nil {
+			return err
+		}
+		return nil
+	}
 	for i, _ := range funcDecl.Params {
-		if _, err := io.WriteString(w, fmt.Sprintf(" call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, i)); err != nil {
+		if err := writeRef(i); err != nil {
 			return err
 		}
 	}
@@ -552,7 +564,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 			sort.Ints(unrefs)
 			for _, unref := range unrefs {
-				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__unref({%s, [0 x i1]}* %%value%d)", refCountType, unref)); err != nil {
+				if err := writeUnref(unref); err != nil {
 					return err
 				}
 			}
@@ -624,7 +636,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 				}
 			}
-			if _, err := io.WriteString(w, fmt.Sprintf(" call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnExit[st.Var.Name])); err != nil {
+			if err := writeRef(ann.localsOnExit[st.Var.Name]); err != nil {
 				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
@@ -741,7 +753,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err != nil {
 					return err
 				}
-				if _, err := io.WriteString(w, fmt.Sprintf(" call void @__unref({%s, [0 x i1]}* %%value%d) %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0 call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnEntry[lvalue.Var.Name], ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType, refCountType, ann.localsOnExit[lvalue.Var.Name])); err != nil {
+				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name]); err != nil {
+					return err
+				}
+				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType)); err != nil {
+					return err
+				}
+				if err := writeRef(ann.localsOnExit[lvalue.Var.Name]); err != nil {
 					return err
 				}
 			} else {
