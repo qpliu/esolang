@@ -332,3 +332,75 @@ func TestAssign2(t *testing.T) {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
 }
+
+func TestFuncall(t *testing.T) {
+	ast, err := testCompile(`type a { a } func id(a a) a { return a } func a() { var a a; a = id(a) }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := ``
+	t.SkipNow()
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestVarInitializer(t *testing.T) {
+	ast, err := testCompile(`type a { a } func id(a a) a { return a } func a() { var a a; var b a = a }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := ``
+	t.SkipNow()
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestVarInitializer2(t *testing.T) {
+	ast, err := testCompile(`type a { a } func id(a a) a { return a } func a() { var a a; var b a = id(a) }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := ``
+	t.SkipNow()
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}
+
+func TestVarInLoop(t *testing.T) {
+	ast, err := testCompile(`type a { a } func a() { var a a; for { var b a; a = b } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["a"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := ``
+	t.SkipNow()
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+}

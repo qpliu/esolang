@@ -140,6 +140,12 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 	}
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		switch st := stmt.(type) {
+		case *StmtBlock:
+			if len(st.Stmts) > 0 {
+				st.Stmts[0].LLVMAnnotation().comesFrom = append(st.Stmts[0].LLVMAnnotation().comesFrom, stmt)
+			} else if st.Next != nil {
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
+			}
 		case *StmtIf:
 			st.Stmts.LLVMAnnotation().startBlock = true
 			st.Stmts.LLVMAnnotation().comesFrom = append(st.Stmts.LLVMAnnotation().comesFrom, stmt)
@@ -156,16 +162,13 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 			}
 		case *StmtFor:
 			st.LLVMAnnotation().startBlock = true
+			st.Stmts.LLVMAnnotation().comesFrom = append(st.Stmts.LLVMAnnotation().comesFrom, st)
+		case StmtContinue:
 		case *StmtBreak:
 			if st.Next != nil {
 				st.Next.LLVMAnnotation().startBlock = true
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
-		}
-		return nil
-	})
-	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
-		switch st := stmt.(type) {
 		case *StmtVar:
 			if st.Next != nil {
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
@@ -182,6 +185,9 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 			if st.Next != nil {
 				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
+		case *StmtReturn:
+		default:
+			panic("Unknown Stmt type")
 		}
 		return nil
 	})
@@ -476,7 +482,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 				comma = ","
 			}
-			if len(exprAnn.allocas) != 1 {
+			if len(exprAnn.allocas) > 0 {
 				if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %s", comma, refCountType, retValAlloc)); err != nil {
 					return 0, 0, err
 				}
@@ -581,31 +587,41 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 			}
 		case *StmtVar:
-			switch len(ann.allocas) {
-			case 0:
-				panic("No allocations for var statement")
-			case 1:
-				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%alloca%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], refCountType, ann.allocas[0], refCountType, ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
+			if st.Expr != nil {
+				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+				if err != nil {
 					return err
 				}
-				if inLoop {
-					if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%value%d, %s %d)", refCountType, ann.localsOnExit[st.Var.Name], offsetType, st.Var.Type.BitSize())); err != nil {
+				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[st.Var.Name], refCountType, val, refCountType, ann.localsOnExit[st.Var.Name], offsetType, offs, offsetType)); err != nil {
+					return err
+				}
+			} else {
+				switch len(ann.allocas) {
+				case 0:
+					panic("No allocations for var statement")
+				case 1:
+					if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = select i1 1, {%s, [0 x i1]}* %%alloca%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], refCountType, ann.allocas[0], refCountType, ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
 						return err
 					}
-				}
-			default:
-				if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = call {%s, [0 x i1]}* @__alloc%d(", ann.localsOnExit[st.Var.Name], refCountType, len(ann.allocas))); err != nil {
-					return err
-				}
-				comma := ""
-				for _, alloca := range ann.allocas {
-					if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca)); err != nil {
+					if inLoop {
+						if _, err := io.WriteString(w, fmt.Sprintf(" call void @__clear({%s, [0 x i1]}* %%value%d, %s %d)", refCountType, ann.localsOnExit[st.Var.Name], offsetType, st.Var.Type.BitSize())); err != nil {
+							return err
+						}
+					}
+				default:
+					if _, err := io.WriteString(w, fmt.Sprintf(" %%value%d = call {%s, [0 x i1]}* @__alloc%d(", ann.localsOnExit[st.Var.Name], refCountType, len(ann.allocas))); err != nil {
 						return err
 					}
-					comma = ","
-				}
-				if _, err := io.WriteString(w, fmt.Sprintf(") %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
-					return err
+					comma := ""
+					for _, alloca := range ann.allocas {
+						if _, err := io.WriteString(w, fmt.Sprintf("%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca)); err != nil {
+							return err
+						}
+						comma = ","
+					}
+					if _, err := io.WriteString(w, fmt.Sprintf(") %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], offsetType, offsetType)); err != nil {
+						return err
+					}
 				}
 			}
 			if _, err := io.WriteString(w, fmt.Sprintf(" call void @__ref({%s, [0 x i1]}* %%value%d)", refCountType, ann.localsOnExit[st.Var.Name])); err != nil {
