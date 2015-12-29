@@ -1,38 +1,26 @@
 package main
 
 import (
-	"os"
+	"errors"
 )
 
-func main() {
-	tokens := make(chan Token)
-	go func() {
-		for _, file := range os.Args[1:] {
-			if f, err := os.Open(file); err != nil {
-				os.Stderr.WriteString(err.Error())
-				os.Exit(1)
-			} else {
-				defer f.Close()
-				Tokenize(file, f, tokens)
-			}
-		}
-		close(tokens)
-	}()
-	ast, err := Parse(tokens)
-	if err != nil {
-		os.Stderr.WriteString(err.Error())
-		os.Exit(1)
-	} else if err := ast.Annotate(); err != nil {
-		os.Stderr.WriteString(err.Error())
-		os.Exit(1)
-	} else if err := AnnotateRuntime(ast); err != nil {
-		os.Stderr.WriteString(err.Error())
-		os.Exit(1)
+func interp(tokens <-chan Token) error {
+	var ast *Ast
+	if _ast, err := Parse(tokens); err != nil {
+		return err
+	} else {
+		ast = _ast
+	}
+	if err := ast.Annotate(); err != nil {
+		return err
+	}
+	if err := AnnotateRuntime(ast); err != nil {
+		return err
 	}
 	mainFunc := ast.Funcs["main"]
 	if mainFunc == nil || len(mainFunc.Params) != 0 {
-		os.Stderr.WriteString("No 'main' function with zero arguments")
-		os.Exit(1)
+		return errors.New("No 'main' function with zero arguments")
 	}
 	EvalFunc(mainFunc, []*Value{})
+	return nil
 }
