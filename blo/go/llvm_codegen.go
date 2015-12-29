@@ -490,7 +490,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			if _, err := io.WriteString(w, ")"); err != nil {
 				return 0, 0, err
 			}
-			if len(exprAnn.allocas) == 1 {
+			if len(exprAnn.allocas) == 0 {
 				return 0, 0, nil
 			}
 			val := ssaTemp

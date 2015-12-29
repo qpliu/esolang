@@ -344,7 +344,7 @@ func TestFuncall(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := ``
+	expected := `define void @a() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.a %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* call void @__clear({i8, [0 x i1]}* %alloca0, i8 1) call void @__clear({i8, [0 x i1]}* %alloca1, i8 1) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 call void @__ref({i8, [0 x i1]}* %value0) %3 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %4 = select i1 1, i8 %offset0, i8 0 %5 = call {{i8, [0 x i1]}*, i8} @id({i8, [0 x i1]}* %3, i8 %4,{i8, [0 x i1]}* %alloca1) %6 = extractvalue {{i8, [0 x i1]}*, i8} %5, i32 0 %7 = extractvalue {{i8 [0 x i1]}*, i8} %5, i32 1 call void @__unref({i8, [0 x i1]}* %value0) %value1 = select i1 1, {i8, [0 x i1]}* %6, {i8, [0 x i1]}* null %offset1 = select i1 1, i8 %7, i8 0 call void @__ref({i8, [0 x i1]}* %value1) call void @__unref({i8, [0 x i1]}* %value1) ret void }`
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
@@ -362,7 +362,7 @@ func TestVarInitializer(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := ``
+	expected := `define void @a() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.a %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* call void @__clear({i8, [0 x i1]}* %alloca0, i8 1) call void @__clear({i8, [0 x i1]}* %alloca1, i8 1) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 call void @__ref({i8, [0 x i1]}* %value0) %3 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %4 = select i1 1, i8 %offset0, i8 0 %value1 = select i1 1, {i8, [0 x i1]}* %3, {i8, [0 x i1]}* null %offset1 = select i1 1, i8 %4, i8 0 call void @__ref({i8, [0 x i1]}* %value1) call void @__unref({i8, [0 x i1]}* %value0) call void @__unref({i8, [0 x i1]}* %value1) ret void }`
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
@@ -380,7 +380,7 @@ func TestVarInitializer2(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := ``
+	expected := `define void @a() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.a %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* %3 = alloca i8, i8 %sizeof.a %alloca2 = bitcast i8* %3 to {i8, [0 x i1]}* call void @__clear({i8, [0 x i1]}* %alloca0, i8 1) call void @__clear({i8, [0 x i1]}* %alloca1, i8 1) call void @__clear({i8, [0 x i1]}* %alloca2, i8 1) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 call void @__ref({i8, [0 x i1]}* %value0) %4 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %5 = select i1 1, i8 %offset0, i8 0 %6 = call {{i8, [0 x i1]}*, i8} @id({i8, [0 x i1]}* %4, i8 %5,{i8, [0 x i1]}* %alloca2) %7 = extractvalue {{i8, [0 x i1]}*, i8} %6, i32 0 %8 = extractvalue {{i8 [0 x i1]}*, i8} %6, i32 1 %value1 = select i1 1, {i8, [0 x i1]}* %7, {i8, [0 x i1]}* null %offset1 = select i1 1, i8 %8, i8 0 call void @__ref({i8, [0 x i1]}* %value1) call void @__unref({i8, [0 x i1]}* %value0) call void @__unref({i8, [0 x i1]}* %value1) ret void }`
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
@@ -398,7 +398,7 @@ func TestVarInLoop(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["a"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := ``
+	expected := `define void @a() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.a %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* %3 = alloca i8, i8 %sizeof.a %alloca2 = bitcast i8* %3 to {i8, [0 x i1]}* call void @__clear({i8, [0 x i1]}* %alloca0, i8 1) call void @__clear({i8, [0 x i1]}* %alloca1, i8 1) call void @__clear({i8, [0 x i1]}* %alloca2, i8 1) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 call void @__ref({i8, [0 x i1]}* %value0) br label %block2 block2: %value1 = phi {i8, [0 x i1]}* [%value0,%block1],[%value3,%block2] %offset1 = phi i8 [%offset0,%block1],[%offset3,%block2] %value2 = call {i8, [0 x i1]}* @__alloc2({i8, [0 x i1]}* %alloca1,{i8, [0 x i1]}* %alloca2) %offset2 = select i1 1, i8 0, i8 0 call void @__ref({i8, [0 x i1]}* %value2) %4 = select i1 1, {i8, [0 x i1]}* %value2, {i8, [0 x i1]}* null %5 = select i1 1, i8 %offset2, i8 0 call void @__unref({i8, [0 x i1]}* %value1) %value3 = select i1 1, {i8, [0 x i1]}* %4, {i8, [0 x i1]}* null %offset3 = select i1 1, i8 %5, i8 0 call void @__ref({i8, [0 x i1]}* %value3) call void @__unref({i8, [0 x i1]}* %value2) br label %block2 }`
 	t.SkipNow()
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
