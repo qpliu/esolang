@@ -2,8 +2,47 @@ package main
 
 import (
 	"bytes"
+	"os/exec"
 	"testing"
 )
+
+func checkLLC(t *testing.T, ast *Ast) {
+	for _, funcDecl := range ast.Funcs {
+		WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
+			ann := stmt.LLVMAnnotation()
+			*ann = LLVMStmtAnnotation{}
+			return nil
+		})
+		WalkExprs(funcDecl, func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
+			ann := expr.LLVMAnnotation()
+			*ann = LLVMExprAnnotation{}
+			return nil
+		})
+	}
+	llcmd := exec.Command("llc", "-filetype=null")
+	out, err1 := llcmd.StdinPipe()
+	if err1 != nil {
+		t.Error(err1.Error())
+	}
+	in, err2 := llcmd.StderrPipe()
+	if err2 != nil {
+		t.Error(err2.Error())
+	}
+	if err := llcmd.Start(); err != nil {
+		t.Error(err.Error())
+	}
+	if err := LLVMCodeGen(ast, out); err != nil {
+		t.Error(err.Error())
+	}
+	out.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(in); err != nil {
+		t.Error(err.Error())
+	}
+	if err := llcmd.Wait(); err != nil {
+		t.Errorf("%s: %s", err.Error(), buf.String())
+	}
+}
 
 func TestPrologue(t *testing.T) {
 	ast, err := testCompile(`
@@ -42,6 +81,7 @@ l5: %12 = phi {i8, [0 x i1]}* [%a0, %l0], [%a1, %l1], [%a2, %l2], [%a3, %l3] cal
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenPrologue expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestEmpty(t *testing.T) {
@@ -59,6 +99,7 @@ func TestEmpty(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestSimple(t *testing.T) {
@@ -76,6 +117,7 @@ func TestSimple(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestSimple2(t *testing.T) {
@@ -93,6 +135,7 @@ func TestSimple2(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestInfiniteLoop(t *testing.T) {
@@ -110,6 +153,7 @@ func TestInfiniteLoop(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestBreak(t *testing.T) {
@@ -127,6 +171,7 @@ func TestBreak(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestBreak2(t *testing.T) {
@@ -144,6 +189,7 @@ func TestBreak2(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestBreak3(t *testing.T) {
@@ -161,6 +207,7 @@ func TestBreak3(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestBreak4(t *testing.T) {
@@ -178,6 +225,7 @@ func TestBreak4(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestSetClear(t *testing.T) {
@@ -195,6 +243,7 @@ func TestSetClear(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestIf(t *testing.T) {
@@ -212,6 +261,7 @@ func TestIf(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestIf2(t *testing.T) {
@@ -229,6 +279,7 @@ func TestIf2(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestIf3(t *testing.T) {
@@ -246,6 +297,7 @@ func TestIf3(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestIf4(t *testing.T) {
@@ -263,6 +315,7 @@ func TestIf4(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestScope(t *testing.T) {
@@ -280,6 +333,7 @@ func TestScope(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestScope2(t *testing.T) {
@@ -297,6 +351,7 @@ func TestScope2(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestAssign(t *testing.T) {
@@ -314,6 +369,7 @@ func TestAssign(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestAssign2(t *testing.T) {
@@ -331,6 +387,7 @@ func TestAssign2(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestFuncall(t *testing.T) {
@@ -348,6 +405,7 @@ func TestFuncall(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestVarInitializer(t *testing.T) {
@@ -365,6 +423,7 @@ func TestVarInitializer(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestVarInitializer2(t *testing.T) {
@@ -382,6 +441,7 @@ func TestVarInitializer2(t *testing.T) {
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
 
 func TestVarInLoop(t *testing.T) {
@@ -395,8 +455,9 @@ func TestVarInLoop(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestVarInLoop"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := `define void @TestVarInLoop() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.a %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* %3 = alloca i8, i8 %sizeof.a %alloca2 = bitcast i8* %3 to {i8, [0 x i1]}* call void @__clear({i8, [0 x i1]}* %alloca0, i8 1) call void @__clear({i8, [0 x i1]}* %alloca1, i8 1) call void @__clear({i8, [0 x i1]}* %alloca2, i8 1) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %4 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %5 = load i8, i8* %4 %6 = add i8 %5, 1 store i8 %6, i8* %4 br label %block2 block2: %value1 = phi {i8, [0 x i1]}* [%value0,%block1],[%value3,%block2] %offset1 = phi i8 [%offset0,%block1],[%offset3,%block2] %value2 = call {i8, [0 x i1]}* @__alloc2({i8, [0 x i1]}* %alloca1,{i8, [0 x i1]}* %alloca2) %offset2 = select i1 1, i8 0, i8 0 %7 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value2, i32 0, i32 0 %8 = load i8, i8* %7 %9 = add i8 %8, 1 store i8 %9, i8* %7 %10 = select i1 1, {i8, [0 x i1]}* %value2, {i8, [0 x i1]}* null %11 = select i1 1, i8 %offset2, i8 0 %12 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %13 = load i8, i8* %12 %14 = sub i8 %13, 1 store i8 %14, i8* %12 %value3 = select i1 1, {i8, [0 x i1]}* %10, {i8, [0 x i1]}* null %offset3 = select i1 1, i8 %11, i8 0 %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value3, i32 0, i32 0 %16 = load i8, i8* %15 %17 = add i8 %16, 1 store i8 %17, i8* %15 %18 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value2, i32 0, i32 0 %19 = load i8, i8* %18 %20 = sub i8 %19, 1 store i8 %20, i8* %18 br label %block2 }`
+	expected := `define void @TestVarInLoop() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.a %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* %3 = alloca i8, i8 %sizeof.a %alloca2 = bitcast i8* %3 to {i8, [0 x i1]}* call void @__clear({i8, [0 x i1]}* %alloca0, i8 1) call void @__clear({i8, [0 x i1]}* %alloca1, i8 1) call void @__clear({i8, [0 x i1]}* %alloca2, i8 1) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %4 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %5 = load i8, i8* %4 %6 = add i8 %5, 1 store i8 %6, i8* %4 br label %block2 block2: %value1 = phi {i8, [0 x i1]}* [%value0,%block1],[%value3,%block2] %offset1 = phi i8 [%offset0,%block1],[%offset3,%block2] %value2 = call {i8, [0 x i1]}* @__alloc2(i8 1,{i8, [0 x i1]}* %alloca1,{i8, [0 x i1]}* %alloca2) %offset2 = select i1 1, i8 0, i8 0 %7 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value2, i32 0, i32 0 %8 = load i8, i8* %7 %9 = add i8 %8, 1 store i8 %9, i8* %7 %10 = select i1 1, {i8, [0 x i1]}* %value2, {i8, [0 x i1]}* null %11 = select i1 1, i8 %offset2, i8 0 %12 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %13 = load i8, i8* %12 %14 = sub i8 %13, 1 store i8 %14, i8* %12 %value3 = select i1 1, {i8, [0 x i1]}* %10, {i8, [0 x i1]}* null %offset3 = select i1 1, i8 %11, i8 0 %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value3, i32 0, i32 0 %16 = load i8, i8* %15 %17 = add i8 %16, 1 store i8 %17, i8* %15 %18 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value2, i32 0, i32 0 %19 = load i8, i8* %18 %20 = sub i8 %19, 1 store i8 %20, i8* %18 br label %block2 }`
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
+	checkLLC(t, ast)
 }
