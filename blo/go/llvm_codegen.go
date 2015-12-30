@@ -374,10 +374,14 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		}
 		return nil
 	})
+	writeClear := func(val string, typeDecl *Type) error {
+		_, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, val, offsetType, typeDecl.BitSize())
+		return err
+	}
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%alloca%d, %s %d)", refCountType, alloca, offsetType, ann.allocaType.BitSize()); err != nil {
+			if err := writeClear(fmt.Sprintf("%%alloca%d", alloca), ann.allocaType); err != nil {
 				return err
 			}
 		}
@@ -386,7 +390,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 	WalkExprs(funcDecl, func(stmt Stmt, inLoop bool, expr Expr, inAssign bool) error {
 		ann := expr.LLVMAnnotation()
 		for _, alloca := range ann.allocas {
-			if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%alloca%d, %s %d)", refCountType, alloca, offsetType, ann.allocaType.BitSize()); err != nil {
+			if err := writeClear(fmt.Sprintf("%%alloca%d", alloca), ann.allocaType); err != nil {
 				return err
 			}
 		}
@@ -455,7 +459,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				retVal = ssaTemp
 				ssaTemp++
 				if inLoop {
-					if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %s, %s %d)", refCountType, retValAlloc, offsetType, exprAnn.allocaType.BitSize()); err != nil {
+					if err := writeClear(retValAlloc, exprAnn.allocaType); err != nil {
 						return 0, 0, err
 					}
 				}
@@ -612,7 +616,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 						return err
 					}
 					if inLoop {
-						if _, err := fmt.Fprintf(w, " call void @__clear({%s, [0 x i1]}* %%value%d, %s %d)", refCountType, ann.localsOnExit[st.Var.Name], offsetType, st.Var.Type.BitSize()); err != nil {
+						if err := writeClear(fmt.Sprintf("%%value%d", ann.localsOnExit[st.Var.Name]), st.Var.Type); err != nil {
 							return err
 						}
 					}
