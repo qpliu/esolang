@@ -25,7 +25,7 @@ func compile(tokens <-chan Token, outflag, outfile string) error {
 	}
 	if outflag == "-S" {
 		return LLVMCodeGen(ast, os.Stdout)
-	} else if outflag == "-c" {
+	} else if outflag == "-s" {
 		var waitGroup sync.WaitGroup
 		llcmd := exec.Command("llc", "-filetype=asm")
 		out, err := llcmd.StdinPipe()

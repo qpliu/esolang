@@ -6,6 +6,23 @@ import (
 )
 
 func main() {
+	if len(os.Args) <= 1 {
+		progName := "blo"
+		if len(os.Args) > 0 {
+			progName = os.Args[0]
+		}
+		os.Stderr.WriteString("Usage:\n")
+		os.Stderr.WriteString(progName)
+		os.Stderr.WriteString(" SRCFILE ...\n")
+		os.Stderr.WriteString(progName)
+		os.Stderr.WriteString(" -S SRCFILE ...\n")
+		os.Stderr.WriteString(progName)
+		os.Stderr.WriteString(" -s SRCFILE ...\n")
+		os.Stderr.WriteString(progName)
+		os.Stderr.WriteString(" -o EXECUTABLEFILE SRCFILE ...\n")
+		os.Exit(1)
+	}
+
 	var srcs []string
 	var outflag, outfile string
 	f := func(tokens <-chan Token, outflag, outfile string) error {
@@ -16,18 +33,18 @@ func main() {
 		outflag = "-o"
 		outfile = os.Args[2]
 		srcs = os.Args[3:]
-	} else if len(os.Args) > 2 && os.Args[1] == "-c" {
+	} else if len(os.Args) > 2 && os.Args[1] == "-s" {
 		f = compile
-		outflag = "-c"
+		outflag = "-s"
 		srcs = os.Args[2:]
 	} else if len(os.Args) > 2 && os.Args[1] == "-S" {
 		f = compile
 		outflag = "-S"
 		srcs = os.Args[2:]
-	} else if len(os.Args) > 0 && (os.Args[0] == "compile" || strings.HasSuffix(os.Args[0], "/compile")) {
+	} else if os.Args[0] == "compile" || strings.HasSuffix(os.Args[0], "/compile") {
 		f = compile
 		srcs = os.Args[1:]
-	} else if len(os.Args) > 0 {
+	} else {
 		srcs = os.Args[1:]
 	}
 
