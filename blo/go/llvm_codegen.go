@@ -862,13 +862,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err != nil {
 					return err
 				}
-				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name]); err != nil {
-					return err
-				}
 				if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
 					return err
 				}
 				if err := writeRef(ann.localsOnExit[lvalue.Var.Name]); err != nil {
+					return err
+				}
+				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name]); err != nil {
 					return err
 				}
 			} else {
