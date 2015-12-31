@@ -1,7 +1,7 @@
-SRC=blo.go interp.go compile.go annotate.go ast.go eval.go llvm_codegen.go llvm_runtime.go parse.go runtime.go token.go value.go
+SRC=annotate.go ast.go blo.go compile.go eval.go interp.go llvm_codegen.go llvm_runtime.go parse.go runtime.go token.go value.go
 
 blo: $(SRC)
-	go build $(SRC)
+	go build -o $@ $(SRC)
 
 test:
 	go fmt && go vet && go test

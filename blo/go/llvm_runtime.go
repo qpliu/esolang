@@ -9,6 +9,7 @@ import (
 )
 
 func AnnotateRuntimeLLVM(ast *Ast) error {
+	ast.LLVMDeclares = make(map[string]string)
 	for _, typeDecl := range ast.Types {
 		if typeDecl.Imported {
 			return errors.New(typeDecl.Location.String() + ": Unrecognized import type: " + typeDecl.Name)
@@ -19,8 +20,10 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 			continue
 		}
 		if funcDecl.Name == "getByte" && len(funcDecl.Params) == 1 && funcDecl.Type == nil {
+			ast.LLVMDeclares["read"] = "declare i32 @read(i32,i8*,i32)"
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitGetByte
 		} else if funcDecl.Name == "putByte" && len(funcDecl.Params) == 1 && funcDecl.Type == nil {
+			ast.LLVMDeclares["write"] = "declare i32 @write(i32,i8*,i32)"
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitPutByte
 		} else {
 			return errors.New(funcDecl.Location.String() + ": Unrecognized import function: " + funcDecl.Name)
@@ -30,7 +33,7 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 }
 
 func runtimeLLVMEmitGetByte(ast *Ast, funcDecl *Func, w io.Writer) error {
-	if _, err := io.WriteString(w, fmt.Sprintf("declare i32 @read(i32,i8*,i32) define void @%s({%s, [0 x i1]}* %%a1, %s %%a2) { %%1 = alloca i8, i32 1 %%2 = call i32 @read(i32 0,i8* %%1,i32 1) %%3 = icmp eq i32 1, %%2 br i1 %%3, label %%l2, label %%l1 l1:", LLVMCanonicalName(funcDecl.Name), LLVMRefcountType(ast), LLVMOffsetType(ast))); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @%s({%s, [0 x i1]}* %%a1, %s %%a2) { %%1 = alloca i8, i32 1 %%2 = call i32 @read(i32 0,i8* %%1,i32 1) %%3 = icmp eq i32 1, %%2 br i1 %%3, label %%l2, label %%l1 l1:", LLVMCanonicalName(funcDecl.Name), LLVMRefcountType(ast), LLVMOffsetType(ast))); err != nil {
 		return err
 	}
 	i := 4
@@ -60,7 +63,7 @@ func runtimeLLVMEmitGetByte(ast *Ast, funcDecl *Func, w io.Writer) error {
 }
 
 func runtimeLLVMEmitPutByte(ast *Ast, funcDecl *Func, w io.Writer) error {
-	if _, err := io.WriteString(w, fmt.Sprintf("declare i32 @write(i32,i8*,i32) define void @%s({%s, [0 x i1]}* %%a1, %s %%a2) { %%1 = alloca i8, i32 1 %%2 = zext i1 0 to i8", LLVMCanonicalName(funcDecl.Name), LLVMRefcountType(ast), LLVMOffsetType(ast))); err != nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("define void @%s({%s, [0 x i1]}* %%a1, %s %%a2) { %%1 = alloca i8, i32 1 %%2 = zext i1 0 to i8", LLVMCanonicalName(funcDecl.Name), LLVMRefcountType(ast), LLVMOffsetType(ast))); err != nil {
 		return err
 	}
 	i := 2

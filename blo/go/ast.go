@@ -10,6 +10,7 @@ type Ast struct {
 	MaxBitIndex  int
 	MaxOffset    int
 	MaxLocalRefs int
+	LLVMDeclares map[string]string
 }
 
 func newAst() *Ast {
@@ -17,10 +18,11 @@ func newAst() *Ast {
 }
 
 type Type struct {
-	Location Location
-	Name     string
-	Imported bool
-	Fields   []*Var
+	Location   Location
+	Name       string
+	Imported   bool
+	Fields     []*Var
+	LLVMRTType LLVMImportedRuntimeType
 }
 
 func (t *Type) BitSize() int {
