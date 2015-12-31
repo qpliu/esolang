@@ -19,14 +19,12 @@ func checkLLC(t *testing.T, ast *Ast) {
 			return nil
 		})
 	}
+	var buf bytes.Buffer
 	llcmd := exec.Command("llc", "-filetype=null")
-	out, err1 := llcmd.StdinPipe()
-	if err1 != nil {
-		t.Error(err1.Error())
-	}
-	in, err2 := llcmd.StderrPipe()
-	if err2 != nil {
-		t.Error(err2.Error())
+	llcmd.Stderr = &buf
+	out, err := llcmd.StdinPipe()
+	if err != nil {
+		t.Error(err.Error())
 	}
 	if err := llcmd.Start(); err != nil {
 		t.Error(err.Error())
@@ -35,10 +33,6 @@ func checkLLC(t *testing.T, ast *Ast) {
 		t.Error(err.Error())
 	}
 	out.Close()
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(in); err != nil {
-		t.Error(err.Error())
-	}
 	if err := llcmd.Wait(); err != nil {
 		t.Errorf("%s: %s", err.Error(), buf.String())
 	}

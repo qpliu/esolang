@@ -2,11 +2,9 @@ package main
 
 import (
 	"errors"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"sync"
 )
 
 func compile(tokens <-chan Token, outflag, outfile string) error {
@@ -26,29 +24,12 @@ func compile(tokens <-chan Token, outflag, outfile string) error {
 	if outflag == "-S" {
 		return LLVMCodeGen(ast, os.Stdout)
 	} else if outflag == "-s" {
-		var waitGroup sync.WaitGroup
 		llcmd := exec.Command("llc", "-filetype=asm")
+		llcmd.Stdout = os.Stdout
+		llcmd.Stderr = os.Stderr
 		out, err := llcmd.StdinPipe()
 		if err != nil {
 			return err
-		}
-		if in, err := llcmd.StdoutPipe(); err != nil {
-			return err
-		} else {
-			waitGroup.Add(1)
-			go func() {
-				defer waitGroup.Done()
-				io.Copy(os.Stdout, in)
-			}()
-		}
-		if in, err := llcmd.StderrPipe(); err != nil {
-			return err
-		} else {
-			waitGroup.Add(1)
-			go func() {
-				defer waitGroup.Done()
-				io.Copy(os.Stderr, in)
-			}()
 		}
 		if err := llcmd.Start(); err != nil {
 			return err
@@ -60,7 +41,6 @@ func compile(tokens <-chan Token, outflag, outfile string) error {
 		if err := llcmd.Wait(); err != nil {
 			return err
 		}
-		waitGroup.Wait()
 		return nil
 	}
 	var llfile *os.File
