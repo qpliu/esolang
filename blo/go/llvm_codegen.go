@@ -483,56 +483,81 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		}
 		return nil
 	})
-	writeRef := func(val int) error {
-		//... modify to handle %import
+	writeRef := func(val int, typeDecl *Type) error {
 		if _, err := fmt.Fprintf(w, " %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%value%d, i32 0, i32 0 %%%d = load %s, %s* %%%d %%%d = add %s %%%d, 1 store %s %%%d, %s* %%%d", ssaTemp, refCountType, refCountType, val, ssaTemp+1, offsetType, offsetType, ssaTemp, ssaTemp+2, offsetType, ssaTemp+1, offsetType, ssaTemp+2, offsetType, ssaTemp); err != nil {
 			return err
 		}
 		ssaTemp += 3
+		if importedCount(typeDecl) > 0 {
+			for i, t := range importedTypes(typeDecl) {
+				if _, err := fmt.Fprintf(w, " %%%d = extractvalue [%d x i8*] %%import%d, %d", ssaTemp, importedCount(typeDecl), val, i); err != nil {
+					return err
+				}
+				ssaTemp++
+				if err := t.WriteRef(fmt.Sprintf("%%%d", ssaTemp-1), &ssaTemp, w); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	}
-	writeUnref := func(val int) error {
-		//... modify to handle %import
+	writeUnref := func(val int, typeDecl *Type) error {
 		if _, err := fmt.Fprintf(w, " %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%value%d, i32 0, i32 0 %%%d = load %s, %s* %%%d %%%d = sub %s %%%d, 1 store %s %%%d, %s* %%%d", ssaTemp, refCountType, refCountType, val, ssaTemp+1, offsetType, offsetType, ssaTemp, ssaTemp+2, offsetType, ssaTemp+1, offsetType, ssaTemp+2, offsetType, ssaTemp); err != nil {
 			return err
 		}
 		ssaTemp += 3
+		if importedCount(typeDecl) > 0 {
+			for i, t := range importedTypes(typeDecl) {
+				if _, err := fmt.Fprintf(w, " %%%d = extractvalue [%d x i8*] %%import%d, %d", ssaTemp, importedCount(typeDecl), val, i); err != nil {
+					return err
+				}
+				ssaTemp++
+				if err := t.WriteUnref(fmt.Sprintf("%%%d", ssaTemp-1), &ssaTemp, w); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	}
-	for i, _ := range funcDecl.Params {
-		//... modify to handle %import
-		if err := writeRef(i); err != nil {
+	for i, param := range funcDecl.Params {
+		if err := writeRef(i, param.Type); err != nil {
 			return err
 		}
 	}
-	var writeExpr func(Stmt, Expr, bool) (int, int, error)
-	writeExpr = func(stmt Stmt, expr Expr, inLoop bool) (int, int, error) {
+	var writeExpr func(Stmt, Expr, bool) (int, int, int, error)
+	writeExpr = func(stmt Stmt, expr Expr, inLoop bool) (int, int, int, error) {
 		//... modify to handle %import
 		switch ex := expr.(type) {
 		case *ExprVar:
 			if _, err := fmt.Fprintf(w, " %%%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%%d = select i1 1, %s %%offset%d, %s 0", ssaTemp, refCountType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], refCountType, ssaTemp+1, offsetType, stmt.LLVMAnnotation().localsOnEntry[ex.Name], offsetType); err != nil {
-				return 0, 0, err
+				return 0, 0, 0, err
 			}
+			val := ssaTemp
+			offs := ssaTemp + 1
 			ssaTemp += 2
-			return ssaTemp - 2, ssaTemp - 1, nil
+			imp := 0 //... handle %import
+			return val, offs, imp, nil
 		case *ExprField:
-			val, offs, err := writeExpr(stmt, ex.Expr, inLoop)
+			val, offs, imp, err := writeExpr(stmt, ex.Expr, inLoop)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, 0, err
 			}
 			if _, err := fmt.Fprintf(w, " %%%d = add %s %%%d, %d", ssaTemp, offsetType, offs, ex.Expr.Type().BitOffset(ex.Name)); err != nil {
-				return 0, 0, err
+				return 0, 0, 0, err
 			}
+			offs = ssaTemp
 			ssaTemp += 1
-			return val, ssaTemp - 1, nil
+			imp = 0 //... handle %import
+			return val, offs, imp, nil
 		case *ExprFunc:
-			var args [][2]int
+			//... modify for %import
+			var args [][3]int
 			for _, param := range ex.Params {
-				val, offs, err := writeExpr(stmt, param, inLoop)
+				val, offs, imp, err := writeExpr(stmt, param, inLoop)
 				if err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
-				args = append(args, [2]int{val, offs})
+				args = append(args, [3]int{val, offs, imp})
 			}
 			exprAnn := expr.LLVMAnnotation()
 			retVal := 0
@@ -543,7 +568,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					panic("expr function")
 				}
 				if _, err := io.WriteString(w, " call void"); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
 			case 1:
 				retValAlloc = fmt.Sprintf("%%alloca%d", exprAnn.allocas[0])
@@ -551,64 +576,70 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				ssaTemp++
 				if inLoop {
 					if err := writeClear(retValAlloc, exprAnn.allocaType); err != nil {
-						return 0, 0, err
+						return 0, 0, 0, err
 					}
 				}
+				//... modify for %import
 				if _, err := fmt.Fprintf(w, " %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
 			default:
 				retValAlloc = fmt.Sprintf("%%%d", ssaTemp)
 				retVal = ssaTemp + 1
 				ssaTemp += 2
 				if _, err := fmt.Fprintf(w, " %s = call {%s, [0 x i1]}* @__alloc%d(", retValAlloc, refCountType, len(exprAnn.allocas)); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
 				comma := ""
 				for _, alloca := range exprAnn.allocas {
 					if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %%alloca%d", comma, refCountType, alloca); err != nil {
-						return 0, 0, err
+						return 0, 0, 0, err
 					}
 					comma = ","
 				}
 				if _, err := fmt.Fprintf(w, ")"); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
 				if err := writeClear(retValAlloc, exprAnn.allocaType); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
+				//... modify for %import
 				if _, err := fmt.Fprintf(w, "%%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
 			}
 			if _, err := fmt.Fprintf(w, " @%s(", LLVMCanonicalName(ex.Name)); err != nil {
-				return 0, 0, err
+				return 0, 0, 0, err
 			}
 			comma := ""
-			for _, arg := range args {
+			for i, arg := range args {
 				if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %%%d, %s %%%d", comma, refCountType, arg[0], offsetType, arg[1]); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
+				}
+				if importedCount(ex.Params[i].Type()) > 0 {
+					//... handle %import
 				}
 				comma = ","
 			}
 			if len(exprAnn.allocas) > 0 {
 				if _, err := fmt.Fprintf(w, "%s{%s, [0 x i1]}* %s", comma, refCountType, retValAlloc); err != nil {
-					return 0, 0, err
+					return 0, 0, 0, err
 				}
 			}
 			if _, err := io.WriteString(w, ")"); err != nil {
-				return 0, 0, err
+				return 0, 0, 0, err
 			}
 			if len(exprAnn.allocas) == 0 {
-				return 0, 0, nil
+				return 0, 0, 0, nil
 			}
 			val := ssaTemp
 			offs := ssaTemp + 1
+			imp := 0 //... handle %import
 			ssaTemp += 2
 			if _, err := fmt.Fprintf(w, " %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal); err != nil {
-				return 0, 0, err
+				return 0, 0, 0, err
 			}
-			return val, offs, nil
+			return val, offs, imp, nil
 		default:
 			panic("Unknown expr type")
 		}
@@ -621,11 +652,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 			if len(ann.comesFrom) > 1 {
 				var vars []string
+				var varTypes []*Type
 				for name, _ := range ann.localsOnEntry {
 					vars = append(vars, name)
+					varTypes = append(varTypes, stmt.Scope()[name].Type)
 				}
 				sort.Strings(vars)
-				for _, v := range vars {
+				for i, v := range vars {
 					if _, err := fmt.Fprintf(w, " %%value%d = phi {%s, [0 x i1]}* ", ann.localsOnEntry[v], refCountType); err != nil {
 						return err
 					}
@@ -646,13 +679,24 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 						}
 						comma = ","
 					}
-					//... handle %import
+					if importedCount(varTypes[i]) > 0 {
+						if _, err := fmt.Fprintf(w, " %%import%d = phi [%d x i8*] ", ann.localsOnEntry[v], importedCount(varTypes[i])); err != nil {
+							return err
+						}
+						comma = ""
+						for _, prev := range ann.comesFrom {
+							if _, err := fmt.Fprintf(w, "%s[%%import%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel); err != nil {
+								return err
+							}
+							comma = ","
+						}
+					}
 				}
 			}
 		}
 		writeUnrefs := func(next Stmt) error {
-			//... modify to handle %import
 			var unrefs []int
+			var unrefTypes []*Type
 			for name, ref := range ann.localsOnExit {
 				if next != nil {
 					if _, ok := next.LLVMAnnotation().localsOnEntry[name]; ok {
@@ -660,10 +704,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 				}
 				unrefs = append(unrefs, ref)
+				unrefTypes = append(unrefTypes, stmt.Scope()[name].Type)
 			}
 			sort.Ints(unrefs)
-			for _, unref := range unrefs {
-				if err := writeUnref(unref); err != nil {
+			for i, unref := range unrefs {
+				if err := writeUnref(unref, unrefTypes[i]); err != nil {
 					return err
 				}
 			}
@@ -700,7 +745,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		case *StmtVar:
 			//... modify to handle %import
 			if st.Expr != nil {
-				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+				val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
@@ -742,7 +787,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 				}
 			}
-			if err := writeRef(ann.localsOnExit[st.Var.Name]); err != nil {
+			if err := writeRef(ann.localsOnExit[st.Var.Name], st.Var.Type); err != nil {
 				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
@@ -753,7 +798,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 		case *StmtIf:
 			//... modify to handle %import
-			val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+			val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
 			if err != nil {
 				return err
 			}
@@ -812,7 +857,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 			} else {
 				//... modify to handle %import
-				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+				val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
@@ -836,7 +881,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				ssaTemp++
 			}
 		case *StmtSetClear:
-			val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+			val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
 			if err != nil {
 				return err
 			}
@@ -858,26 +903,26 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		case *StmtAssign:
 			if lvalue, ok := st.LValue.(*ExprVar); ok {
 				//... modify to handle %import
-				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+				val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
 				if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
 					return err
 				}
-				if err := writeRef(ann.localsOnExit[lvalue.Var.Name]); err != nil {
+				if err := writeRef(ann.localsOnExit[lvalue.Var.Name], lvalue.Var.Type); err != nil {
 					return err
 				}
-				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name]); err != nil {
+				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name], lvalue.Var.Type); err != nil {
 					return err
 				}
 			} else {
 				//... modify to handle %import
-				lval, loffs, lerr := writeExpr(stmt, st.LValue, inLoop)
+				lval, loffs, _, lerr := writeExpr(stmt, st.LValue, inLoop)
 				if lerr != nil {
 					return lerr
 				}
-				val, offs, err := writeExpr(stmt, st.Expr, inLoop)
+				val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
@@ -893,7 +938,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 		case *StmtExpr:
 			//... modify to handle %import
-			if _, _, err := writeExpr(stmt, st.Expr, inLoop); err != nil {
+			if _, _, _, err := writeExpr(stmt, st.Expr, inLoop); err != nil {
 				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
