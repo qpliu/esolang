@@ -278,15 +278,25 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 			ann.localsOnExit[st.Var.Name] = local
 			local++
 		case *StmtAssign:
-			//... if expr is ultimately var.field
-			//... as opposed to ultimately funcall().field
-			if lvalue, ok := st.LValue.(*ExprVar); ok {
-				ann.localsOnExit = make(map[string]int)
-				for k, v := range ann.localsOnEntry {
-					ann.localsOnExit[k] = v
+			ex := st.LValue
+		loop:
+			for {
+				switch lvalue := ex.(type) {
+				case *ExprVar:
+					ann.localsOnExit = make(map[string]int)
+					for k, v := range ann.localsOnEntry {
+						ann.localsOnExit[k] = v
+					}
+					ann.localsOnExit[lvalue.Name] = local
+					local++
+					break loop
+				case *ExprField:
+					ex = lvalue.Expr
+				case *ExprFunc:
+					break loop
+				default:
+					panic("Unknown Expr type")
 				}
-				ann.localsOnExit[lvalue.Name] = local
-				local++
 			}
 		}
 		return nil
@@ -958,44 +968,54 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				return err
 			}
 		case *StmtAssign:
-			if lvalue, ok := st.LValue.(*ExprVar); ok {
-				val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
-				if err != nil {
-					return err
+			lval, loffs, limp, lerr := writeExpr(stmt, st.LValue, inLoop)
+			if lerr != nil {
+				return lerr
+			}
+			ex := st.LValue
+			limpOffset := 0
+		loop:
+			for {
+				switch lvalue := ex.(type) {
+				case *ExprField:
+					limpOffset += importedOffset(lvalue.Expr.Type(), lvalue.Name)
+				case *ExprVar:
+					val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
+					if err != nil {
+						return err
+					}
+					if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
+						return err
+					}
+					//... copy %import using shufflevector
+					if err := writeRef(ann.localsOnExit[lvalue.Var.Name], lvalue.Var.Type); err != nil {
+						return err
+					}
+					if err := writeExprUnref(val, offs, imp, st.Expr.Type()); err != nil {
+						return err
+					}
+					if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name], lvalue.Var.Type); err != nil {
+						return err
+					}
+					break loop
+				case *ExprFunc:
+					val, offs, _ /*imp*/, err := writeExpr(stmt, st.Expr, inLoop)
+					if err != nil {
+						return err
+					}
+					if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
+						return err
+					}
+					//... copy %import using  shufflevector
+					//... ref new %import copy
+					//... unref old %import copy
+					break loop
+				default:
+					panic("Unknown expr type")
 				}
-				if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
-					return err
-				}
-				//... add %import
-				if err := writeRef(ann.localsOnExit[lvalue.Var.Name], lvalue.Var.Type); err != nil {
-					return err
-				}
-				if err := writeExprUnref(val, offs, imp, st.Expr.Type()); err != nil {
-					return err
-				}
-				if err := writeUnref(ann.localsOnEntry[lvalue.Var.Name], lvalue.Var.Type); err != nil {
-					return err
-				}
-			} else {
-				//... modify to handle %import
-				lval, loffs, limp, lerr := writeExpr(stmt, st.LValue, inLoop)
-				if lerr != nil {
-					return lerr
-				}
-				val, offs, _ /*imp*/, err := writeExpr(stmt, st.Expr, inLoop)
-				if err != nil {
-					return err
-				}
-				if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
-					return err
-				}
-				//... if expr is ultimately var.field
-				//... as opposed to ultimately funcall().field
-				//... copy %value, %offset, %import on entry to %value, %offset, %import on exit
-				//... use shufflevector to merge %import elements
-				if err := writeExprUnref(lval, loffs, limp, st.Expr.Type()); err != nil {
-					return err
-				}
+			}
+			if err := writeExprUnref(lval, loffs, limp, st.Expr.Type()); err != nil {
+				return err
 			}
 			if err := writeUnrefs(st.Next); err != nil {
 				return err
