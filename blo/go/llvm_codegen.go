@@ -1108,16 +1108,17 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 					break loop
 				case *ExprFunc:
-					val, offs, _ /*imp*/, err := writeExpr(stmt, st.Expr, inLoop)
+					val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
 					if err != nil {
 						return err
 					}
 					if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
 						return err
 					}
-					//... copy %import using using extractvalue/insertvalue
-					//... ref new %import copy
-					//... unref old %import copy
+					// don't need to copy %imports - not referenced anywhere
+					if err := writeExprUnref(val, offs, imp, st.Expr.Type()); err != nil {
+						return err
+					}
 					break loop
 				default:
 					panic("Unknown expr type")
