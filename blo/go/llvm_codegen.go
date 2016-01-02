@@ -963,28 +963,49 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 			} else {
 				//... modify to handle %import
-				val, offs, _, err := writeExpr(stmt, st.Expr, inLoop)
+				val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
 				}
 				if err := writeUnrefs(nil); err != nil {
 					return err
 				}
+				retType := fmt.Sprintf("{{%s, [0 x i1]}*, %s}", refCountType, offsetType)
+				if importedCount(st.Expr.Type()) > 0 {
+					retType = fmt.Sprintf("{{%s, [0 x i1]}*, %s, [%d x i8*]}", refCountType, offsetType, importedCount(st.Expr.Type()))
+				}
 				subblockLabel := 0
 				for i, param := range funcDecl.Params {
 					if param.Type != st.Expr.Type() && !param.Type.Contains(st.Expr.Type()) {
 						continue
 					}
-					if _, err := fmt.Fprintf(w, " %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%block%d.%d, label %%block%d.%d block%d.%d: %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%%d, 0 %%%d = insertvalue {{%s, [0 x i1]}*, %s} %%%d, %s %%%d, 1 ret {{%s, [0 x i1]}*, %s} %%%d block%d.%d:", ssaTemp, refCountType, val, i, ssaTemp, ann.blockLabel, subblockLabel, ann.blockLabel, subblockLabel+1, ann.blockLabel, subblockLabel, ssaTemp+1, refCountType, offsetType, refCountType, offsetType, refCountType, val, ssaTemp+2, refCountType, offsetType, ssaTemp+1, offsetType, offs, refCountType, offsetType, ssaTemp+2, ann.blockLabel, subblockLabel+1); err != nil {
+					if _, err := fmt.Fprintf(w, " %%%d = icmp eq {%s, [0 x i1]}* %%%d, %%value%d br i1 %%%d, label %%block%d.%d, label %%block%d.%d block%d.%d: %%%d = insertvalue %s undef, {%s, [0 x i1]}* %%%d, 0 %%%d = insertvalue %s %%%d, %s %%%d, 1", ssaTemp, refCountType, val, i, ssaTemp, ann.blockLabel, subblockLabel, ann.blockLabel, subblockLabel+1, ann.blockLabel, subblockLabel, ssaTemp+1, retType, refCountType, val, ssaTemp+2, retType, ssaTemp+1, offsetType, offs); err != nil {
+						return err
+					}
+					ssaTemp += 3
+					if importedCount(st.Expr.Type()) > 0 {
+						if _, err := fmt.Fprintf(w, " %%%d = insertvalue %s %%%d, [%d x i8*] %%%d, 2", ssaTemp, retType, ssaTemp-1, importedCount(st.Expr.Type()), imp); err != nil {
+							return err
+						}
+					}
+					if _, err := fmt.Fprintf(w, " ret %s %%%d block%d.%d:", retType, ssaTemp-1, ann.blockLabel, subblockLabel+1); err != nil {
 						return err
 					}
 					subblockLabel += 2
-					ssaTemp += 3
 				}
-				if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) %%%d = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retval, 0 ret {{%s, [0 x i1]}*, %s} %%%d", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), ssaTemp, refCountType, offsetType, refCountType, offsetType, refCountType, refCountType, offsetType, ssaTemp); err != nil {
+				if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) %%%d = insertvalue %s undef, {%s, [0 x i1]}* %%retval, 0 %%%d = insertvalue %s %%%d, %s 0, 1", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), ssaTemp, retType, refCountType, ssaTemp+1, retType, ssaTemp, offsetType); err != nil {
 					return err
 				}
-				ssaTemp++
+				ssaTemp += 2
+				if importedCount(st.Expr.Type()) > 0 {
+					if _, err := fmt.Fprintf(w, " %%%d = insertvalue %s %%%d, [%d x i8*] %%%d, 2", ssaTemp, retType, ssaTemp-1, importedCount(st.Expr.Type()), imp); err != nil {
+						return err
+					}
+					ssaTemp++
+				}
+				if _, err := fmt.Fprintf(w, " ret %s %%%d", retType, ssaTemp-1); err != nil {
+					return err
+				}
 			}
 		case *StmtSetClear:
 			val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
