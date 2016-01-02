@@ -841,7 +841,6 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 			}
 		case *StmtVar:
-			//... modify to handle %import
 			if st.Expr != nil {
 				val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
@@ -849,6 +848,11 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 				if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[st.Var.Name], refCountType, val, refCountType, ann.localsOnExit[st.Var.Name], offsetType, offs, offsetType); err != nil {
 					return err
+				}
+				if importedCount(st.Var.Type) > 0 {
+					if _, err := fmt.Fprintf(w, " %%import%d = select i1 1, [%d x i8*] %%%d, [%d x i8*] undef", ann.localsOnExit[st.Var.Name], importedCount(st.Var.Type), imp, importedCount(st.Var.Type)); err != nil {
+						return err
+					}
 				}
 				if err := writeRef(ann.localsOnExit[st.Var.Name], st.Var.Type); err != nil {
 					return err
@@ -887,6 +891,26 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 						return err
 					}
 					if _, err := fmt.Fprintf(w, " %%offset%d = select i1 1, %s 0, %s 0", ann.localsOnExit[st.Var.Name], offsetType, offsetType); err != nil {
+						return err
+					}
+				}
+				if importedCount(st.Var.Type) > 0 {
+					if _, err := fmt.Fprintf(w, " %%%d = select i1 1, [%d x i8*] undef, [%d x i8*] undef", ssaTemp, importedCount(st.Var.Type), importedCount(st.Var.Type)); err != nil {
+						return err
+					}
+					ssaTemp++
+					for i, rttype := range importedTypes(st.Var.Type) {
+						lastImp := ssaTemp - 1
+						imp, err := rttype.WriteInit(&ssaTemp, w)
+						if err != nil {
+							return err
+						}
+						if _, err := fmt.Fprintf(w, " %%%d = insertvalue [%d x i8*] %%%d, i8* %%%d, %d", ssaTemp, importedCount(st.Var.Type), lastImp, imp, i); err != nil {
+							return err
+						}
+						ssaTemp++
+					}
+					if _, err := fmt.Fprintf(w, " %%import%d = select i1 1, [%d x i8*] %%%d, [%d x i8*] undef", ann.localsOnExit[st.Var.Name], importedCount(st.Var.Type), ssaTemp-1, importedCount(st.Var.Type)); err != nil {
 						return err
 					}
 				}
@@ -962,7 +986,6 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return err
 				}
 			} else {
-				//... modify to handle %import
 				val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
 				if err != nil {
 					return err
@@ -1069,7 +1092,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%%d, %s %%%d, %s %d)", refCountType, val, offsetType, offs, refCountType, lval, offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
 						return err
 					}
-					//... copy %import using  shufflevector
+					//... copy %import using using extractvalue/insertvalue
 					//... ref new %import copy
 					//... unref old %import copy
 					break loop
