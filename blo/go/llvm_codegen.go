@@ -1070,10 +1070,33 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					if err != nil {
 						return err
 					}
-					if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
-						return err
+					if lvalue.Var.Type == st.Expr.Type() {
+						if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, val, refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, offs, offsetType); err != nil {
+							return err
+						}
+					} else {
+						if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %d, {%s, [0 x i1]}* %%value%d, %s %d, %s %d)", refCountType, val, offsetType, offs, refCountType, ann.localsOnEntry[lvalue.Var.Name], offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
+							return err
+						}
+						if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%offset%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, ann.localsOnEntry[lvalue.Var.Name], refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, ann.localsOnEntry[lvalue.Var.Name], offsetType); err != nil {
+							return err
+						}
 					}
-					//... copy %import - cannot use shufflevector - have to use extractvalue/insertvalue
+					if importedCount(lvalue.Var.Type) > 0 {
+						if _, err := fmt.Fprintf(w, " %%%d = select i1 1, [%d x i8*] %%import%d, [%d x i8*] undef", ssaTemp, importedCount(lvalue.Var.Type), ann.localsOnEntry[lvalue.Var.Name], importedCount(lvalue.Var.Type)); err != nil {
+							return err
+						}
+						ssaTemp++
+						for i := 0; i < importedCount(st.Expr.Type()); i++ {
+							if _, err := fmt.Fprintf(w, " %%%d = extractvalue [%d x i8*] %%%d, %d %%%d = insertvalue [%d x i8*] %%%d, i8* %%%d, %d", ssaTemp, importedCount(st.Expr.Type()), imp, i, ssaTemp+1, importedCount(lvalue.Var.Type), ssaTemp-1, ssaTemp, limpOffset+i); err != nil {
+								return err
+							}
+							ssaTemp += 2
+						}
+						if _, err := fmt.Fprintf(w, " %%import%d = select i1, [%d x i8*] %%%d, [%d x i8*] undef", ann.localsOnExit[lvalue.Var.Name], importedCount(lvalue.Var.Type), ssaTemp-1, importedCount(lvalue.Var.Type)); err != nil {
+							return err
+						}
+					}
 					if err := writeRef(ann.localsOnExit[lvalue.Var.Name], lvalue.Var.Type); err != nil {
 						return err
 					}
