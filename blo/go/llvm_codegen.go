@@ -600,20 +600,10 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			ssaTemp += 1
 			newimp := 0
 			if importedCount(expr.Type()) > 0 {
-				if _, err := fmt.Fprintf(w, " %%%d = select i1 1, [%d x i8*] [", ssaTemp, importedCount(expr.Type())); err != nil {
+				if _, err := fmt.Fprintf(w, " %%%d = select i1 1, [%d x i8*] undef, [%d x i8*] undef", ssaTemp, importedCount(expr.Type()), importedCount(expr.Type())); err != nil {
 					return 0, 0, 0, err
 				}
 				ssaTemp++
-				comma := ""
-				for i := 0; i < importedCount(expr.Type()); i++ {
-					if _, err := fmt.Fprintf(w, "%si8* null", comma); err != nil {
-						return 0, 0, 0, err
-					}
-					comma = ","
-				}
-				if _, err := io.WriteString(w, "]"); err != nil {
-					return 0, 0, 0, err
-				}
 				for i := 0; i < importedCount(expr.Type()); i++ {
 					if _, err := fmt.Fprintf(w, " %%%d = extractvalue [%d x i8*] %%%d, %d %%%d = insertvalue [%d x i8*] %%%d, i8* %%%d, %d", ssaTemp, importedCount(ex.Expr.Type()), imp, i+importedOffset(ex.Expr.Type(), ex.Name), ssaTemp+1, importedCount(expr.Type()), ssaTemp-1, ssaTemp, i); err != nil {
 						return 0, 0, 0, nil
@@ -630,7 +620,6 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 			return val, newoffs, newimp, nil
 		case *ExprFunc:
-			//... modify for %import
 			var args [][3]int
 			for _, param := range ex.Params {
 				val, offs, imp, err := writeExpr(stmt, param, inLoop)
@@ -659,8 +648,15 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 						return 0, 0, 0, err
 					}
 				}
-				//... modify for %import
-				if _, err := fmt.Fprintf(w, " %%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType); err != nil {
+				if _, err := fmt.Fprintf(w, " %%%d = call {{%s, [0 x i1]}*, %s", retVal, refCountType, offsetType); err != nil {
+					return 0, 0, 0, err
+				}
+				if importedCount(expr.Type()) > 0 {
+					if _, err := fmt.Fprintf(w, ", [%d x i8*]", importedCount(expr.Type())); err != nil {
+						return 0, 0, 0, err
+					}
+				}
+				if _, err := io.WriteString(w, "}"); err != nil {
 					return 0, 0, 0, err
 				}
 			default:
@@ -683,8 +679,15 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if err := writeClear(retValAlloc, exprAnn.allocaType); err != nil {
 					return 0, 0, 0, err
 				}
-				//... modify for %import
-				if _, err := fmt.Fprintf(w, "%%%d = call {{%s, [0 x i1]}*, %s}", retVal, refCountType, offsetType); err != nil {
+				if _, err := fmt.Fprintf(w, "%%%d = call {{%s, [0 x i1]}*, %s", retVal, refCountType, offsetType); err != nil {
+					return 0, 0, 0, err
+				}
+				if importedCount(expr.Type()) > 0 {
+					if _, err := fmt.Fprintf(w, ", [%d x i8*]", importedCount(expr.Type())); err != nil {
+						return 0, 0, 0, err
+					}
+				}
+				if _, err := io.WriteString(w, "}"); err != nil {
 					return 0, 0, 0, err
 				}
 			}
@@ -697,7 +700,9 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					return 0, 0, 0, err
 				}
 				if importedCount(ex.Params[i].Type()) > 0 {
-					//... handle %import
+					if _, err := fmt.Fprintf(w, ",[%d x i8*] %%%d", importedCount(ex.Params[i].Type()), arg[2]); err != nil {
+						return 0, 0, 0, err
+					}
 				}
 				comma = ","
 			}
@@ -719,10 +724,18 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 			val := ssaTemp
 			offs := ssaTemp + 1
-			imp := 0 //... handle %import
 			ssaTemp += 2
-			if _, err := fmt.Fprintf(w, " %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal); err != nil {
-				return 0, 0, 0, err
+			imp := 0
+			if importedCount(expr.Type()) == 0 {
+				if _, err := fmt.Fprintf(w, " %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s} %%%d, 1", val, refCountType, offsetType, retVal, offs, refCountType, offsetType, retVal); err != nil {
+					return 0, 0, 0, err
+				}
+			} else {
+				imp = ssaTemp
+				ssaTemp++
+				if _, err := fmt.Fprintf(w, " %%%d = extractvalue {{%s, [0 x i1]}*, %s, [%d x i8*]} %%%d, 0 %%%d = extractvalue {{%s, [0 x i1]}*, %s, [%d x i8*]} %%%d, 1 %%%d = extractvalue {{%s, [0 x i1]}*, %s, [%d x i8*]} %%%d, 2", val, refCountType, offsetType, importedCount(expr.Type()), retVal, offs, refCountType, offsetType, importedCount(expr.Type()), retVal, imp, refCountType, offsetType, importedCount(expr.Type()), retVal); err != nil {
+					return 0, 0, 0, err
+				}
 			}
 			return val, offs, imp, nil
 		default:
