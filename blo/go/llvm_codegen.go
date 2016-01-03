@@ -92,9 +92,7 @@ func LLVMCodeGen(ast *Ast, w io.Writer) error {
 func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 	refCountType := LLVMRefcountType(ast)
 	offsetType := LLVMOffsetType(ast)
-	if _, err := fmt.Fprintf(w, "declare void @llvm.memset.p0i8.%s(i8*,i8,%s,i32,i1)", offsetType, offsetType); err != nil {
-		return err
-	}
+	ast.LLVMDeclares[fmt.Sprintf("llvm.memset.p0i8.%s", offsetType)] = fmt.Sprintf("declare void @llvm.memset.p0i8.%s(i8*,i8,%s,i32,i1)", offsetType, offsetType)
 	var declares []string
 	for declare, _ := range ast.LLVMDeclares {
 		declares = append(declares, declare)
@@ -148,7 +146,7 @@ func LLVMCodeGenPrologue(ast *Ast, w io.Writer) error {
 	sort.Strings(typeNames)
 	for _, typeName := range typeNames {
 		typeDecl := ast.Types[typeName]
-		if typeDecl.Imported {
+		if typeDecl.Imported && typeDecl.LLVMRTType.WritePrologue != nil {
 			if err := typeDecl.LLVMRTType.WritePrologue(w); err != nil {
 				return err
 			}
