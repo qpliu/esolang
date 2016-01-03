@@ -20,6 +20,7 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 				ast.LLVMDeclares["free"] = "declare void @free(i8*)"
 				ast.LLVMDeclares["malloc"] = "declare i8* void @malloc(i32)"
 				ast.LLVMDeclares["llvm.memset.p0i8.i32"] = "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)"
+				ast.LLVMDeclares["llvm.memcpy.p0i8.p0i8.i32"] = "declare void @llvm.memcpy.p0i8.p018.i32(i8*,i8*,i32,i32,i1)"
 			} else {
 				return errors.New(typeDecl.Location.String() + ": Unrecognized import type: " + typeDecl.Name)
 			}
@@ -37,9 +38,9 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitPutByte
 		} else if funcDecl.Name == "pushStack" && len(funcDecl.Params) == 2 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type == nil {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitPushStack
-		} else if funcDecl.Name == "popStack" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && !funcDecl.Type.Imported {
+		} else if funcDecl.Name == "popStack" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && importedCount(funcDecl.Type) == 0 {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitPopStack
-		} else if funcDecl.Name == "isEmpty" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && !funcDecl.Type.Imported {
+		} else if funcDecl.Name == "isEmpty" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && importedCount(funcDecl.Type) == 0 {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitIsEmptyStack
 		} else {
 			return errors.New(funcDecl.Location.String() + ": Unrecognized import function: " + funcDecl.Name)
@@ -127,16 +128,64 @@ func runtimeLLVMUnrefStack(imp string, ssaTemp *int, w io.Writer) error {
 }
 
 func runtimeLLVMEmitPushStack(ast *Ast, funcDecl *Func, w io.Writer) error {
-	//...
+	refCountType := LLVMRefcountType(ast)
+	offsetType := LLVMOffsetType(ast)
+	importCount := importedCount(funcDecl.Params[0].Type)
+	if _, err := fmt.Fprintf(w, "define void @%s({%s, [0 x i1]}* %%stackval, %s %%stackoffset, [%d x i8*] %%stackimport, {%s, [0 x i1]}* %%value, %s %%offset) {", LLVMCanonicalName(funcDecl.Name), refCountType, offsetType, importCount, refCountType, offsetType); err != nil {
+		return err
+	}
+	if funcDecl.Params[1].Type.BitSize() > 0 {
+		// %2 = bit to push
+		if _, err := fmt.Fprintf(w, " entry: %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%value, i32 0, i32 1, %s %%offset %%2 = load i8, i8* %%1", refCountType, refCountType, offsetType); err != nil {
+			return err
+		}
+		// %5 = &stack size %6 = stack size %7 = &stack capacity %8 = stack capacity %9 = &&stack data %10 = &stack data
+		if _, err := fmt.Fprintf(w, " %%3 = extractvalue [%d x i8*] %%stackimport, 0 %%4 = bitcast i8* %%3 to {i32,i32,i32,[0 x i8]*} %%5 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*} %%4, i32 0, i32 1 %%6 = load i32, i32* %%5 %%7 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*} %%4, i32 0, i32 2 %%8 = load i32, i32* %%7 %%9 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*} %%4, i32 0, i32 3 %%10 = load [0 x i8]*, [0 x i8]** %%9", importCount); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, " %%11 = load icmp lt i32 %%6, %%8 br i1 %%9, label %%l1, label %%l2 l1: %%12 = phi [0 x i8]* [%%10, %%entry], [%%28, %%l2] [%%28, %%l3] %%13 = add i32 %%6, 1 store i32 %%13, i32* %%6 %%14 = udiv i32 %%6, 8 %%15 = urem i32 %%6, 8 %%17 = getelementptr [0 x i8], [0 x i8]* %%12, i32 0, i32 %%14 %%18 = load i8, i8* %%17 %%19 = trunc i32 %%15 to i8 %%20 = shl i8 1, %%19 %%21 = xor i8 %%20, 255 %%22 = and i8 %%21, %%18 %%23 = shl i8 %%2, %%19 %%24 = or i8 %%22, %%23 store i8 %%24, i8* 17 ret void"); err != nil {
+			return err
+		}
+		// %27 = (i8*) &new stack data, %28 = &new stack data
+		if _, err := fmt.Fprintf(w, " l2: %%25 = add i32 %%8, 128 store i32 %%25, i32* %%7 %%26 = udiv i32 %%25, 8 %%27 = call i8* @malloc(i32 %%26) %%28 = bitcast i8* %%27 to [0 x i8]* store [0 x i8]* %%28, [0 x i8]** %%9 %%29 = icmp eq i32 %%8, 0 br i1 %%29, label %%l1, label %%l3"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, " l3: %%30 = bitcast [0 x i8]* %%10 to i8* %%31 = udiv i32 %%8, 8 call void @llvm.memcpy.p0i8.p0i8.i32(i8* %%27, i8* %%30, i32 %%31, i32 0, i1 0) call void @free(i8* %%30) br label %%l1"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := fmt.Fprintf(w, " ret void"); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w, " }"); err != nil {
+		return err
+	}
 	return nil
 }
 
 func runtimeLLVMEmitPopStack(ast *Ast, funcDecl *Func, w io.Writer) error {
+	refCountType := LLVMRefcountType(ast)
+	offsetType := LLVMOffsetType(ast)
+	if _, err := fmt.Fprintf(w, "define {{%s, [0 x i1]}*, %s} @%s({%s, [0 x i1]}* %%stackval, %s %%stackoffset, [%d x i8*] %%stackimport, {%s, [0 x i1]}* %%retvalue) {", refCountType, offsetType, LLVMCanonicalName(funcDecl.Name), refCountType, offsetType, importedCount(funcDecl.Params[0].Type), refCountType); err != nil {
+		return err
+	}
 	//...
+	if _, err := fmt.Fprintf(w, " ret void }"); err != nil {
+		return err
+	}
 	return nil
 }
 
 func runtimeLLVMEmitIsEmptyStack(ast *Ast, funcDecl *Func, w io.Writer) error {
+	refCountType := LLVMRefcountType(ast)
+	offsetType := LLVMOffsetType(ast)
+	if _, err := fmt.Fprintf(w, "define {{%s, [0 x i1]}*, %s} @%s({%s, [0 x i1]}* %%stackval, %s %%stackoffset, [%d x i8*] %%stackimport, {%s, [0 x i1]}* %%retvalue) {", refCountType, offsetType, LLVMCanonicalName(funcDecl.Name), refCountType, offsetType, importedCount(funcDecl.Params[0].Type), refCountType); err != nil {
+		return err
+	}
 	//...
+	if _, err := fmt.Fprintf(w, " ret void }"); err != nil {
+		return err
+	}
 	return nil
 }
