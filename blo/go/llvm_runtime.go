@@ -171,7 +171,7 @@ func runtimeLLVMEmitPopStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 		return err
 	}
 	//...
-	if _, err := fmt.Fprintf(w, " ret void }"); err != nil {
+	if _, err := fmt.Fprintf(w, " }"); err != nil {
 		return err
 	}
 	return nil
@@ -180,11 +180,19 @@ func runtimeLLVMEmitPopStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 func runtimeLLVMEmitIsEmptyStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 	refCountType := LLVMRefcountType(ast)
 	offsetType := LLVMOffsetType(ast)
+	importCount := importedCount(funcDecl.Params[0].Type)
 	if _, err := fmt.Fprintf(w, "define {{%s, [0 x i1]}*, %s} @%s({%s, [0 x i1]}* %%stackval, %s %%stackoffset, [%d x i8*] %%stackimport, {%s, [0 x i1]}* %%retvalue) {", refCountType, offsetType, LLVMCanonicalName(funcDecl.Name), refCountType, offsetType, importedCount(funcDecl.Params[0].Type), refCountType); err != nil {
 		return err
 	}
-	//...
-	if _, err := fmt.Fprintf(w, " ret void }"); err != nil {
+	if _, err := fmt.Fprintf(w, " %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = add %s %%3, 1 store %s %%3, %s* %%1 %%4 = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retvalue, 0", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, offsetType, refCountType, offsetType, refCountType); err != nil {
+		return err
+	}
+	if funcDecl.Type.BitSize() > 0 {
+		if _, err := fmt.Fprintf(w, " %%5 = extractvalue [%d x i8*] %%stackimport, 0 %%6 = bitcast i8* %%5 to {i32, i32, i32, [0 x i8]*}* %%7 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%5, i32 0, i32 0 %%8 = load i32, i32* %%7 %%9 = icmp eq i32 %%8, 0 %%10 = getelementptr {%s, [0 x i1]},  {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%9, i1* %%10", importCount, refCountType, refCountType, offsetType); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w, " ret {{%s, [0 x i1]}*, %s} %%4 }", refCountType, offsetType); err != nil {
 		return err
 	}
 	return nil
