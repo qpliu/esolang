@@ -1069,6 +1069,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				switch lvalue := ex.(type) {
 				case *ExprField:
 					limpOffset += importedOffset(lvalue.Expr.Type(), lvalue.Name)
+					ex = lvalue.Expr
 				case *ExprVar:
 					val, offs, imp, err := writeExpr(stmt, st.Expr, inLoop)
 					if err != nil {
@@ -1079,7 +1080,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 							return err
 						}
 					} else {
-						if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %d, {%s, [0 x i1]}* %%value%d, %s %d, %s %d)", refCountType, val, offsetType, offs, refCountType, ann.localsOnEntry[lvalue.Var.Name], offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
+						if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%value%d, %s %d, %s %d)", refCountType, val, offsetType, offs, refCountType, ann.localsOnEntry[lvalue.Var.Name], offsetType, loffs, offsetType, st.Expr.Type().BitSize()); err != nil {
 							return err
 						}
 						if _, err := fmt.Fprintf(w, " %%value%d = select i1 1, {%s, [0 x i1]}* %%value%d, {%s, [0 x i1]}* null %%offset%d = select i1 1, %s %%offset%d, %s 0", ann.localsOnExit[lvalue.Var.Name], refCountType, ann.localsOnEntry[lvalue.Var.Name], refCountType, ann.localsOnExit[lvalue.Var.Name], offsetType, ann.localsOnEntry[lvalue.Var.Name], offsetType); err != nil {
