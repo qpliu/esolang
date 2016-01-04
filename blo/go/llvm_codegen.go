@@ -216,6 +216,18 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 		}
 		return nil
 	})
+	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
+		if st, ok := stmt.(*StmtBlock); ok {
+			lastWasIf := false
+			for _, s := range st.Stmts {
+				if lastWasIf {
+					s.LLVMAnnotation().startBlock = true
+				}
+				_, lastWasIf = s.(*StmtIf)
+			}
+		}
+		return nil
+	})
 	blockLabel := 0
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()

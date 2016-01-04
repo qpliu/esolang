@@ -348,6 +348,24 @@ func TestIf6(t *testing.T) {
 	checkLLC(t, ast)
 }
 
+func TestIf7(t *testing.T) {
+	ast, err := testCompile(`type a { a } func TestIf7(a a) { if a.a {} else { return } clear a.a }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["TestIf7"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestIf7"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @TestIf7({i8, [0 x i1]}* %value0,i8 %offset0) { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %2 = load i8, i8* %1 %3 = add i8 %2, 1 store i8 %3, i8* %1 br label %block1 block1: %4 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %5 = select i1 1, i8 %offset0, i8 0 %6 = add i8 %5, 0 %7 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %4, i32 0, i32 1, i8 %6 %8 = load i1, i1* %7 br i1 %8, label %block2, label %block3 block2: br label %block4 block3: %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %10 = load i8, i8* %9 %11 = sub i8 %10, 1 store i8 %11, i8* %9 ret void block4: %12 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %13 = select i1 1, i8 %offset0, i8 0 %14 = add i8 %13, 0 %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %12, i32 0, i32 1, i8 %14 store i1 0, i1* %15 %16 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %17 = load i8, i8* %16 %18 = sub i8 %17, 1 store i8 %18, i8* %16 ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+	checkLLC(t, ast)
+}
+
 func TestScope(t *testing.T) {
 	ast, err := testCompile(`type a { a } func TestScope() { { var a a } var a a }`)
 	if err != nil {
