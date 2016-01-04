@@ -40,7 +40,7 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitPushStack
 		} else if funcDecl.Name == "popStack" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && importedCount(funcDecl.Type) == 0 {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitPopStack
-		} else if funcDecl.Name == "isEmpty" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && importedCount(funcDecl.Type) == 0 {
+		} else if funcDecl.Name == "isEmptyStack" && len(funcDecl.Params) == 1 && funcDecl.Params[0].Type.Imported && funcDecl.Params[0].Type.Name == "stack" && funcDecl.Type != nil && importedCount(funcDecl.Type) == 0 {
 			funcDecl.RuntimeLLVM = runtimeLLVMEmitIsEmptyStack
 		} else {
 			return errors.New(funcDecl.Location.String() + ": Unrecognized import function: " + funcDecl.Name)

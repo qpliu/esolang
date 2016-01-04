@@ -183,6 +183,7 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 			}
 			if st.Next != nil {
 				st.Next.LLVMAnnotation().startBlock = true
+				st.Next.LLVMAnnotation().comesFrom = append(st.Next.LLVMAnnotation().comesFrom, stmt)
 			}
 		case *StmtFor:
 			st.LLVMAnnotation().startBlock = true

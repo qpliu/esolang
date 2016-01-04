@@ -305,7 +305,7 @@ func TestIf4(t *testing.T) {
 	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestIf4"], &buf); err != nil {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
-	expected := `define void @TestIf4({i8, [0 x i1]}* %value0,i8 %offset0,{i8, [0 x i1]}* %value1,i8 %offset1) { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %2 = load i8, i8* %1 %3 = add i8 %2, 1 store i8 %3, i8* %1 %4 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %5 = load i8, i8* %4 %6 = add i8 %5, 1 store i8 %6, i8* %4 br label %block1 block1: %7 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %8 = select i1 1, i8 %offset0, i8 0 %9 = add i8 %8, 0 %10 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %7, i32 0, i32 1, i8 %9 %11 = load i1, i1* %10 br i1 %11, label %block2, label %block3 block2: %12 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %13 = select i1 1, i8 %offset0, i8 0 %14 = add i8 %13, 0 %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %12, i32 0, i32 1, i8 %14 store i1 1, i1* %15 br label %block3 block3: %16 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %17 = select i1 1, i8 %offset0, i8 0 %18 = add i8 %17, 0 %19 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %16, i32 0, i32 1, i8 %18 store i1 0, i1* %19 %20 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %21 = load i8, i8* %20 %22 = sub i8 %21, 1 store i8 %22, i8* %20 %23 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %24 = load i8, i8* %23 %25 = sub i8 %24, 1 store i8 %25, i8* %23 ret void }`
+	expected := `define void @TestIf4({i8, [0 x i1]}* %value0,i8 %offset0,{i8, [0 x i1]}* %value1,i8 %offset1) { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %2 = load i8, i8* %1 %3 = add i8 %2, 1 store i8 %3, i8* %1 %4 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %5 = load i8, i8* %4 %6 = add i8 %5, 1 store i8 %6, i8* %4 br label %block1 block1: %7 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %8 = select i1 1, i8 %offset0, i8 0 %9 = add i8 %8, 0 %10 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %7, i32 0, i32 1, i8 %9 %11 = load i1, i1* %10 br i1 %11, label %block2, label %block3 block2: %12 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %13 = select i1 1, i8 %offset0, i8 0 %14 = add i8 %13, 0 %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %12, i32 0, i32 1, i8 %14 store i1 1, i1* %15 br label %block3 block3: %value2 = phi {i8, [0 x i1]}* [%value0,%block1],[%value0,%block2] %offset2 = phi i8 [%offset0,%block1],[%offset0,%block2] %value3 = phi {i8, [0 x i1]}* [%value1,%block1],[%value1,%block2] %offset3 = phi i8 [%offset1,%block1],[%offset1,%block2] %16 = select i1 1, {i8, [0 x i1]}* %value2, {i8, [0 x i1]}* null %17 = select i1 1, i8 %offset2, i8 0 %18 = add i8 %17, 0 %19 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %16, i32 0, i32 1, i8 %18 store i1 0, i1* %19 %20 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value2, i32 0, i32 0 %21 = load i8, i8* %20 %22 = sub i8 %21, 1 store i8 %22, i8* %20 %23 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value3, i32 0, i32 0 %24 = load i8, i8* %23 %25 = sub i8 %24, 1 store i8 %25, i8* %23 ret void }`
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
@@ -342,6 +342,96 @@ func TestScope2(t *testing.T) {
 		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
 	}
 	expected := `define void @TestScope2() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.a, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = bitcast {i8, [0 x i1]}* %value0 to i8* call void @llvm.memset.p0i8.i8(i8* %3, i8 0, i8 %sizeof.a, i32 0, i1 0) %4 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %5 = load i8, i8* %4 %6 = add i8 %5, 1 store i8 %6, i8* %4 %7 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %8 = load i8, i8* %7 %9 = sub i8 %8, 1 store i8 %9, i8* %7 br label %block1 }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+	checkLLC(t, ast)
+}
+
+func TestScope3(t *testing.T) {
+	ast, err := testCompile(`type a { a } func TestScope3() { var a a; { set a.a } { set a.a } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["TestScope3"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestScope3"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @TestScope3() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.a, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %4 = load i8, i8* %3 %5 = add i8 %4, 1 store i8 %5, i8* %3 %6 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %7 = select i1 1, i8 %offset0, i8 0 %8 = add i8 %7, 0 %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %6, i32 0, i32 1, i8 %8 store i1 1, i1* %9 %10 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %11 = select i1 1, i8 %offset0, i8 0 %12 = add i8 %11, 0 %13 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %10, i32 0, i32 1, i8 %12 store i1 1, i1* %13 %14 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %15 = load i8, i8* %14 %16 = sub i8 %15, 1 store i8 %16, i8* %14 ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+	checkLLC(t, ast)
+}
+
+func TestScope4(t *testing.T) {
+	ast, err := testCompile(`type a { a } func TestScope4() { var a a; { set a.a } if a.a { set a.a } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["TestScope4"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestScope4"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @TestScope4() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.a, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %4 = load i8, i8* %3 %5 = add i8 %4, 1 store i8 %5, i8* %3 %6 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %7 = select i1 1, i8 %offset0, i8 0 %8 = add i8 %7, 0 %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %6, i32 0, i32 1, i8 %8 store i1 1, i1* %9 %10 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %11 = select i1 1, i8 %offset0, i8 0 %12 = add i8 %11, 0 %13 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %10, i32 0, i32 1, i8 %12 %14 = load i1, i1* %13 br i1 %14, label %block2, label %block1.0 block1.0: %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %16 = load i8, i8* %15 %17 = sub i8 %16, 1 store i8 %17, i8* %15 ret void block2: %18 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %19 = select i1 1, i8 %offset0, i8 0 %20 = add i8 %19, 0 %21 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %18, i32 0, i32 1, i8 %20 store i1 1, i1* %21 %22 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %23 = load i8, i8* %22 %24 = sub i8 %23, 1 store i8 %24, i8* %22 ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+	checkLLC(t, ast)
+}
+
+func TestScope5(t *testing.T) {
+	ast, err := testCompile(`type a { a } func TestScope5() { var a a; if a.a { set a.a } { set a.a } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["TestScope5"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestScope5"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @TestScope5() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.a, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %4 = load i8, i8* %3 %5 = add i8 %4, 1 store i8 %5, i8* %3 %6 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %7 = select i1 1, i8 %offset0, i8 0 %8 = add i8 %7, 0 %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %6, i32 0, i32 1, i8 %8 %10 = load i1, i1* %9 br i1 %10, label %block2, label %block3 block2: %11 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %12 = select i1 1, i8 %offset0, i8 0 %13 = add i8 %12, 0 %14 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %11, i32 0, i32 1, i8 %13 store i1 1, i1* %14 br label %block3 block3: %value1 = phi {i8, [0 x i1]}* [%value0,%block1],[%value0,%block2] %offset1 = phi i8 [%offset0,%block1],[%offset0,%block2] %15 = select i1 1, {i8, [0 x i1]}* %value1, {i8, [0 x i1]}* null %16 = select i1 1, i8 %offset1, i8 0 %17 = add i8 %16, 0 %18 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %15, i32 0, i32 1, i8 %17 store i1 1, i1* %18 %19 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %20 = load i8, i8* %19 %21 = sub i8 %20, 1 store i8 %21, i8* %19 ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+	checkLLC(t, ast)
+}
+
+func TestScope6(t *testing.T) {
+	ast, err := testCompile(`type a { a } func TestScope6() { var a a; if a.a { set a.a } if a.a { set a.a } }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["TestScope6"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestScope6"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @TestScope6() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.a, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %4 = load i8, i8* %3 %5 = add i8 %4, 1 store i8 %5, i8* %3 %6 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %7 = select i1 1, i8 %offset0, i8 0 %8 = add i8 %7, 0 %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %6, i32 0, i32 1, i8 %8 %10 = load i1, i1* %9 br i1 %10, label %block2, label %block3 block2: %11 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %12 = select i1 1, i8 %offset0, i8 0 %13 = add i8 %12, 0 %14 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %11, i32 0, i32 1, i8 %13 store i1 1, i1* %14 br label %block3 block3: %value1 = phi {i8, [0 x i1]}* [%value0,%block1],[%value0,%block2] %offset1 = phi i8 [%offset0,%block1],[%offset0,%block2] %15 = select i1 1, {i8, [0 x i1]}* %value1, {i8, [0 x i1]}* null %16 = select i1 1, i8 %offset1, i8 0 %17 = add i8 %16, 0 %18 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %15, i32 0, i32 1, i8 %17 %19 = load i1, i1* %18 br i1 %19, label %block4, label %block3.0 block3.0: %20 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %21 = load i8, i8* %20 %22 = sub i8 %21, 1 store i8 %22, i8* %20 ret void block4: %23 = select i1 1, {i8, [0 x i1]}* %value1, {i8, [0 x i1]}* null %24 = select i1 1, i8 %offset1, i8 0 %25 = add i8 %24, 0 %26 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %23, i32 0, i32 1, i8 %25 store i1 1, i1* %26 %27 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %28 = load i8, i8* %27 %29 = sub i8 %28, 1 store i8 %29, i8* %27 ret void }`
+	if buf.String() != expected {
+		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+	}
+	checkLLC(t, ast)
+}
+
+func TestScope7(t *testing.T) {
+	ast, err := testCompile(`type a { a } func TestScope7() { var a a; if a.a { return } set a.a; set a.a }`)
+	if err != nil {
+		t.Errorf("testCompile error: %s", err.Error())
+	}
+
+	LLVMCodeGenAnnotateFunc(ast, ast.Funcs["TestScope7"])
+	var buf bytes.Buffer
+	if err := LLVMCodeGenFunc(ast, ast.Funcs["TestScope7"], &buf); err != nil {
+		t.Errorf("LLVMCodeGenFunc error: %s", err.Error())
+	}
+	expected := `define void @TestScope7() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 1 %sizeof.a = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.a %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.a, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %4 = load i8, i8* %3 %5 = add i8 %4, 1 store i8 %5, i8* %3 %6 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %7 = select i1 1, i8 %offset0, i8 0 %8 = add i8 %7, 0 %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %6, i32 0, i32 1, i8 %8 %10 = load i1, i1* %9 br i1 %10, label %block2, label %block3 block2: %11 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %12 = load i8, i8* %11 %13 = sub i8 %12, 1 store i8 %13, i8* %11 ret void block3: %14 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %15 = select i1 1, i8 %offset0, i8 0 %16 = add i8 %15, 0 %17 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %14, i32 0, i32 1, i8 %16 store i1 1, i1* %17 %18 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %19 = select i1 1, i8 %offset0, i8 0 %20 = add i8 %19, 0 %21 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %18, i32 0, i32 1, i8 %20 store i1 1, i1* %21 %22 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %23 = load i8, i8* %22 %24 = sub i8 %23, 1 store i8 %24, i8* %22 ret void }`
 	if buf.String() != expected {
 		t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
 	}
