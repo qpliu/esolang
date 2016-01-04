@@ -219,6 +219,9 @@ func LLVMCodeGenAnnotateFunc(ast *Ast, funcDecl *Func) {
 	blockLabel := 0
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
 		ann := stmt.LLVMAnnotation()
+		if len(ann.comesFrom) > 1 {
+			ann.startBlock = true
+		}
 		if ann.startBlock {
 			blockLabel++
 		}
