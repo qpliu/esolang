@@ -18,7 +18,7 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 				typeDecl.LLVMRTType.WriteRef = runtimeLLVMRefStack
 				typeDecl.LLVMRTType.WriteUnref = runtimeLLVMUnrefStack
 				ast.LLVMDeclares["free"] = "declare void @free(i8*)"
-				ast.LLVMDeclares["malloc"] = "declare i8* void @malloc(i32)"
+				ast.LLVMDeclares["malloc"] = "declare void @malloc(i32)"
 				ast.LLVMDeclares["llvm.memset.p0i8.i32"] = "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)"
 				ast.LLVMDeclares["llvm.memcpy.p0i8.p0i8.i32"] = "declare void @llvm.memcpy.p0i8.p018.i32(i8*,i8*,i32,i32,i1)"
 			} else {
