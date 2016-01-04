@@ -1,0 +1,71 @@
+import func getByte(b byte+bit)
+import func putByte(b byte)
+import type stack {}
+import func pushStack(s stack, b bit)
+import func popStack(s stack) bit
+import func isEmptyStack(s stack) bit
+
+type bit { b }
+
+type byte { 1, 2, 4, 8, 10, 20, 40, 80 bit }
+
+type byte+bit { byte byte; bit bit }
+
+func pushByte(s stack, byte byte) {
+    pushStack(s, byte.1)
+    pushStack(s, byte.2)
+    pushStack(s, byte.4)
+    pushStack(s, byte.8)
+    pushStack(s, byte.10)
+    pushStack(s, byte.20)
+    pushStack(s, byte.40)
+    pushStack(s, byte.80)
+}
+
+func popByte(s stack) byte {
+    var byte byte
+    if popStack(s).b { set byte.80.b }
+    if popStack(s).b { set byte.40.b }
+    if popStack(s).b { set byte.20.b }
+    if popStack(s).b { set byte.10.b }
+    if popStack(s).b { set byte.8.b }
+    if popStack(s).b { set byte.4.b }
+    if popStack(s).b { set byte.2.b }
+    if popStack(s).b { set byte.1.b }
+    return byte
+}
+
+func isEOL(byte byte) bit {
+    var bit bit
+    if byte.80.b { return bit }
+    if byte.40.b { return bit }
+    if byte.20.b { return bit }
+    if byte.10.b { return bit }
+    if byte.8.b {} else { return bit }
+    if byte.4.b { return bit }
+    if byte.2.b {} else { return bit }
+    if byte.1.b { return bit }
+    set bit.b
+    return bit
+}
+
+func main() {
+    var in byte+bit
+    var line stack
+    for {
+        getByte(in)
+        if in.bit.b {
+            break
+        } else if isEOL(in.byte).b {
+            for {
+                if isEmptyStack(line).b {
+                    putByte(in.byte)
+                    break
+                }
+                putByte(popByte(line))
+            }
+        } else {
+            pushByte(line, in.byte)
+        }
+    }
+}
