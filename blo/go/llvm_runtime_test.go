@@ -95,3 +95,147 @@ import func isEmptyStack(s stack) bit
 	}
 	checkLLC(t, ast)
 }
+
+func TestLLVMImportTest(t *testing.T) {
+	ast, err := testCompile(`import type test {}
+func useTest() {
+  var a test
+  {
+    var b test = a
+  }
+}
+
+func testParam(a test) {
+  var b test = a
+}
+
+func returnTest() test {
+  var a test
+  return a
+}
+
+func passTest() {
+  var a test
+  testParam(a)
+}
+
+func testReturned() {
+  var a test = returnTest()
+}
+`)
+	if err != nil {
+		t.Errorf("compile error: %s", err.Error())
+	}
+	if err := AnnotateRuntimeLLVM(ast); err != nil {
+		t.Errorf("AnnotateRuntimeLLVM error: %s", err.Error())
+	}
+
+	testFunc := func(funcName string, expected string) {
+		LLVMCodeGenAnnotateFunc(ast, ast.Funcs[funcName])
+		var buf bytes.Buffer
+		if err := LLVMCodeGenFunc(ast, ast.Funcs[funcName], &buf); err != nil {
+			t.Errorf("LLVMCodeGenFunc %s error: %s", funcName, err.Error())
+		}
+		if buf.String() != expected {
+			t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+		}
+	}
+
+	testFunc("useTest", `define void @useTest() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 0 %sizeof.test = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.test %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.test %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* %3 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %3, i8 0, i8 %sizeof.test, i32 0, i1 0) %4 = bitcast {i8, [0 x i1]}* %alloca1 to i8* call void @llvm.memset.p0i8.i8(i8* %4, i8 0, i8 %sizeof.test, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %5 = select i1 1, [1 x i8*] undef, [1 x i8*] undef %6 = select i1 1, i8* null, i8* null ; test init %6
+ %7 = insertvalue [1 x i8*] %5, i8* %6, 0 %import0 = select i1 1, [1 x i8*] %7, [1 x i8*] undef %8 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %9 = load i8, i8* %8 %10 = add i8 %9, 1 store i8 %10, i8* %8 %11 = extractvalue [1 x i8*] %import0, 0 ; test ref %11
+ %12 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %13 = select i1 1, i8 %offset0, i8 0 %14 = select i1 1, [1 x i8*] %import0, [1 x i8*] undef %15 = extractvalue [1 x i8*] %14, 0 ; test ref %15
+ %value1 = select i1 1, {i8, [0 x i1]}* %12, {i8, [0 x i1]}* null %offset1 = select i1 1, i8 %13, i8 0 %import1 = select i1 1, [1 x i8*] %14, [1 x i8*] undef %16 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %17 = load i8, i8* %16 %18 = add i8 %17, 1 store i8 %18, i8* %16 %19 = extractvalue [1 x i8*] %import1, 0 ; test ref %19
+ %20 = extractvalue [1 x i8*] %14, 0 ; test unref %20
+ %21 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %22 = load i8, i8* %21 %23 = sub i8 %22, 1 store i8 %23, i8* %21 %24 = extractvalue [1 x i8*] %import0, 0 ; test unref %24
+ %25 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %26 = load i8, i8* %25 %27 = sub i8 %26, 1 store i8 %27, i8* %25 %28 = extractvalue [1 x i8*] %import1, 0 ; test unref %28
+ ret void }`)
+	testFunc("testParam", `define void @testParam({i8, [0 x i1]}* %value0,i8 %offset0,[1 x i8*] %import0) { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 0 %sizeof.test = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.test %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.test, i32 0, i1 0) %3 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %4 = load i8, i8* %3 %5 = add i8 %4, 1 store i8 %5, i8* %3 %6 = extractvalue [1 x i8*] %import0, 0 ; test ref %6
+ br label %block1 block1: %7 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %8 = select i1 1, i8 %offset0, i8 0 %9 = select i1 1, [1 x i8*] %import0, [1 x i8*] undef %10 = extractvalue [1 x i8*] %9, 0 ; test ref %10
+ %value1 = select i1 1, {i8, [0 x i1]}* %7, {i8, [0 x i1]}* null %offset1 = select i1 1, i8 %8, i8 0 %import1 = select i1 1, [1 x i8*] %9, [1 x i8*] undef %11 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %12 = load i8, i8* %11 %13 = add i8 %12, 1 store i8 %13, i8* %11 %14 = extractvalue [1 x i8*] %import1, 0 ; test ref %14
+ %15 = extractvalue [1 x i8*] %9, 0 ; test unref %15
+ %16 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %17 = load i8, i8* %16 %18 = sub i8 %17, 1 store i8 %18, i8* %16 %19 = extractvalue [1 x i8*] %import0, 0 ; test unref %19
+ %20 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value1, i32 0, i32 0 %21 = load i8, i8* %20 %22 = sub i8 %21, 1 store i8 %22, i8* %20 %23 = extractvalue [1 x i8*] %import1, 0 ; test unref %23
+ ret void }`)
+	testFunc("returnTest", `define {{i8, [0 x i1]}*, i8, [1 x i8*]} @returnTest({i8, [0 x i1]}* %retval) { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 0 %sizeof.test = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.test %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.test, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = select i1 1, [1 x i8*] undef, [1 x i8*] undef %4 = select i1 1, i8* null, i8* null ; test init %4
+ %5 = insertvalue [1 x i8*] %3, i8* %4, 0 %import0 = select i1 1, [1 x i8*] %5, [1 x i8*] undef %6 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %7 = load i8, i8* %6 %8 = add i8 %7, 1 store i8 %8, i8* %6 %9 = extractvalue [1 x i8*] %import0, 0 ; test ref %9
+ %10 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %11 = select i1 1, i8 %offset0, i8 0 %12 = select i1 1, [1 x i8*] %import0, [1 x i8*] undef %13 = extractvalue [1 x i8*] %12, 0 ; test ref %13
+ %14 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %15 = load i8, i8* %14 %16 = sub i8 %15, 1 store i8 %16, i8* %14 %17 = extractvalue [1 x i8*] %import0, 0 ; test unref %17
+ call void @__copy({i8, [0 x i1]}* %10, i8 %11, {i8, [0 x i1]}* %retval, i8 0, i8 0) %18 = insertvalue {{i8, [0 x i1]}*, i8, [1 x i8*]} undef, {i8, [0 x i1]}* %retval, 0 %19 = insertvalue {{i8, [0 x i1]}*, i8, [1 x i8*]} %18, i8 0, 1 %20 = insertvalue {{i8, [0 x i1]}*, i8, [1 x i8*]} %19, [1 x i8*] %12, 2 ret {{i8, [0 x i1]}*, i8, [1 x i8*]} %20 }`)
+	testFunc("passTest", `define void @passTest() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 0 %sizeof.test = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.test %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %2, i8 0, i8 %sizeof.test, i32 0, i1 0) br label %block1 block1: %value0 = select i1 1, {i8, [0 x i1]}* %alloca0, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 0, i8 0 %3 = select i1 1, [1 x i8*] undef, [1 x i8*] undef %4 = select i1 1, i8* null, i8* null ; test init %4
+ %5 = insertvalue [1 x i8*] %3, i8* %4, 0 %import0 = select i1 1, [1 x i8*] %5, [1 x i8*] undef %6 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %7 = load i8, i8* %6 %8 = add i8 %7, 1 store i8 %8, i8* %6 %9 = extractvalue [1 x i8*] %import0, 0 ; test ref %9
+ %10 = select i1 1, {i8, [0 x i1]}* %value0, {i8, [0 x i1]}* null %11 = select i1 1, i8 %offset0, i8 0 %12 = select i1 1, [1 x i8*] %import0, [1 x i8*] undef %13 = extractvalue [1 x i8*] %12, 0 ; test ref %13
+ call void @testParam({i8, [0 x i1]}* %10, i8 %11,[1 x i8*] %12) %14 = extractvalue [1 x i8*] %12, 0 ; test unref %14
+ %15 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %16 = load i8, i8* %15 %17 = sub i8 %16, 1 store i8 %17, i8* %15 %18 = extractvalue [1 x i8*] %import0, 0 ; test unref %18
+ ret void }`)
+	testFunc("testReturned", `define void @testReturned() { entry: %0 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* null, i32 0, i32 1, i8 0 %sizeof.test = ptrtoint i1* %0 to i8 %1 = alloca i8, i8 %sizeof.test %alloca0 = bitcast i8* %1 to {i8, [0 x i1]}* %2 = alloca i8, i8 %sizeof.test %alloca1 = bitcast i8* %2 to {i8, [0 x i1]}* %3 = bitcast {i8, [0 x i1]}* %alloca0 to i8* call void @llvm.memset.p0i8.i8(i8* %3, i8 0, i8 %sizeof.test, i32 0, i1 0) %4 = bitcast {i8, [0 x i1]}* %alloca1 to i8* call void @llvm.memset.p0i8.i8(i8* %4, i8 0, i8 %sizeof.test, i32 0, i1 0) br label %block1 block1: %5 = call {{i8, [0 x i1]}*, i8, [1 x i8*]} @returnTest({i8, [0 x i1]}* %alloca1) %6 = extractvalue {{i8, [0 x i1]}*, i8, [1 x i8*]} %5, 0 %7 = extractvalue {{i8, [0 x i1]}*, i8, [1 x i8*]} %5, 1 %8 = extractvalue {{i8, [0 x i1]}*, i8, [1 x i8*]} %5, 2 %value0 = select i1 1, {i8, [0 x i1]}* %6, {i8, [0 x i1]}* null %offset0 = select i1 1, i8 %7, i8 0 %import0 = select i1 1, [1 x i8*] %8, [1 x i8*] undef %9 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %10 = load i8, i8* %9 %11 = add i8 %10, 1 store i8 %11, i8* %9 %12 = extractvalue [1 x i8*] %import0, 0 ; test ref %12
+ %13 = extractvalue [1 x i8*] %8, 0 ; test unref %13
+ %14 = getelementptr {i8, [0 x i1]}, {i8, [0 x i1]}* %value0, i32 0, i32 0 %15 = load i8, i8* %14 %16 = sub i8 %15, 1 store i8 %16, i8* %14 %17 = extractvalue [1 x i8*] %import0, 0 ; test unref %17
+ ret void }`)
+	checkLLC(t, ast)
+}
+
+func TestLLVMImportTestFields(t *testing.T) {
+	ast, err := testCompile(`
+import type test {
+    testbit
+}
+
+type a {
+    bit
+    test test
+}
+
+type b {
+    a a
+    test test
+}
+
+func test() {
+  var b b
+
+  set b.a.bit
+  set b.a.test.testbit
+  set b.test.testbit
+}
+
+func test2() {
+  var b b
+  var a a = b.a
+  var test test = b.a.test
+  a.test = test
+}
+
+func id(b b) b {
+  return b
+}
+
+func test3() {
+  var b b
+  var test test = id(b).test
+  id(b).a.test = test
+}
+`)
+	if err != nil {
+		t.Errorf("compile error: %s", err.Error())
+	}
+	if err := AnnotateRuntimeLLVM(ast); err != nil {
+		t.Errorf("AnnotateRuntimeLLVM error: %s", err.Error())
+	}
+
+	testFunc := func(funcName string, expected string) {
+		LLVMCodeGenAnnotateFunc(ast, ast.Funcs[funcName])
+		var buf bytes.Buffer
+		if err := LLVMCodeGenFunc(ast, ast.Funcs[funcName], &buf); err != nil {
+			t.Errorf("LLVMCodeGenFunc %s error: %s", funcName, err.Error())
+		}
+		if buf.String() != expected {
+			t.Errorf("LLVMCodeGenFunc expected %s, got %s", expected, buf.String())
+		}
+	}
+
+	t.SkipNow()
+	testFunc("test", ``)
+	testFunc("test2", ``)
+	testFunc("test3", ``)
+	checkLLC(t, ast)
+}

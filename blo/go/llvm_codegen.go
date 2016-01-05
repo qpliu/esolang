@@ -1042,18 +1042,12 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				if _, err := fmt.Fprintf(w, " call void @__copy({%s, [0 x i1]}* %%%d, %s %%%d, {%s, [0 x i1]}* %%retval, %s 0, %s %d) %%%d = insertvalue %s undef, {%s, [0 x i1]}* %%retval, 0 %%%d = insertvalue %s %%%d, %s 0, 1", refCountType, val, offsetType, offs, refCountType, offsetType, offsetType, st.Expr.Type().BitSize(), ssaTemp, retType, refCountType, ssaTemp+1, retType, ssaTemp, offsetType); err != nil {
 					return err
 				}
-				retVal := ssaTemp + 1
 				ssaTemp += 2
-				retImp := 0
 				if importedCount(st.Expr.Type()) > 0 {
 					if _, err := fmt.Fprintf(w, " %%%d = insertvalue %s %%%d, [%d x i8*] %%%d, 2", ssaTemp, retType, ssaTemp-1, importedCount(st.Expr.Type()), imp); err != nil {
 						return err
 					}
-					retImp = ssaTemp
 					ssaTemp++
-				}
-				if err := writeExprRef(retVal, 0, retImp, st.Expr.Type()); err != nil {
-					return err
 				}
 				if _, err := fmt.Fprintf(w, " ret %s %%%d", retType, ssaTemp-1); err != nil {
 					return err

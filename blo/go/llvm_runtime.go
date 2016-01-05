@@ -12,7 +12,8 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 	ast.LLVMDeclares = make(map[string]string)
 	for _, typeDecl := range ast.Types {
 		if typeDecl.Imported {
-			if typeDecl.Name == "stack" {
+			switch typeDecl.Name {
+			case "stack":
 				typeDecl.LLVMRTType.WritePrologue = runtimeLLVMPrologueStack
 				typeDecl.LLVMRTType.WriteInit = runtimeLLVMInitStack
 				typeDecl.LLVMRTType.WriteRef = runtimeLLVMRefStack
@@ -21,7 +22,11 @@ func AnnotateRuntimeLLVM(ast *Ast) error {
 				ast.LLVMDeclares["malloc"] = "declare i8* @malloc(i32)"
 				ast.LLVMDeclares["llvm.memset.p0i8.i32"] = "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)"
 				ast.LLVMDeclares["llvm.memcpy.p0i8.p0i8.i32"] = "declare void @llvm.memcpy.p0i8.p0i8.i32(i8*,i8*,i32,i32,i1)"
-			} else {
+			case "test":
+				typeDecl.LLVMRTType.WriteInit = runtimeLLVMInitTest
+				typeDecl.LLVMRTType.WriteRef = runtimeLLVMRefTest
+				typeDecl.LLVMRTType.WriteUnref = runtimeLLVMUnrefTest
+			default:
 				return errors.New(typeDecl.Location.String() + ": Unrecognized import type: " + typeDecl.Name)
 			}
 		}
@@ -209,6 +214,28 @@ func runtimeLLVMEmitIsEmptyStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 		}
 	}
 	if _, err := fmt.Fprintf(w, " ret {{%s, [0 x i1]}*, %s} %%4 }", refCountType, offsetType); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runtimeLLVMInitTest(ssaTemp *int, w io.Writer) (int, error) {
+	if _, err := fmt.Fprintf(w, " %%%d = select i1 1, i8* null, i8* null ; test init %%%d\n", *ssaTemp, *ssaTemp); err != nil {
+		return 0, err
+	}
+	*ssaTemp++
+	return *ssaTemp - 1, nil
+}
+
+func runtimeLLVMRefTest(imp string, ssaTemp *int, w io.Writer) error {
+	if _, err := fmt.Fprintf(w, " ; test ref %s\n", imp); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runtimeLLVMUnrefTest(imp string, ssaTemp *int, w io.Writer) error {
+	if _, err := fmt.Fprintf(w, " ; test unref %s\n", imp); err != nil {
 		return err
 	}
 	return nil
