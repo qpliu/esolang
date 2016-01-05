@@ -179,7 +179,7 @@ func runtimeLLVMEmitPopStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 		return err
 	}
 	// %19 = popped bit
-	if _, err := fmt.Fprintf(w, " l1: %%10 = sub i32 %%8, 1 store i32 %%10, i32* %%7 %%11 = udiv i32 %%8, 8 %%12 = urem i32 %%8, 8 %%13 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*}* %%6, i32 0, i32 3 %%14 = load [0 x i8]*, [0 x i8]** %%13 %%15 = getelementptr [0 x i8], [0 x i8]* %%14, i32 0, i32 %%11 %%16 = load i8, i8* %%15 %%17 = zext i8 %%16 to i32 %%18 = lshr i32 %%17, %%12 %%19 = trunc i32 %%18 to i1"); err != nil {
+	if _, err := fmt.Fprintf(w, " l1: %%10 = sub i32 %%8, 1 store i32 %%10, i32* %%7 %%11 = udiv i32 %%10, 8 %%12 = urem i32 %%10, 8 %%13 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*}* %%6, i32 0, i32 3 %%14 = load [0 x i8]*, [0 x i8]** %%13 %%15 = getelementptr [0 x i8], [0 x i8]* %%14, i32 0, i32 %%11 %%16 = load i8, i8* %%15 %%17 = zext i8 %%16 to i32 %%18 = lshr i32 %%17, %%12 %%19 = trunc i32 %%18 to i1"); err != nil {
 		return err
 	}
 	if funcDecl.Type.BitSize() > 0 {
@@ -204,7 +204,7 @@ func runtimeLLVMEmitIsEmptyStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 		return err
 	}
 	if funcDecl.Type.BitSize() > 0 {
-		if _, err := fmt.Fprintf(w, " %%5 = extractvalue [%d x i8*] %%stackimport, 0 %%6 = bitcast i8* %%5 to {i32, i32, i32, [0 x i8]*}* %%7 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%6, i32 0, i32 0 %%8 = load i32, i32* %%7 %%9 = icmp eq i32 %%8, 0 %%10 = getelementptr {%s, [0 x i1]},  {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%9, i1* %%10", importCount, refCountType, refCountType, offsetType); err != nil {
+		if _, err := fmt.Fprintf(w, " %%5 = extractvalue [%d x i8*] %%stackimport, 0 %%6 = bitcast i8* %%5 to {i32, i32, i32, [0 x i8]*}* %%7 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%6, i32 0, i32 1 %%8 = load i32, i32* %%7 %%9 = icmp eq i32 %%8, 0 %%10 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%9, i1* %%10", importCount, refCountType, refCountType, offsetType); err != nil {
 			return err
 		}
 	}
