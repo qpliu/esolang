@@ -810,7 +810,6 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		}
 		writeUnrefs := func(next Stmt) error {
 			var unrefs []int
-			var unrefTypes []*Type
 			for name, ref := range ann.localsOnExit {
 				if next != nil {
 					if _, ok := next.LLVMAnnotation().localsOnEntry[name]; ok {
@@ -818,9 +817,17 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 				}
 				unrefs = append(unrefs, ref)
-				unrefTypes = append(unrefTypes, stmt.Scope()[name].Type)
 			}
 			sort.Ints(unrefs)
+			var unrefTypes []*Type
+			for _, unref := range unrefs {
+				for name, ref := range ann.localsOnExit {
+					if unref == ref {
+						unrefTypes = append(unrefTypes, stmt.Scope()[name].Type)
+						break
+					}
+				}
+			}
 			for i, unref := range unrefs {
 				if err := writeUnref(unref, unrefTypes[i]); err != nil {
 					return err
