@@ -655,13 +655,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 				}
 			case 1:
 				retValAlloc = fmt.Sprintf("%%alloca%d", exprAnn.allocas[0])
-				retVal = ssaTemp
-				ssaTemp++
 				if inLoop {
 					if err := writeClear(retValAlloc, exprAnn.allocaType); err != nil {
 						return 0, 0, 0, err
 					}
 				}
+				retVal = ssaTemp
+				ssaTemp++
 				if _, err := fmt.Fprintf(w, " %%%d = call {{%s, [0 x i1]}*, %s", retVal, refCountType, offsetType); err != nil {
 					return 0, 0, 0, err
 				}
@@ -764,12 +764,14 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			}
 			if len(ann.comesFrom) > 1 {
 				var vars []string
-				var varTypes []*Type
 				for name, _ := range ann.localsOnEntry {
 					vars = append(vars, name)
-					varTypes = append(varTypes, stmt.Scope()[name].Type)
 				}
 				sort.Strings(vars)
+				var varTypes []*Type
+				for _, name := range vars {
+					varTypes = append(varTypes, stmt.Scope()[name].Type)
+				}
 				for i, v := range vars {
 					if _, err := fmt.Fprintf(w, " %%value%d = phi {%s, [0 x i1]}* ", ann.localsOnEntry[v], refCountType); err != nil {
 						return err
