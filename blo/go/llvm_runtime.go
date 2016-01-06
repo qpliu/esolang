@@ -176,23 +176,23 @@ func runtimeLLVMEmitPopStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, "define {{%s, [0 x i1]}*, %s} @%s({%s, [0 x i1]}* %%stackval, %s %%stackoffset, [%d x i8*] %%stackimport, {%s, [0 x i1]}* %%retvalue) {", refCountType, offsetType, LLVMCanonicalName(funcDecl.Name), refCountType, offsetType, importCount, refCountType); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, " %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = add %s %%2, 1 store %s %%3, %s* %%1 %%4 = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retvalue, 0", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, offsetType, refCountType, offsetType, refCountType); err != nil {
+	if _, err := fmt.Fprintf(w, " %%1 = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retvalue, 0", refCountType, offsetType, refCountType, offsetType, refCountType); err != nil {
 		return err
 	}
-	// %7 = &stack size, %8 = stack size
-	if _, err := fmt.Fprintf(w, " %%5 = extractvalue [%d x i8*] %%stackimport, 0 %%6 = bitcast i8* %%5 to {i32, i32, i32, [0 x i8]*}* %%7 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%6, i32 0, i32 0 %%8 = load i32, i32* %%7 %%9 = icmp ugt i32 %%8, 0 br i1 %%9, label %%l1, label %%l2", importCount); err != nil {
+	// %4 = &stack size, %5 = stack size
+	if _, err := fmt.Fprintf(w, " %%2 = extractvalue [%d x i8*] %%stackimport, 0 %%3 = bitcast i8* %%2 to {i32, i32, i32, [0 x i8]*}* %%4 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%3, i32 0, i32 1 %%5 = load i32, i32* %%4 %%6 = icmp ugt i32 %%5, 0 br i1 %%6, label %%l1, label %%l2", importCount); err != nil {
 		return err
 	}
-	// %19 = popped bit
-	if _, err := fmt.Fprintf(w, " l1: %%10 = sub i32 %%8, 1 store i32 %%10, i32* %%7 %%11 = udiv i32 %%10, 8 %%12 = urem i32 %%10, 8 %%13 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*}* %%6, i32 0, i32 3 %%14 = load [0 x i8]*, [0 x i8]** %%13 %%15 = getelementptr [0 x i8], [0 x i8]* %%14, i32 0, i32 %%11 %%16 = load i8, i8* %%15 %%17 = zext i8 %%16 to i32 %%18 = lshr i32 %%17, %%12 %%19 = trunc i32 %%18 to i1"); err != nil {
+	// %16 = popped bit
+	if _, err := fmt.Fprintf(w, " l1: %%7 = sub i32 %%5, 1 store i32 %%7, i32* %%4 %%8 = udiv i32 %%7, 8 %%9 = urem i32 %%7, 8 %%10 = getelementptr {i32,i32,i32,[0 x i8]*}, {i32,i32,i32,[0 x i8]*}* %%3, i32 0, i32 3 %%11 = load [0 x i8]*, [0 x i8]** %%10 %%12 = getelementptr [0 x i8], [0 x i8]* %%11, i32 0, i32 %%8 %%13 = load i8, i8* %%12 %%14 = zext i8 %%13 to i32 %%15 = lshr i32 %%14, %%9 %%16 = trunc i32 %%15 to i1"); err != nil {
 		return err
 	}
 	if funcDecl.Type.BitSize() > 0 {
-		if _, err := fmt.Fprintf(w, " %%20 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%19, i1* %%20", refCountType, refCountType, offsetType); err != nil {
+		if _, err := fmt.Fprintf(w, " %%17 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%16, i1* %%17", refCountType, refCountType, offsetType); err != nil {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(w, " br label %%l2 l2: ret {{%s, [0 x i1]}*, %s} %%4 }", refCountType, offsetType); err != nil {
+	if _, err := fmt.Fprintf(w, " br label %%l2 l2: ret {{%s, [0 x i1]}*, %s} %%1 }", refCountType, offsetType); err != nil {
 		return err
 	}
 	return nil
@@ -205,15 +205,15 @@ func runtimeLLVMEmitIsEmptyStack(ast *Ast, funcDecl *Func, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, "define {{%s, [0 x i1]}*, %s} @%s({%s, [0 x i1]}* %%stackval, %s %%stackoffset, [%d x i8*] %%stackimport, {%s, [0 x i1]}* %%retvalue) {", refCountType, offsetType, LLVMCanonicalName(funcDecl.Name), refCountType, offsetType, importCount, refCountType); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, " %%1 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 0 %%2 = load %s, %s* %%1 %%3 = add %s %%2, 1 store %s %%3, %s* %%1 %%4 = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retvalue, 0", refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, refCountType, offsetType, refCountType, offsetType, refCountType); err != nil {
+	if _, err := fmt.Fprintf(w, " %%1 = insertvalue {{%s, [0 x i1]}*, %s} {{%s, [0 x i1]}* null, %s 0}, {%s, [0 x i1]}* %%retvalue, 0", refCountType, offsetType, refCountType, offsetType, refCountType); err != nil {
 		return err
 	}
 	if funcDecl.Type.BitSize() > 0 {
-		if _, err := fmt.Fprintf(w, " %%5 = extractvalue [%d x i8*] %%stackimport, 0 %%6 = bitcast i8* %%5 to {i32, i32, i32, [0 x i8]*}* %%7 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%6, i32 0, i32 1 %%8 = load i32, i32* %%7 %%9 = icmp eq i32 %%8, 0 %%10 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%9, i1* %%10", importCount, refCountType, refCountType, offsetType); err != nil {
+		if _, err := fmt.Fprintf(w, " %%2 = extractvalue [%d x i8*] %%stackimport, 0 %%3 = bitcast i8* %%2 to {i32, i32, i32, [0 x i8]*}* %%4 = getelementptr {i32, i32, i32, [0 x i8]*}, {i32, i32, i32, [0 x i8]*}* %%3, i32 0, i32 1 %%5 = load i32, i32* %%4 %%6 = icmp eq i32 %%5, 0 %%7 = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%retvalue, i32 0, i32 1, %s 0 store i1 %%6, i1* %%7", importCount, refCountType, refCountType, offsetType); err != nil {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(w, " ret {{%s, [0 x i1]}*, %s} %%4 }", refCountType, offsetType); err != nil {
+	if _, err := fmt.Fprintf(w, " ret {{%s, [0 x i1]}*, %s} %%1 }", refCountType, offsetType); err != nil {
 		return err
 	}
 	return nil
