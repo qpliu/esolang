@@ -34,8 +34,8 @@ func LLVMOffsetType(ast *Ast) string {
 
 func LLVMCanonicalName(name string) string {
 	var buf bytes.Buffer
-	for _, rune := range name {
-		if rune <= unicode.MaxASCII && (unicode.IsDigit(rune) || unicode.IsLetter(rune)) {
+	for i, rune := range name {
+		if rune <= unicode.MaxASCII && ((unicode.IsDigit(rune) && i > 0) || unicode.IsLetter(rune)) {
 			buf.WriteRune(rune)
 		} else {
 			fmt.Fprintf(&buf, "_%x_", rune)
@@ -757,6 +757,13 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 		}
 	}
 	WalkStmts(funcDecl, func(stmt Stmt, inLoop bool) error {
+		blockLabel := func(prev Stmt) string {
+			label := prev.LLVMAnnotation().blockLabel
+			if label == 0 {
+				return "%entry"
+			}
+			return fmt.Sprintf("%%block%d", label)
+		}
 		ann := stmt.LLVMAnnotation()
 		if ann.startBlock {
 			if _, err := fmt.Fprintf(w, " block%d:", ann.blockLabel); err != nil {
@@ -778,7 +785,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 					comma := ""
 					for _, prev := range ann.comesFrom {
-						if _, err := fmt.Fprintf(w, "%s[%%value%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel); err != nil {
+						if _, err := fmt.Fprintf(w, "%s[%%value%d,%s]", comma, prev.LLVMAnnotation().localsOnExit[v], blockLabel(prev)); err != nil {
 							return err
 						}
 						comma = ","
@@ -788,7 +795,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 					}
 					comma = ""
 					for _, prev := range ann.comesFrom {
-						if _, err := fmt.Fprintf(w, "%s[%%offset%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel); err != nil {
+						if _, err := fmt.Fprintf(w, "%s[%%offset%d,%s]", comma, prev.LLVMAnnotation().localsOnExit[v], blockLabel(prev)); err != nil {
 							return err
 						}
 						comma = ","
@@ -799,7 +806,7 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 						}
 						comma = ""
 						for _, prev := range ann.comesFrom {
-							if _, err := fmt.Fprintf(w, "%s[%%import%d,%%block%d]", comma, prev.LLVMAnnotation().localsOnExit[v], prev.LLVMAnnotation().blockLabel); err != nil {
+							if _, err := fmt.Fprintf(w, "%s[%%import%d,%s]", comma, prev.LLVMAnnotation().localsOnExit[v], blockLabel(prev)); err != nil {
 								return err
 							}
 							comma = ","
