@@ -1,0 +1,200 @@
+import func putByte(b byte)
+
+type bit { bit }
+type nybble { 1, 2, 4, 8 bit }
+type byte { lo, hi nybble }
+
+func is0(nybble nybble) bit {
+    var result bit
+    if nybble.1.bit {
+    } else if nybble.2.bit {
+    } else if nybble.4.bit {
+    } else if nybble.8.bit {
+    } else {
+        set result.bit
+    }
+    return result
+}
+
+func is1(nybble nybble) bit {
+    var result bit
+    if nybble.8.bit {
+    } else if nybble.4.bit {
+    } else if nybble.2.bit {
+    } else if nybble.1.bit {
+        set result.bit
+    }
+    return result
+}
+
+func dec(nybble nybble) bit {
+    var underflow bit
+    if nybble.1.bit {
+        clear nybble.1.bit
+    } else {
+        set nybble.1.bit
+        if nybble.2.bit {
+            clear nybble.2.bit
+        } else {
+            set nybble.2.bit
+            if nybble.4.bit {
+                clear nybble.4.bit
+            } else {
+                set nybble.4.bit
+                if nybble.8.bit {
+                    clear nybble.8.bit
+                } else {
+                    set nybble.8.bit
+                    set underflow.bit
+                }
+            }
+        }
+    }
+    return underflow
+}
+
+func bcdDec(byte byte) bit {
+    var underflow bit = dec(byte.lo)
+    if underflow.bit {
+        clear byte.lo.2.bit
+        clear byte.lo.4.bit
+        underflow = dec(byte.hi)
+        if underflow.bit {
+            clear byte.hi.2.bit
+            clear byte.hi.4.bit
+        }
+    }
+    return underflow
+}
+
+func putBCD(byte byte) {
+    var char byte
+    set char.hi.1.bit
+    set char.hi.2.bit
+    if is0(byte.hi).bit {
+    } else {
+        char.lo = byte.hi
+        putByte(char)
+    }
+    char.lo = byte.lo
+    putByte(char)
+}
+
+func print(bottle, s, ofbeer, onthewall, c, period, nl, take, nomore, Nomore, goto bit) {
+    var dot byte; set dot.hi.2.bit; set dot.lo.8.bit; set dot.lo.4.bit; set dot.lo.2.bit
+    var comma byte; set comma.hi.2.bit; set comma.lo.8.bit; set comma.lo.4.bit
+    var newline byte; set newline.lo.8.bit; set newline.lo.2.bit
+    var space byte; set space.hi.2.bit
+    var "a" byte; set "a".hi.4.bit; set "a".hi.2.bit; set "a".lo.1.bit
+    var "b" byte; "b".hi = "a".hi; set "b".lo.2.bit
+    var "d" byte; "d".hi = "a".hi; set "d".lo.4.bit
+    var "e" byte; "e".hi = "a".hi; set "e".lo.4.bit; set "e".lo.1.bit
+    var "f" byte; "f".hi = "a".hi; set "f".lo.4.bit; set "f".lo.2.bit
+    var "h" byte; "h".hi = "a".hi; set "h".lo.8.bit
+    var "i" byte; "i".hi = "a".hi; set "i".lo.8.bit; set "i".lo.1.bit
+    var "k" byte; "k".hi = "a".hi; set "k".lo.8.bit; set "k".lo.2.bit; set "k".lo.1.bit
+    var "l" byte; "l".hi = "a".hi; set "l".lo.8.bit; set "l".lo.4.bit
+    var "m" byte; "m".hi = "a".hi; set "m".lo.8.bit; set "m".lo.4.bit; set "m".lo.1.bit
+    var "n" byte; "n".hi = "a".hi; set "n".lo.8.bit; set "n".lo.4.bit; set "n".lo.2.bit
+    var "o" byte; "o".hi = "a".hi; set "o".lo.8.bit; set "o".lo.4.bit; set "o".lo.2.bit; set "o".lo.1.bit
+    var "p" byte; "p".hi = "a".hi; set "p".hi.1.bit
+    var "r" byte; "r".hi = "p".hi; set "r".lo.2.bit
+    var "s" byte; "s".hi = "p".hi; set "s".lo.2.bit; set "s".lo.1.bit
+    var "t" byte; "t".hi = "p".hi; set "t".lo.4.bit
+    var "u" byte; "u".hi = "p".hi; set "u".lo.4.bit; set "u".lo.1.bit
+    var "w" byte; "w".hi = "p".hi; set "w".lo.4.bit; set "w".lo.2.bit; set "w".lo.1.bit
+    var "y" byte; "y".hi = "p".hi; set "y".lo.8.bit; set "y".lo.1.bit
+    var "G" byte; set "G".hi.4.bit; set "G".lo.4.bit; set "G".lo.2.bit; set "G".lo.1.bit
+    var "N" byte; set "N".hi.4.bit; set "N".lo.8.bit; set "N".lo.4.bit; set "N".lo.2.bit
+    var "T" byte; set "T".hi.4.bit; set "T".hi.1.bit; set "T".lo.4.bit
+
+    if bottle.bit {
+        putByte(space); putByte("b"); putByte("o"); putByte("t"); putByte("t")
+        putByte("l"); putByte("e")
+    }
+    if s.bit {
+        putByte("s")
+    }
+    if ofbeer.bit {
+        putByte(space); putByte("o"); putByte("f"); putByte(space)
+        putByte("b"); putByte("e"); putByte("e"); putByte("r")
+    }
+    if onthewall.bit {
+        putByte(space); putByte("o"); putByte("n"); putByte(space)
+        putByte("t"); putByte("h"); putByte("e"); putByte(space)
+        putByte("w"); putByte("a"); putByte("l"); putByte("l")
+    }
+    if c.bit {
+        putByte(comma); putByte(space)
+    }
+    if period.bit {
+        putByte(dot); putByte(newline)
+    }
+    if nl.bit {
+        putByte(newline)
+    }
+    if take.bit {
+        putByte("T"); putByte("a"); putByte("k"); putByte("e"); putByte(space)
+        putByte("o"); putByte("n"); putByte("e"); putByte(space); putByte("d")
+        putByte("o"); putByte("w"); putByte("n"); putByte(space); putByte("a")
+        putByte("n"); putByte("d"); putByte(space); putByte("p"); putByte("a")
+        putByte("s"); putByte("s"); putByte(space); putByte("i"); putByte("t")
+        putByte(space); putByte("a"); putByte("r"); putByte("o"); putByte("u")
+        putByte("n"); putByte("d"); putByte(comma); putByte(space)
+    }
+    if nomore.bit {
+        putByte("n"); putByte("o"); putByte(space); putByte("m"); putByte("o")
+        putByte("r"); putByte("e")
+    }
+    if Nomore.bit {
+        putByte("N"); putByte("o"); putByte(space); putByte("m"); putByte("o")
+        putByte("r"); putByte("e")
+    }
+    if goto.bit {
+        putByte("G"); putByte("o"); putByte(space); putByte("t"); putByte("o")
+        putByte(space); putByte("t"); putByte("h"); putByte("e")
+        putByte(space); putByte("s"); putByte("t"); putByte("o"); putByte("r")
+        putByte("e"); putByte(space); putByte("a"); putByte("n"); putByte("d")
+        putByte(space); putByte("b"); putByte("u"); putByte("y")
+        putByte(space); putByte("s"); putByte("o"); putByte("m"); putByte("e")
+        putByte(space); putByte("m"); putByte("o"); putByte("r"); putByte("e")
+        putByte(comma); putByte(space)
+    }
+}
+
+func main() {
+    var counter byte
+    set counter.lo.1.bit; set counter.lo.8.bit
+    set counter.hi.1.bit; set counter.hi.8.bit
+
+    var t bit; set t.bit
+    var f bit
+    var s bit; set s.bit
+
+    for {
+        putBCD(counter)
+	print(t, s, t, t, t, f, f, f, f, f, f)
+        putBCD(counter)
+	print(t, s, t, f, f, t, f, t, f, f, f)
+        bcdDec(counter)
+        if is0(counter.hi).bit {
+            if is0(counter.lo).bit {
+                break
+            } else if is1(counter.lo).bit {
+                clear s.bit
+            }
+        }
+        putBCD(counter)
+        print(t, s, t, t, f, t, t, f, f, f, f)
+    }
+    print(f, f, f, f, f, f, f, f, t, f, f)
+    print(t, t, t, t, f, t, t, f, f, f, f)
+    print(f, f, f, f, f, f, f, f, f, t, f)
+    print(t, t, t, t, t, f, f, f, f, f, f)
+    print(f, f, f, f, f, f, f, f, t, f, f)
+    print(t, t, t, f, f, t, f, f, f, f, f)
+    print(f, f, f, f, f, f, f, f, f, f, t)
+    bcdDec(counter)
+    putBCD(counter)
+    print(t, t, t, t, f, t, f, f, f, f, f)
+}
