@@ -53,7 +53,7 @@ func dec(nybble nybble) bit {
     return underflow
 }
 
-func bcdDec(byte byte) bit {
+func decBCD(byte byte) bit {
     var underflow bit = dec(byte.lo)
     if underflow.bit {
         clear byte.lo.2.bit
@@ -173,10 +173,10 @@ func main() {
 
     for {
         putBCD(counter)
-	print(t, s, t, t, t, f, f, f, f, f, f)
+        print(t, s, t, t, t, f, f, f, f, f, f)
         putBCD(counter)
-	print(t, s, t, f, f, t, f, t, f, f, f)
-        bcdDec(counter)
+        print(t, s, t, f, f, t, f, t, f, f, f)
+        decBCD(counter)
         if is0(counter.hi).bit {
             if is0(counter.lo).bit {
                 break
@@ -194,7 +194,7 @@ func main() {
     print(f, f, f, f, f, f, f, f, t, f, f)
     print(t, t, t, f, f, t, f, f, f, f, f)
     print(f, f, f, f, f, f, f, f, f, f, t)
-    bcdDec(counter)
+    decBCD(counter)
     putBCD(counter)
     print(t, t, t, t, f, t, f, f, f, f, f)
 }
