@@ -46,12 +46,11 @@ nextToken = do
   where
     singleCharToken = fmap (:[]) (oneOf tokenChars)
     continueToken pre = do
-        rest <- (if pre == "" then many1 else many) (noneOf (tokenChars ++ spaceChars))
+        rest <- (if pre == "" then many1 else many) (noneOf ('/' : tokenChars ++ spaceChars))
         try (throughSlash (pre ++ rest)) <|> return (pre ++ rest)
     throughSlash pre = do
-        char '/'
-        (char '*' >> fail "/*") <|> (char '/' >> fail "//")
-                                <|> continueToken (pre ++ "/")
+        try (lookAhead (string "/*")) <|> try (lookAhead (string "//"))
+                                      <|> (char '/' >> continueToken (pre ++ "/"))
     skipLineComment = do
         try (string "//")
         manyTill (noneOf "\n") newline
