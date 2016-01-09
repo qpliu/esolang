@@ -185,7 +185,7 @@ funcParams pendingVars pendingVarNames = do
     addVarType varName = do
         varType <- identifier <?> "parameter type"
         skipNewlines
-        let vars = map (flip Var varType) pendingVarNames ++ pendingVars
+        let vars = map (flip Var varType) (varName:pendingVarNames) ++ pendingVars
         anotherParam vars <|> return (reverse vars)
     anotherParam vars = do
         try (token ",")
@@ -205,8 +205,7 @@ typeFields pendingFields pendingFieldNames = do
         fieldType <- optionMaybe (try identifier)
         terminateField
         skipNewlines
-        let fields = ((map (flip TypeField fieldType) pendingFieldNames) ++
-                     pendingFields)
+        let fields = ((map (flip TypeField fieldType) (fieldName:pendingFieldNames)) ++ pendingFields)
         typeFields fields [] <|> return (reverse fields)
     terminateField = void (try (token ";") <|> try (token "\n")
                                            <|> try (lookAhead (token "}")))
