@@ -1,5 +1,5 @@
 module Parse
-    (ParseError,SourcePos,
+    (Error(..),SourcePos,
      Identifier(..),Definition(..),
      FuncHeader(..),TypeField(..),Var(..),
      Stmt(..),Expr(..),
@@ -8,16 +8,21 @@ where
 
 import Control.Monad(unless,void,when)
 import Data.Set(Set,fromList,member)
+import Text.Parsec.Error(errorMessages,errorPos,messageString)
 import Text.ParserCombinators.Parsec
-    (ParseError,Parser,SourcePos,
+    (ParseError(..),Parser,SourcePos,
      anyChar,char,eof,getPosition,lookAhead,many,many1,manyTill,
      oneOf,optionMaybe,newline,noneOf,
      sepBy,skipMany,string,try,
      (<|>),(<?>))
 import qualified Text.ParserCombinators.Parsec as Parsec
 
-parse :: String -> String -> Either ParseError [Definition]
-parse filename source = Parsec.parse parser filename source
+data Error = Error SourcePos String
+  deriving Show
+
+parse :: String -> String -> Either Error [Definition]
+parse filename source =
+    either (Left . mapError) Right (Parsec.parse parser filename source)
   where
     parser = do
         skipNewlines
@@ -26,6 +31,9 @@ parse filename source = Parsec.parse parser filename source
         many (oneOf spaceChars)
         eof
         return defs
+    mapError err =
+        --Error (errorPos err) (messageString (last (errorMessages err)))
+        Error (errorPos err) (concatMap messageString (errorMessages err))
 
 keywords :: [String]
 keywords = ["type", "func", "var", "if", "else", "for", "break",
@@ -71,7 +79,7 @@ terminateStmt = void (try (token ";") <|> try (token "\n")
 token :: String -> Parser SourcePos
 token tok = do
     (pos,t) <- nextToken
-    unless (t == tok) (fail ("Expected '" ++ tok ++ "'"))
+    unless (t == tok) (fail ("'" ++ tok ++ "'"))
     return pos
 
 data Identifier = Identifier SourcePos String
