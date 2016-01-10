@@ -1,5 +1,5 @@
 module Parse
-    (Error(..),SourcePos,
+    (Error(..),SourcePos(..),
      Identifier(..),Definition(..),
      FuncHeader(..),TypeField(..),Var(..),
      Stmt(..),Expr(..),
@@ -10,7 +10,7 @@ import Control.Monad(unless,void,when)
 import Data.Set(Set,fromList,member)
 import Text.Parsec.Error(errorMessages,errorPos,messageString)
 import Text.ParserCombinators.Parsec
-    (ParseError(..),Parser,SourcePos,
+    (ParseError(..),Parser,SourcePos(..),
      anyChar,char,eof,getPosition,lookAhead,many,many1,manyTill,
      oneOf,optionMaybe,newline,noneOf,
      sepBy,skipMany,string,try,
