@@ -1,9 +1,11 @@
 module Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
+     astTypeName,astTypeSize,astTypeField,
+     astFuncName,astFuncParams,astFuncType,
      check)
 where
 
-import Control.Monad(foldM_)
+import Control.Monad(foldM,foldM_,liftM)
 import Data.Map(Map,elems,empty,fromList,insert,member)
 import qualified Data.Map as M
 
@@ -21,7 +23,7 @@ check defs = let Check result = runCheck in result
         checkDuplicateFuncs defs
         types <- checkTypes defs
         funcSigs <- checkFuncSigs defs types
-        funcs <- checkFuncs types funcSigs
+        funcs <- checkFuncs defs types funcSigs
         return (Ast (flip M.lookup types) (flip M.lookup funcs))
 
 data Check a = Check (Either Error a)
@@ -65,9 +67,13 @@ data AstType =
 data AstFunc =
     AstFunc AstFuncSig AstStmt
   | AstImportFunc AstFuncSig
-data AstFuncSig = AstFuncSig SourcePos String [AstType] (Maybe AstType)
+data AstFuncSig = AstFuncSig SourcePos String [AstVar] (Maybe AstType)
+data AstVar = AstVar String AstType
 data AstStmt = AstStmt
 data AstExpr = AstExpr
+
+instance Eq AstType where
+    t1 == t2 = astTypeName t1 == astTypeName t2
 
 astTypeName :: AstType -> String
 astTypeName (AstType _ name _ _) = name
@@ -81,6 +87,20 @@ astTypeSize (Just (AstImportType _ _ size _)) = size
 astTypeField :: AstType -> String -> Maybe (Int,Maybe AstType)
 astTypeField (AstType _ _ _ getField) = getField
 astTypeField (AstImportType _ _ _ getField) = getField
+
+astFuncName :: AstFunc -> String
+astFuncName (AstFunc (AstFuncSig _ name _ _) _) = name
+astFuncName (AstImportFunc (AstFuncSig _ name _ _)) = name
+
+astFuncParams :: AstFunc -> [AstType]
+astFuncParams (AstFunc (AstFuncSig _ _ params _) _) =
+    map (\ (AstVar _ astType) -> astType) params
+astFuncParams (AstImportFunc (AstFuncSig _ _ params _)) =
+    map (\ (AstVar _ astType) -> astType) params
+
+astFuncType :: AstFunc -> Maybe AstType
+astFuncType (AstFunc (AstFuncSig _ _ _ returnType) _) = returnType
+astFuncType (AstImportFunc (AstFuncSig _ _ _ returnType)) = returnType
 
 checkTypes :: [Definition] -> Check (Map String AstType)
 checkTypes defs = do
@@ -128,7 +148,26 @@ checkTypes defs = do
                 (offset + astTypeSize fieldType,insert fieldName (offset,fieldType) fieldMap)
 
 checkFuncSigs :: [Definition] -> Map String AstType -> Check (Map String AstFuncSig)
-checkFuncSigs = undefined
+checkFuncSigs defs types = foldM checkDef empty defs
+  where
+    checkDef funcSigs (FuncDef pos funcHeader _) = checkSig funcSigs pos funcHeader
+    checkDef funcSigs (FuncImport pos funcHeader) = checkSig funcSigs pos funcHeader
+    checkDef funcSigs _ = return funcSigs
+    checkSig funcSigs pos (FuncHeader (Identifier _ name) params returnType) = do
+        astFuncType <- maybe (return Nothing) (liftM Just . checkType) returnType
+        foldM_ checkDuplicateVar empty params
+        astParams <- mapM checkVar params
+        return (insert name (AstFuncSig pos name astParams astFuncType) funcSigs)
+    checkType (Identifier pos typeName) =
+        maybe (checkError pos ("Unknown type '" ++ typeName ++ "'"))
+              return (M.lookup typeName types)
+    checkDuplicateVar set (Var (Identifier pos name) _)
+      | member name set =
+            checkError pos ("Duplicate parameter '" ++ name ++ "'")
+      | otherwise = return (insert name () set)
+    checkVar (Var (Identifier _ name) paramType) = do
+        astParamType <- checkType paramType
+        return (AstVar name astParamType)
 
-checkFuncs :: Map String AstType -> Map String AstFuncSig -> Check (Map String AstFunc)
+checkFuncs :: [Definition] -> Map String AstType -> Map String AstFuncSig -> Check (Map String AstFunc)
 checkFuncs = undefined
