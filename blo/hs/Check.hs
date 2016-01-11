@@ -1,6 +1,6 @@
 module Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
-     astTypeName,astTypeSize,astTypeField,
+     astTypeName,astTypeSize,astTypeField,astTypeIsBit,
      astFuncName,astFuncParams,astFuncType,
      check)
 where
@@ -72,8 +72,9 @@ checkDuplicates label items = foldM_ checkItem empty items
 data Ast = Ast (String -> Maybe AstType) (String -> Maybe AstFunc)
 
 data AstType =
-     AstType SourcePos String Int (String -> Maybe (Int,Maybe AstType))
-   | AstImportType SourcePos String Int (String -> Maybe (Int,Maybe AstType))
+     AstType SourcePos String Int (String -> Maybe (Int,AstType))
+   | AstImportType SourcePos String Int (String -> Maybe (Int,AstType))
+   | AstTypeBit
 data AstFunc =
     AstFunc AstFuncSig AstStmt
   | AstImportFunc AstFuncSig
@@ -88,15 +89,21 @@ instance Eq AstType where
 astTypeName :: AstType -> String
 astTypeName (AstType _ name _ _) = name
 astTypeName (AstImportType _ name _ _) = name
+astTypeName AstTypeBit = ""
 
-astTypeSize :: Maybe AstType -> Int
-astTypeSize Nothing = 1
-astTypeSize (Just (AstType _ _ size _)) = size
-astTypeSize (Just (AstImportType _ _ size _)) = size
+astTypeSize :: AstType -> Int
+astTypeSize (AstType _ _ size _) = size
+astTypeSize (AstImportType _ _ size _) = size
+astTypeSize AstTypeBit = 1
 
-astTypeField :: AstType -> String -> Maybe (Int,Maybe AstType)
+astTypeField :: AstType -> String -> Maybe (Int,AstType)
 astTypeField (AstType _ _ _ getField) = getField
 astTypeField (AstImportType _ _ _ getField) = getField
+astTypeField AstTypeBit = const Nothing
+
+astTypeIsBit :: AstType -> Bool
+astTypeIsBit AstTypeBit = True
+astTypeIsBit _ = False
 
 astFuncName :: AstFunc -> String
 astFuncName (AstFunc (AstFuncSig _ name _ _) _) = name
@@ -147,9 +154,9 @@ checkTypes defs = do
         checkedFieldTypes = map lookupFieldType fields
           where
             lookupFieldType (TypeField (Identifier _ fieldName) Nothing) =
-                (fieldName,Nothing)
+                (fieldName,AstTypeBit)
             lookupFieldType (TypeField (Identifier _ fieldName) (Just (Identifier _ typeName))) =
-                (fieldName,M.lookup typeName checkedTypes)
+                (fieldName,checkedTypes M.! typeName)
         size = sum (map (astTypeSize . snd) checkedFieldTypes)
         getField fieldName = M.lookup fieldName fieldMap
           where
@@ -180,4 +187,4 @@ checkFuncSigs defs types = foldM checkDef empty defs
         return (AstVar name astParamType)
 
 checkFuncs :: [Definition] -> Map String AstType -> Map String AstFuncSig -> Check (Map String AstFunc)
-checkFuncs = undefined
+checkFuncs defs types funcSigs = undefined
