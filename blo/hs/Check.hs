@@ -60,8 +60,8 @@ checkDuplicates label items = foldM_ checkItem empty items
 data Ast = Ast (String -> Maybe AstType) (String -> Maybe AstFunc)
 
 data AstType =
-     AstType SourcePos String Int (String -> Maybe (Int,AstType))
-   | AstImportType SourcePos String Int (String -> Maybe (Int,AstType))
+     AstType SourcePos String Int (String -> Maybe (Int,Maybe AstType))
+   | AstImportType SourcePos String Int (String -> Maybe (Int,Maybe AstType))
 data AstFunc =
     AstFunc AstFuncSig AstStmt
   | AstImportFunc AstFuncSig
@@ -73,23 +73,59 @@ astTypeName :: AstType -> String
 astTypeName (AstType _ name _ _) = name
 astTypeName (AstImportType _ name _ _) = name
 
-astTypeSize :: AstType -> Int
-astTypeSize (AstType _ _ size _) = size
-astTypeSize (AstImportType _ _ size _) = size
+astTypeSize :: Maybe AstType -> Int
+astTypeSize Nothing = 1
+astTypeSize (Just (AstType _ _ size _)) = size
+astTypeSize (Just (AstImportType _ _ size _)) = size
+
+astTypeField :: AstType -> String -> Maybe (Int,Maybe AstType)
+astTypeField (AstType _ _ _ getField) = getField
+astTypeField (AstImportType _ _ _ getField) = getField
 
 checkTypes :: [Definition] -> Check (Map String AstType)
 checkTypes defs = do
-    astTypes <- sequence (elems checkedTypes)
-    return (fromList (map (\ t -> (astTypeName t,t)) astTypes))
+    foldM_ checkDuplicateFieldNames empty (elems uncheckedTypes)
+    mapM_ (checkFieldTypes empty) (elems uncheckedTypes)
+    return checkedTypes
   where
-    checkedTypes = fromList (concatMap checkDef defs)
-    checkDef (FuncDef _ _ _) = []
-    checkDef (FuncImport _ _) = []
-    checkDef (TypeDef pos (Identifier _ name) fields) =
-        [(name,checkType AstType pos name fields)]
-    checkDef (TypeImport pos (Identifier _ name) fields) =
-        [(name,checkType AstImportType pos name fields)]
-    checkType astType pos name fields = undefined
+    uncheckedTypes = fromList (concatMap uncheckedDef defs)
+    uncheckedDef (FuncDef _ _ _) = []
+    uncheckedDef (FuncImport _ _) = []
+    uncheckedDef (TypeDef pos (Identifier _ name) fields) =
+        [(name,(AstType,pos,name,fields))]
+    uncheckedDef (TypeImport pos (Identifier _ name) fields) =
+        [(name,(AstImportType,pos,name,fields))]
+
+    checkDuplicateFieldNames set (_,pos,name,_)
+      | member name set =
+            checkError pos ("Duplicate field name '" ++ name ++ "'")
+      | otherwise = return (insert name () set)
+
+    checkFieldTypes set (_,pos,name,fields)
+      | member name set =
+            checkError pos ("Recursively defined type '" ++ name ++ "'")
+      | otherwise = mapM_ (checkField (insert name () set)) fields
+      where
+        checkField set (TypeField _ Nothing) = return ()
+        checkField set (TypeField _ (Just (Identifier pos typeName))) =
+            maybe (checkError pos ("Unknown type '" ++ typeName ++ "'"))
+                  (checkFieldTypes set) (M.lookup typeName uncheckedTypes)
+
+    checkedTypes = fromList (map checkType (elems uncheckedTypes))
+    checkType (astType,pos,name,fields) = (name,astType pos name size getField)
+      where
+        checkedFieldTypes = map lookupFieldType fields
+          where
+            lookupFieldType (TypeField (Identifier _ fieldName) Nothing) =
+                (fieldName,Nothing)
+            lookupFieldType (TypeField (Identifier _ fieldName) (Just (Identifier _ typeName))) =
+                (fieldName,M.lookup typeName checkedTypes)
+        size = sum (map (astTypeSize . snd) checkedFieldTypes)
+        getField fieldName = M.lookup fieldName fieldMap
+          where
+            (_,fieldMap) = foldl addFieldOffset (0,empty) checkedFieldTypes
+            addFieldOffset (offset,fieldMap) (fieldName,fieldType) =
+                (offset + astTypeSize fieldType,insert fieldName (offset,fieldType) fieldMap)
 
 checkFuncSigs :: [Definition] -> Map String AstType -> Check (Map String AstFuncSig)
 checkFuncSigs = undefined
