@@ -5,6 +5,7 @@ module Check
      check)
 where
 
+import Control.Applicative(Applicative(..))
 import Control.Monad(foldM,foldM_,liftM)
 import Data.Map(Map,elems,empty,fromList,insert,member)
 import qualified Data.Map as M
@@ -33,7 +34,16 @@ instance Monad Check where
     (Check a) >>= f = either (Check . Left) f a
     return = Check . Right
     fail = error
-    
+
+instance Functor Check where
+    fmap f (Check a) = Check (either Left (Right . f) a)
+
+instance Applicative Check where
+    pure = return
+    f <*> a = f >>= ($ a) . fmap
+    a *> b = a >> b
+    a <* b = a >>= (b >>) . return
+
 checkError :: SourcePos -> String -> Check a
 checkError pos msg = (Check . Left . Error pos) msg
 
