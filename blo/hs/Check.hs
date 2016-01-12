@@ -16,7 +16,8 @@ import Parse
     (Error(..),SourcePos,
      Identifier(..),Definition(..),
      FuncHeader(..),TypeField(..),Var(..),
-     Stmt(..),Expr(..))
+     Stmt(..),Expr(..),
+     stmtSourcePos,exprSourcePos)
 
 check :: [Definition] -> Either Error Ast
 check defs = let Check result = runCheck in result
@@ -135,6 +136,9 @@ astExprType (AstExprVar _ astType) = astType
 astExprType (AstExprFunc (AstFuncSig _ _ _ (Just astType)) _) = astType
 astExprType (AstExprField _ astType _) = astType
 
+astStmtFallsThru :: AstStmt -> Bool
+astStmtFallsThru = undefined
+
 checkTypes :: [Definition] -> Check (Map String AstType)
 checkTypes defs = do
     foldM_ checkDuplicateFieldNames empty (elems uncheckedTypes)
@@ -203,12 +207,29 @@ checkFuncSigs defs types = foldM checkDef empty defs
         return (AstVar name astParamType)
 
 checkFuncs :: [Definition] -> Map String AstType -> Map String AstFuncSig -> Check (Map String AstFunc)
-checkFuncs defs types funcSigs = undefined
+checkFuncs defs types funcSigs = do
+    funcs <- foldM checkDef empty defs
+    undefined
+  where
+    checkDef funcs (FuncDef pos (FuncHeader (Identifier _ name) _ _) stmt) = do
+        let funcSig = funcSigs M.! name
+        checkedStmt <- checkFuncBody funcSig stmt
+        undefined
+        return (insert name undefined funcs)
+    checkDef funcs (FuncImport pos (FuncHeader (Identifier _ name) _ _)) = do
+        let funcSig = funcSigs M.! name
+        undefined
+        return (insert name undefined funcs)
+    checkDef funcs _ = return funcs
 
-checkExpr :: Map String AstFuncSig -> (String -> Maybe AstType) -> Maybe AstType -> Expr -> Check AstExpr
+    checkFuncBody (AstFuncSig _ _ vars maybeRetType) stmt = do
+        -- check fallthru if maybeRetType /= Nothing
+        undefined
+
+checkExpr :: Map String AstFuncSig -> Map String AstType -> Maybe AstType -> Expr -> Check AstExpr
 checkExpr funcSigs scope expectedType (ExprVar (Identifier pos name)) = do
     astType <- maybe (checkError pos ("Unknown var '" ++ name ++ "'"))
-                     return (scope name)
+                     return (M.lookup name scope)
     let xType = maybe astType id expectedType
     unless (xType == astType)
            (checkError pos ("Var '" ++ name ++ "' has type '" ++
@@ -246,3 +267,69 @@ checkExpr funcSigs scope expectedType (ExprField expr (Identifier pos name)) = d
                             astTypeName astType ++ "', need type '" ++
                             astTypeName xType ++ "'"))
     return (AstExprField offset astType checkedExpr)
+
+checkStmt :: Map String AstType -> Map String AstFuncSig -> Map String AstType -> Map String () -> Maybe AstType -> Stmt -> Check AstStmt
+checkStmt types funcSigs scope forLabels retType (StmtBlock pos stmts) = do
+    checkedStmts <- fmap (reverse . snd)
+                         (foldM checkBlockStmt ((True,scope),[]) stmts)
+    undefined
+  where
+    checkBlockStmt ((False,_),_) stmt =
+        checkError (stmtSourcePos stmt) "Unreachable statement"
+    checkBlockStmt ((_,stmtScope),checkedStmts) stmt = do
+        checkedStmt <- checkStmt types funcSigs stmtScope forLabels retType stmt
+        let newScope = case checkedStmt of
+                           -- add if var stmt
+                           _ -> stmtScope
+        return ((astStmtFallsThru checkedStmt,newScope),checkedStmt:checkedStmts)
+checkStmt types funcSigs scope forLabels retType (StmtVar _ (Var (Identifier varPos name) (Identifier typePos typeName)) maybeExpr) = do
+    when (member name scope)
+         (checkError varPos ("Duplicate var name '" ++ name ++ "'"))
+    astType <- maybe (checkError typePos ("Unknown type '" ++ typeName ++ "'"))
+                     return (M.lookup typeName types)
+    maybeCheckedExpr <-
+        maybe (return Nothing)
+              (fmap Just . checkExpr funcSigs scope (Just astType)) maybeExpr
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtIf _ expr stmt elseStmt) = do
+    checkedExpr <- checkExpr funcSigs scope (Just AstTypeBit) expr
+    checkedStmt <- checkStmt types funcSigs scope forLabels retType stmt
+    checkedElse <- maybe (return Nothing)
+                         (fmap Just . checkStmt types funcSigs scope forLabels retType)
+                         elseStmt
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtFor _ maybeLabel stmt) = do
+    let labels = insert (maybe "" (\ (Identifier _ label) -> label) maybeLabel)
+                        () forLabels
+    checkedStmt <- checkStmt types funcSigs scope labels retType stmt
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtBreak pos Nothing) = do
+    unless (member "" forLabels)
+           (checkError pos "Break must be contained in for")
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtBreak pos (Just (Identifier _ label))) = do
+    unless (member "" forLabels)
+           (checkError pos ("Break must be contained in for with label '" ++
+                            label ++ "'"))
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtReturn pos Nothing) = do
+    maybe (return ())
+          (checkError pos . ("Must return value of type '" ++) .
+                            (++ "'") . astTypeName)
+          retType
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtReturn pos (Just expr)) = do
+    checkedExpr <- maybe (checkError pos "Cannot return value")
+                         (flip (checkExpr funcSigs scope) expr . Just)
+                         retType
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtSetClear pos bit expr) = do
+    checkedExpr <- checkExpr funcSigs scope (Just AstTypeBit) expr
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtAssign pos lhs rhs) = do
+    checkedLhs <- checkExpr funcSigs scope Nothing lhs
+    checkedRhs <- checkExpr funcSigs scope (Just (astExprType checkedLhs)) rhs
+    undefined
+checkStmt types funcSigs scope forLabels retType (StmtExpr expr) = do
+    checkedExpr <- checkExpr funcSigs scope Nothing expr
+    undefined

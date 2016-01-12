@@ -3,6 +3,7 @@ module Parse
      Identifier(..),Definition(..),
      FuncHeader(..),TypeField(..),Var(..),
      Stmt(..),Expr(..),
+     stmtSourcePos,exprSourcePos,
      parse)
 where
 
@@ -114,6 +115,22 @@ data Expr =
   | ExprFunc Identifier [Expr]
   | ExprField Expr Identifier
   deriving Show
+
+stmtSourcePos :: Stmt -> SourcePos
+stmtSourcePos (StmtBlock pos _) = pos
+stmtSourcePos (StmtVar pos _ _) = pos
+stmtSourcePos (StmtIf pos _ _ _) = pos
+stmtSourcePos (StmtFor pos _ _) = pos
+stmtSourcePos (StmtBreak pos _) = pos
+stmtSourcePos (StmtReturn pos _) = pos
+stmtSourcePos (StmtSetClear pos _ _) = pos
+stmtSourcePos (StmtAssign pos _ _) = pos
+stmtSourcePos (StmtExpr expr) = exprSourcePos expr
+
+exprSourcePos :: Expr -> SourcePos
+exprSourcePos (ExprVar (Identifier pos _)) = pos
+exprSourcePos (ExprFunc (Identifier pos _) _) = pos
+exprSourcePos (ExprField expr _) = exprSourcePos expr
 
 identifier :: Parser Identifier
 identifier = do
