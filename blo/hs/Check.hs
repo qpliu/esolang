@@ -2,11 +2,13 @@ module Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
      astTypeName,astTypeSize,astTypeField,astTypeIsBit,
      astFuncName,astFuncParams,astFuncType,
+     astVarName,astVarType,
+     astExprType,
      check)
 where
 
 import Control.Applicative(Applicative(..))
-import Control.Monad(foldM,foldM_,liftM)
+import Control.Monad(foldM,foldM_,liftM,unless,when,zipWithM)
 import Data.Map(Map,elems,empty,fromList,insert,member)
 import qualified Data.Map as M
 
@@ -81,7 +83,10 @@ data AstFunc =
 data AstFuncSig = AstFuncSig SourcePos String [AstVar] (Maybe AstType)
 data AstVar = AstVar String AstType
 data AstStmt = AstStmt
-data AstExpr = AstExpr
+data AstExpr =
+    AstExprVar String AstType
+  | AstExprFunc AstFuncSig [AstExpr]
+  | AstExprField Int AstType AstExpr
 
 instance Eq AstType where
     t1 == t2 = astTypeName t1 == astTypeName t2
@@ -118,6 +123,17 @@ astFuncParams (AstImportFunc (AstFuncSig _ _ params _)) =
 astFuncType :: AstFunc -> Maybe AstType
 astFuncType (AstFunc (AstFuncSig _ _ _ returnType) _) = returnType
 astFuncType (AstImportFunc (AstFuncSig _ _ _ returnType)) = returnType
+
+astVarName :: AstVar -> String
+astVarName (AstVar name _) = name
+
+astVarType :: AstVar -> AstType
+astVarType (AstVar _ astType) = astType
+
+astExprType :: AstExpr -> AstType
+astExprType (AstExprVar _ astType) = astType
+astExprType (AstExprFunc (AstFuncSig _ _ _ (Just astType)) _) = astType
+astExprType (AstExprField _ astType _) = astType
 
 checkTypes :: [Definition] -> Check (Map String AstType)
 checkTypes defs = do
@@ -188,3 +204,45 @@ checkFuncSigs defs types = foldM checkDef empty defs
 
 checkFuncs :: [Definition] -> Map String AstType -> Map String AstFuncSig -> Check (Map String AstFunc)
 checkFuncs defs types funcSigs = undefined
+
+checkExpr :: Map String AstFuncSig -> (String -> Maybe AstType) -> Maybe AstType -> Expr -> Check AstExpr
+checkExpr funcSigs scope expectedType (ExprVar (Identifier pos name)) = do
+    astType <- maybe (checkError pos ("Unknown var '" ++ name ++ "'"))
+                     return (scope name)
+    let xType = maybe astType id expectedType
+    unless (xType == astType)
+           (checkError pos ("Var '" ++ name ++ "' has type '" ++
+                            astTypeName astType ++ "', need type '" ++
+                            astTypeName xType ++ "'"))
+    return (AstExprVar name astType)
+checkExpr funcSigs scope expectedType (ExprFunc (Identifier pos name) params) = do
+    funcSig@(AstFuncSig _ _ vars maybeRetType) <-
+        maybe (checkError pos ("Unknown func '" ++ name ++ "'"))
+              return (M.lookup name funcSigs)
+    retType <- maybe (checkError pos ("Func '" ++ name ++
+                                      "' returns no value"))
+                     return maybeRetType
+    let xType = maybe retType id expectedType
+    unless (xType == retType)
+           (checkError pos ("Func '" ++ name ++ "' returns type '" ++
+                            astTypeName retType ++ "', need type '" ++
+                            astTypeName xType ++ "'"))
+    unless (length params == length vars)
+           (checkError pos ("Func '" ++ name ++ "' takes " ++
+                            show (length vars) ++ " parameter(s), given " ++
+                            show (length params)))
+    checkedParams <- zipWithM (checkExpr funcSigs scope)
+                              (map (Just . astVarType) vars)
+                              params
+    return (AstExprFunc funcSig checkedParams)
+checkExpr funcSigs scope expectedType (ExprField expr (Identifier pos name)) = do
+    checkedExpr <- checkExpr funcSigs scope Nothing expr
+    (offset,astType) <- maybe
+        (checkError pos ("Unknown field name '" ++ name ++ "'"))
+        return (astTypeField (astExprType checkedExpr) name)
+    let xType = maybe astType id expectedType
+    unless (xType == astType)
+           (checkError pos ("Field '" ++ name ++ "' has type '" ++
+                            astTypeName astType ++ "', need type '" ++
+                            astTypeName xType ++ "'"))
+    return (AstExprField offset astType checkedExpr)
