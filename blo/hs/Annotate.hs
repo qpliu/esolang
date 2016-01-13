@@ -7,7 +7,7 @@ import Control.Applicative(Applicative(..))
 import Data.Map(Map,fromList)
 import qualified Data.Map as M
 
-import Parse(Error(..),SourcePos)
+import Compile(Compile(..),CompileError,SourcePos,compileError)
 import Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
      astTypeName,astTypeSize,astTypeImportSize,astTypeIsImport,
@@ -15,35 +15,14 @@ import Check
      astStmtSourcePos)
 
 class Runtime rt where
-    annotateType :: AstType -> Either Error rt
-    annotateFunc :: AstFuncSig -> Either Error rt
+    annotateType :: AstType -> Either CompileError rt
+    annotateFunc :: AstFuncSig -> Either CompileError rt
 
-annotate :: Runtime rt => Ast -> Either Error (Blo rt)
-annotate (Ast astTypes astFuncs) = let Annotate result = doAnnotate in result
-  where
-    doAnnotate = do
-        types <- annotateTypes astTypes
-        funcs <- annotateFuncs types astFuncs
-        return (flip M.lookup funcs)
-
-data Annotate a = Annotate (Either Error a)
-
-instance Monad Annotate where
-    (Annotate a) >>= f = either (Annotate . Left) f a
-    return = Annotate . Right
-    fail = error
-
-instance Functor Annotate where
-    fmap f (Annotate a) = Annotate (either Left (Right . f) a)
-
-instance Applicative Annotate where
-    pure = return
-    f <*> a = f >>= ($ a) . fmap
-    a *> b = a >> b
-    a <* b = a >>= (b >>) . return
-
-annotateError :: SourcePos -> String -> Annotate a
-annotateError pos msg = (Annotate . Left . Error pos) msg
+annotate :: Runtime rt => Ast -> Compile (Blo rt)
+annotate (Ast astTypes astFuncs) = do
+    types <- annotateTypes astTypes
+    funcs <- annotateFuncs types astFuncs
+    return (flip M.lookup funcs)
 
 type Blo rt = String -> Maybe (BloFunc rt)
 data BloType rt =
@@ -69,14 +48,14 @@ data BloExpr rt =
   | BloExprFunc (BloFunc rt)
   | BloExprField Int Int (BloType rt) (BloExpr rt)
 
-annotateTypes :: Runtime rt => [AstType] -> Annotate (Map String (BloType rt))
+annotateTypes :: Runtime rt => [AstType] -> Compile (Map String (BloType rt))
 annotateTypes astTypes = do
     annotated <- mapM addAnnotation astTypes
     return (fromList annotated)
   where
     addAnnotation astType
       | astTypeIsImport astType = do
-            rt <- Annotate (annotateType astType)
+            rt <- Compile (annotateType astType)
             return (astTypeName astType,
                     BloRtType (astTypeSize astType)
                               (astTypeImportSize astType) rt)
@@ -84,7 +63,7 @@ annotateTypes astTypes = do
             return (astTypeName astType,
                     BloType (astTypeSize astType) (astTypeImportSize astType))
 
-annotateFuncs :: Runtime rt => Map String (BloType rt) -> [AstFunc] -> Annotate (Map String (BloFunc rt))
+annotateFuncs :: Runtime rt => Map String (BloType rt) -> [AstFunc] -> Compile (Map String (BloFunc rt))
 annotateFuncs types astFuncs = do
     annotated <- mapM addAnnotation astFuncs
     return (toBlo (fromList annotated))
@@ -92,7 +71,7 @@ annotateFuncs types astFuncs = do
     addAnnotation astFunc@(AstFunc astFuncSig astStmt) =
         return (astFuncName astFunc,(toBloFuncSig astFuncSig,Left astStmt))
     addAnnotation astFunc@(AstImportFunc astFuncSig) = do
-        rt <- Annotate (annotateFunc astFuncSig)
+        rt <- Compile (annotateFunc astFuncSig)
         return (astFuncName astFunc,(toBloFuncSig astFuncSig,Right rt))
 
     toBloType AstTypeBit = BloBitType

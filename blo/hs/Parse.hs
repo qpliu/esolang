@@ -18,12 +18,15 @@ import Text.ParserCombinators.Parsec
      (<|>),(<?>))
 import qualified Text.ParserCombinators.Parsec as Parsec
 
+import Compile(Compile(..),CompileError(..))
+
 data Error = Error SourcePos String
   deriving Show
 
-parse :: String -> String -> Either Error [Definition]
+parse :: String -> String -> Compile [Definition]
 parse filename source =
-    either (Left . mapError) Right (Parsec.parse parser filename source)
+    Compile (either (Left . mapError) Right
+                    (Parsec.parse parser filename source))
   where
     parser = do
         skipNewlines
@@ -33,8 +36,7 @@ parse filename source =
         eof
         return defs
     mapError err =
-        --Error (errorPos err) (messageString (last (errorMessages err)))
-        Error (errorPos err) (concatMap messageString (errorMessages err))
+        CompileError (errorPos err) (messageString (last (errorMessages err)))
 
 keywords :: [String]
 keywords = ["type", "func", "var", "if", "else", "for", "break",
