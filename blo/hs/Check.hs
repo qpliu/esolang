@@ -1,7 +1,7 @@
 module Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
      AstVar,
-     astTypeName,astTypeSize,astTypeField,astTypeIsBit,
+     astTypeName,astTypeSize,astTypeImportSize,astTypeField,astTypeIsImport,
      astFuncName,astFuncParams,astFuncType,
      astVarName,astVarType,
      astExprType,
@@ -107,6 +107,10 @@ astTypeName (AstType _ name _ _ _) = name
 astTypeName (AstImportType _ name _ _ _) = name
 astTypeName AstTypeBit = ""
 
+astTypeErrorName :: AstType -> String
+astTypeErrorName AstTypeBit = "bit type"
+astTypeErrorName astType = "type '" ++ astTypeName astType ++ "'"
+
 astTypeSize :: AstType -> Int
 astTypeSize (AstType _ _ size _ _) = size
 astTypeSize (AstImportType _ _ size _ _) = size
@@ -122,9 +126,9 @@ astTypeField (AstType _ _ _ _ getField) = getField
 astTypeField (AstImportType _ _ _ _ getField) = getField
 astTypeField AstTypeBit = const Nothing
 
-astTypeIsBit :: AstType -> Bool
-astTypeIsBit AstTypeBit = True
-astTypeIsBit _ = False
+astTypeIsImport :: AstType -> Bool
+astTypeIsImport (AstImportType _ _ _ _ _) = True
+astTypeIsImport _ = False
 
 astFuncName :: AstFunc -> String
 astFuncName (AstFunc (AstFuncSig _ name _ _) _) = name
@@ -259,8 +263,8 @@ checkFuncs defs types funcSigs = foldM checkDef empty defs
         maybe (return ())
               (when (astStmtFallsThru checkedStmt) .
                checkError pos .
-               (("Func '" ++ name ++ "' must return value of type '") ++) .
-               (++ "'") . astTypeName)
+               (("Func '" ++ name ++ "' must return value of ") ++) .
+                astTypeErrorName)
               retType
         return checkedStmt
 
@@ -270,9 +274,9 @@ checkExpr funcSigs scope expectedType (ExprVar (Identifier pos name)) = do
                      return (M.lookup name scope)
     let xType = maybe astType id expectedType
     unless (xType == astType)
-           (checkError pos ("Var '" ++ name ++ "' has type '" ++
-                            astTypeName astType ++ "', need type '" ++
-                            astTypeName xType ++ "'"))
+           (checkError pos ("Var '" ++ name ++ "' has " ++
+                            astTypeErrorName astType ++ ", need " ++
+                            astTypeErrorName xType))
     return (AstExprVar name astType)
 checkExpr funcSigs scope expectedType (ExprFunc (Identifier pos name) params) = do
     funcSig@(AstFuncSig _ _ vars maybeRetType) <-
@@ -283,9 +287,9 @@ checkExpr funcSigs scope expectedType (ExprFunc (Identifier pos name) params) = 
                      return maybeRetType
     let xType = maybe retType id expectedType
     unless (xType == retType)
-           (checkError pos ("Func '" ++ name ++ "' returns type '" ++
-                            astTypeName retType ++ "', need type '" ++
-                            astTypeName xType ++ "'"))
+           (checkError pos ("Func '" ++ name ++ "' returns " ++
+                            astTypeErrorName retType ++ ", need " ++
+                            astTypeErrorName xType))
     unless (length params == length vars)
            (checkError pos ("Func '" ++ name ++ "' takes " ++
                             show (length vars) ++ " parameter(s), given " ++
@@ -301,9 +305,9 @@ checkExpr funcSigs scope expectedType (ExprField expr (Identifier pos name)) = d
         return (astTypeField (astExprType checkedExpr) name)
     let xType = maybe astType id expectedType
     unless (xType == astType)
-           (checkError pos ("Field '" ++ name ++ "' has type '" ++
-                            astTypeName astType ++ "', need type '" ++
-                            astTypeName xType ++ "'"))
+           (checkError pos ("Field '" ++ name ++ "' has " ++
+                            astTypeErrorName astType ++ ", need " ++
+                            astTypeErrorName xType))
     return (AstExprField offset importOffset astType checkedExpr)
 
 checkStmt :: Map String AstType -> Map String AstFuncSig -> Map String AstType -> Map String () -> Maybe AstType -> Stmt -> Check AstStmt
@@ -360,8 +364,7 @@ checkStmt types funcSigs scope forLabels retType (StmtBreak pos (Just (Identifie
     return (AstStmtBreak pos (Just label))
 checkStmt types funcSigs scope forLabels retType (StmtReturn pos Nothing) = do
     maybe (return ())
-          (checkError pos . ("Must return value of type '" ++) .
-                            (++ "'") . astTypeName)
+          (checkError pos . ("Must return value of " ++) . astTypeErrorName)
           retType
     return (AstStmtReturn pos Nothing)
 checkStmt types funcSigs scope forLabels retType (StmtReturn pos (Just expr)) = do
