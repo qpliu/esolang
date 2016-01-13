@@ -5,6 +5,7 @@ module Check
      astFuncName,astFuncParams,astFuncType,
      astVarName,astVarType,
      astExprType,
+     astStmtSourcePos,
      check)
 where
 
@@ -171,6 +172,17 @@ astStmtFallsThru (AstStmtFor _ maybeLabel stmt) = hasBreak False stmt
 astStmtFallsThru (AstStmtBreak _ _) = False
 astStmtFallsThru (AstStmtReturn _ _) = False
 astStmtFallsThru _ = True
+
+astStmtSourcePos :: AstStmt -> SourcePos
+astStmtSourcePos (AstStmtBlock pos _) = pos
+astStmtSourcePos (AstStmtVar pos _ _) = pos
+astStmtSourcePos (AstStmtIf pos _ _ _) = pos
+astStmtSourcePos (AstStmtFor pos _ _) = pos
+astStmtSourcePos (AstStmtBreak pos _) = pos
+astStmtSourcePos (AstStmtReturn pos _) = pos
+astStmtSourcePos (AstStmtSetClear pos _ _) = pos
+astStmtSourcePos (AstStmtAssign pos _ _) = pos
+astStmtSourcePos (AstStmtExpr pos _) = pos
 
 checkTypes :: [Definition] -> Check (Map String AstType)
 checkTypes defs = do
