@@ -57,11 +57,13 @@ nextToken = do
   where
     singleCharToken = fmap (:[]) (oneOf tokenChars)
     continueToken pre = do
-        rest <- (if pre == "" then many1 else many) (noneOf ('/' : tokenChars ++ spaceChars))
+        rest <- (if pre == "" then many1 else many)
+                (noneOf ('/' : tokenChars ++ spaceChars))
         try (throughSlash (pre ++ rest)) <|> return (pre ++ rest)
     throughSlash pre = do
         try (lookAhead (string "/*")) <|> try (lookAhead (string "//"))
-                                      <|> (char '/' >> continueToken (pre ++ "/"))
+                                      <|> (char '/' >>
+                                           continueToken (pre ++ "/"))
     skipLineComment = do
         try (string "//")
         manyTill (noneOf "\n") newline
@@ -212,7 +214,8 @@ funcParams pendingVars pendingVarNames = do
     addVarType varName = do
         varType <- identifier <?> "parameter type"
         skipNewlines
-        let vars = map (flip Var varType) (varName:pendingVarNames) ++ pendingVars
+        let vars = map (flip Var varType) (varName:pendingVarNames) ++
+                   pendingVars
         anotherParam vars <|> return (reverse vars)
     anotherParam vars = do
         try (token ",")
@@ -232,7 +235,9 @@ typeFields pendingFields pendingFieldNames = do
         fieldType <- optionMaybe (try identifier)
         terminateField
         skipNewlines
-        let fields = ((map (flip TypeField fieldType) (fieldName:pendingFieldNames)) ++ pendingFields)
+        let fields = map (flip TypeField fieldType)
+                         (fieldName:pendingFieldNames) ++
+                     pendingFields
         typeFields fields [] <|> return (reverse fields)
     terminateField = void (try (token ";") <|> try (token "\n")
                                            <|> try (lookAhead (token "}")))
