@@ -1,15 +1,19 @@
 module InterpRuntime
-    (InterpRuntimeType,InterpRuntimeFunc,InterpRuntimeValue,
+    (InterpRuntimeType,InterpRuntimeFunc(..),InterpRuntimeValue,
      newRuntimeValue)
 where
 
+import Memory(Memory)
+import Value(Value,Data)
 import Runtime
     (RuntimeType(..),RuntimeFunc(..),
      Compile,SourcePos,compileError,
      AstType(..),AstFuncSig(..),astTypeName,astTypeSourcePos,astTypeErrorName)
 
+type Mem = Memory (Data InterpRuntimeValue)
 data InterpRuntimeType = InterpRuntimeType
-data InterpRuntimeFunc = InterpRuntimeFunc
+newtype InterpRuntimeFunc =
+    InterpRuntimeFunc (Mem -> [Value] -> IO (Mem, Maybe Value))
 data InterpRuntimeValue = InterpRuntimeValue
 
 instance RuntimeType InterpRuntimeType where

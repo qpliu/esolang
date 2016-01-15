@@ -7,22 +7,21 @@ where
 import Data.Map(fromList,member)
 
 import LowLevel(Type(..))
-import InterpRuntime(InterpRuntimeType,InterpRuntimeValue,newRuntimeValue)
 import Memory(Memory,Ref,newRef,addRef,unref,deref,update)
 
-data Data = Data [Bool] [InterpRuntimeValue]
+data Data rtv = Data [Bool] [rtv]
 data Value = Value Ref (Int,Int,Int,Int)
 
-addVar :: String -> Type InterpRuntimeType -> Memory Data
-                 -> ((String,Value),Memory Data)
-addVar name (Type bitSize rtt) mem = ((name,val),newMem)
+addVar :: (rtt -> rtv) -> String -> Type rtt -> Memory (Data rtv)
+                       -> ((String,Value),Memory (Data rtv))
+addVar newRuntimeValue name (Type bitSize rtt) mem = ((name,val),newMem)
   where
     (newMem,ref) = newRef mem (Data (take bitSize (repeat False))
                               (map newRuntimeValue rtt))
     val = Value ref (0,0,bitSize,length rtt)
 
-reassignVar :: String -> Value -> [(String,Value)] -> Memory Data
-                      -> ([(String,Value)],Memory Data)
+reassignVar :: String -> Value -> [(String,Value)] -> Memory (Data rtv)
+                      -> ([(String,Value)],Memory (Data rtv))
 reassignVar name newVal@(Value newRef _) scope mem = (newScope,newMem)
   where
     newMem = unref (addRef mem newRef) oldRef
@@ -32,7 +31,7 @@ reassignVar name newVal@(Value newRef _) scope mem = (newScope,newMem)
       | varName == name = (varName,newVal)
       | otherwise = var
 
-copyValue :: Value -> Value -> Memory Data -> Memory Data
+copyValue :: Value -> Value -> Memory (Data rtv) -> Memory (Data rtv)
 copyValue (Value srcRef (srcOffset,srcImportOffset,srcSize,srcImportSize))
           (Value destRef (destOffset,destImportOffset,destSize,destImportSize))
           mem
@@ -48,8 +47,8 @@ copyValue (Value srcRef (srcOffset,srcImportOffset,srcSize,srcImportSize))
               take srcImportSize (drop srcImportOffset srcImports) ++
               drop (destImportOffset + srcImportSize) destImports)
 
-removeVars :: [(String,a)] -> [(String,Value)] -> Memory Data
-                           -> ([(String,Value)],Memory Data)
+removeVars :: [(String,a)] -> [(String,Value)] -> Memory (Data rtv)
+                           -> ([(String,Value)],Memory (Data rtv))
 removeVars vars scope mem = (reverse newScope,newMem)
   where
     varSet = fromList vars
@@ -58,19 +57,19 @@ removeVars vars scope mem = (reverse newScope,newMem)
       | member varName varSet = (scope,unref mem ref)
       | otherwise = result
 
-valueBit :: Value -> Int -> Memory Data -> Bool
+valueBit :: Value -> Int -> Memory (Data rtv) -> Bool
 valueBit (Value ref (offset,_,_,_)) index mem = bits !! index
   where
     Data bits _ = deref mem ref
 
-valueField :: Value -> Int -> Int -> Type InterpRuntimeType -> Value
+valueField :: Value -> Int -> Int -> Type rtt -> Value
 valueField (Value ref (offset,importOffset,_,_))
            fieldOffset fieldImportOffset (Type fieldSize fieldRtt) =
     Value ref (offset+fieldOffset,importOffset+fieldImportOffset,
                fieldSize,length fieldRtt)
 
-refValue :: Memory Data -> Value -> Memory Data
+refValue :: Memory (Data rtv) -> Value -> Memory (Data rtv)
 refValue mem (Value ref _) = addRef mem ref
 
-unrefValue :: Memory Data -> Value -> Memory Data
+unrefValue :: Memory (Data rtv) -> Value -> Memory (Data rtv)
 unrefValue mem (Value ref _) = unref mem ref
