@@ -10,16 +10,17 @@ import qualified Data.Map as M
 import Compile(Compile,SourcePos,compileError)
 import Check
         (AstType(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
-         astTypeName,astTypeSize,astTypeImportSize,astStmtSourcePos)
+         astTypeName,astTypeSize,astTypeFields,astTypeImportSize,
+         astStmtSourcePos)
 import Runtime(RuntimeAst(..))
 
 toLowLevel :: RuntimeAst rtt rtf -> String -> Maybe (Func rtt rtf)
 toLowLevel (RuntimeAst rtTypes rtFuncs) = flip M.lookup funcs
   where
-    types = fromList (map toLowLevelType rtTypes)
+    types = toLowLevelTypes rtTypes
     funcs = toLowLevelFuncs types rtFuncs
 
-data Type rtt = Type Int Int (Maybe rtt)
+data Type rtt = Type Int [rtt]
 data Func rtt rtf =
     Func (FuncSig rtt rtf) (Stmt rtt rtf)
   | ImportFunc (FuncSig rtt rtf) rtf
@@ -65,10 +66,17 @@ stmtLeavingScope stmt =
     subtract scope newScope =
         filter (maybe False (const True) . flip lookup newScope . fst) scope
 
-toLowLevelType :: (AstType,Maybe rtt) -> (String,Type rtt)
-toLowLevelType (astType,rtt) =
-    (astTypeName astType,
-     Type (astTypeSize astType) (astTypeImportSize astType) rtt)
+toLowLevelTypes :: [(AstType,Maybe rtt)] -> Map String (Type rtt)
+toLowLevelTypes astTypes = fromList (map toLowLevelType astTypes)
+  where
+    rttMap = fromList (map toRttMap astTypes)
+    toRttMap (astType,Nothing) = (astTypeName astType,[])
+    toRttMap (astType,Just rtt) = (astTypeName astType,[rtt])
+    astTypeRtt (_,(_,_,fieldAstType)) = rttMap M.! astTypeName fieldAstType
+    toLowLevelType (astType,rtt) =
+        (astTypeName astType,
+         Type (astTypeSize astType)
+              (concatMap astTypeRtt (astTypeFields astType)))
 
 toLowLevelFuncs :: Map String (Type rtt) -> [(AstFuncSig,Either AstStmt rtf)]
                                          -> Map String (Func rtt rtf)

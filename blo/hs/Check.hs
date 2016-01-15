@@ -1,7 +1,8 @@
 module Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
      AstVar,
-     astTypeName,astTypeSize,astTypeImportSize,astTypeField,astTypeIsImport,
+     astTypeName,astTypeSize,astTypeImportSize,astTypeFields,
+     astTypeErrorName,astTypeSourcePos,astTypeIsImport,
      astFuncName,astFuncParams,astFuncType,
      astVarName,astVarType,
      astExprType,
@@ -55,8 +56,8 @@ checkDuplicates label items = foldM_ checkItem empty items
 data Ast = Ast [AstType] [AstFunc]
 
 data AstType =
-     AstType SourcePos String Int Int (String -> Maybe (Int,Int,AstType))
-   | AstImportType SourcePos String Int Int (String -> Maybe (Int,Int,AstType))
+     AstType SourcePos String Int Int [(String,(Int,Int,AstType))]
+   | AstImportType SourcePos String Int Int [(String,(Int,Int,AstType))]
    | AstTypeBit
 data AstFunc =
     AstFunc AstFuncSig AstStmt
@@ -90,6 +91,11 @@ astTypeErrorName :: AstType -> String
 astTypeErrorName AstTypeBit = "bit type"
 astTypeErrorName astType = "type '" ++ astTypeName astType ++ "'"
 
+astTypeSourcePos :: AstType -> SourcePos
+astTypeSourcePos (AstType pos _ _ _ _) = pos
+astTypeSourcePos (AstImportType pos _ _ _ _) = pos
+astTypeSourcePos AstTypeBit = error "astTypeSourcePos AstTypeBit"
+
 astTypeSize :: AstType -> Int
 astTypeSize (AstType _ _ size _ _) = size
 astTypeSize (AstImportType _ _ size _ _) = size
@@ -100,10 +106,13 @@ astTypeImportSize (AstType _ _ _ importSize _) = importSize
 astTypeImportSize (AstImportType _ _ _ importSize _) = importSize
 astTypeImportSize AstTypeBit = 0
 
+astTypeFields :: AstType -> [(String,(Int,Int,AstType))]
+astTypeFields (AstType _ _ _ _ fields) = fields
+astTypeFields (AstImportType _ _ _ _ fields) = fields
+astTypeFields AstTypeBit = []
+
 astTypeField :: AstType -> String -> Maybe (Int,Int,AstType)
-astTypeField (AstType _ _ _ _ getField) = getField
-astTypeField (AstImportType _ _ _ _ getField) = getField
-astTypeField AstTypeBit = const Nothing
+astTypeField astType = flip lookup (astTypeFields astType)
 
 astTypeIsImport :: AstType -> Bool
 astTypeIsImport (AstImportType _ _ _ _ _) = True
@@ -193,27 +202,18 @@ checkTypes defs = do
 
     checkedTypes = fromList (map checkType (elems uncheckedTypes))
     checkType (consAstType,pos,name,initialImportSize,fields) =
-        (name,consAstType pos name size importSize getField)
+        (name,consAstType pos name bitSize importSize (reverse checkedFields))
       where
-        checkedFieldTypes = map lookupFieldType fields
+        (checkedFields,bitSize,importSize) =
+            foldl checkField ([],0,initialImportSize) fields
+        checkField (fieldList,offset,importOffset)
+                    (TypeField (Identifier _ fieldName) fieldType) =
+            ((fieldName,(offset,importOffset,checkedFieldType)):fieldList,
+             offset + astTypeSize checkedFieldType,
+             importOffset + astTypeImportSize checkedFieldType)
           where
-            lookupFieldType (TypeField (Identifier _ fieldName) Nothing) =
-                (fieldName,AstTypeBit)
-            lookupFieldType (TypeField (Identifier _ fieldName)
-                                       (Just (Identifier _ typeName))) =
-                (fieldName,checkedTypes M.! typeName)
-        size = sum (map (astTypeSize . snd) checkedFieldTypes)
-        importSize = initialImportSize +
-                     sum (map (astTypeImportSize . snd) checkedFieldTypes)
-        getField fieldName = M.lookup fieldName fieldMap
-          where
-            (_,_,fieldMap) = foldl addFieldOffset (0,initialImportSize,empty)
-                                   checkedFieldTypes
-            addFieldOffset (offset,importOffset,fieldMap)
-                           (fieldName,fieldType) =
-                (offset + astTypeSize fieldType,
-                 importOffset + astTypeImportSize fieldType,
-                 insert fieldName (offset,importOffset,fieldType) fieldMap)
+            checkedFieldType = maybe AstTypeBit lookupCheckedType fieldType
+            lookupCheckedType (Identifier _ name) = checkedTypes M.! name
 
 checkFuncSigs :: [Definition] -> Map String AstType
                               -> Compile (Map String AstFuncSig)

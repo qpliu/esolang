@@ -1,5 +1,5 @@
 module Memory
-    (Memory,Ref,newMemory,newRef,ref,unref,deref,update)
+    (Memory,Ref,newMemory,newRef,addRef,unref,deref,update)
 where
 
 import Data.Map(Map,empty,insert,member,(!))
@@ -18,8 +18,8 @@ newRef (Memory index memory) value =
   where
     newIndex = head (dropWhile (flip member memory . Ref) [index+1..])
 
-ref :: Memory a -> Ref -> Memory a
-ref (Memory index memory) ref = Memory index (M.update refEntry ref memory)
+addRef :: Memory a -> Ref -> Memory a
+addRef (Memory index memory) ref = Memory index (M.update refEntry ref memory)
   where
     refEntry (n,a) = Just (n+1,a)
 
