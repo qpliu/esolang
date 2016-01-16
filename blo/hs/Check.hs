@@ -280,17 +280,17 @@ checkExpr funcSigs scope expectedType (ExprVar (Identifier pos name)) = do
     return (AstExprVar name astType)
 checkExpr funcSigs scope expectedType
           (ExprFunc (Identifier pos name) params) = do
-    funcSig@(AstFuncSig _ _ vars maybeRetType) <-
+    funcSig@(AstFuncSig _ _ vars retType) <-
         maybe (compileError pos ("Unknown func '" ++ name ++ "'"))
               return (M.lookup name funcSigs)
-    retType <- maybe (compileError pos ("Func '" ++ name ++
-                                      "' returns no value"))
-                     return maybeRetType
-    let xType = maybe retType id expectedType
-    unless (xType == retType)
-           (compileError pos ("Func '" ++ name ++ "' returns " ++
-                            astTypeErrorName retType ++ ", need " ++
-                            astTypeErrorName xType))
+    when (expectedType /= Nothing && retType == Nothing)
+         (compileError pos ("Func '" ++ name ++ "' returns no value"))
+    when (expectedType /= Nothing && expectedType /= retType)
+         (let Just xType = expectedType
+              Just rType = retType
+          in  compileError pos ("Func '" ++ name ++ "' returns " ++
+                                astTypeErrorName rType ++ ", need " ++
+                                astTypeErrorName xType))
     unless (length params == length vars)
            (compileError pos ("Func '" ++ name ++ "' takes " ++
                             show (length vars) ++ " parameter(s), given " ++

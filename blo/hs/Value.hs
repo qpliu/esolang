@@ -53,9 +53,9 @@ removeVars vars scope mem = (reverse newScope,newMem)
   where
     varSet = fromList vars
     (newScope,newMem) = foldl checkVar ([],mem) scope
-    checkVar result@(scope,mem) (varName,Value ref _)
+    checkVar (scope,mem) var@(varName,Value ref _)
       | member varName varSet = (scope,unref mem ref)
-      | otherwise = result
+      | otherwise = (var:scope,mem)
 
 valueBit :: Value -> Int -> Memory (Data rtv) -> Bool
 valueBit (Value ref (offset,_,_,_)) index mem = bits !! index

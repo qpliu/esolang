@@ -1,13 +1,19 @@
 module Compile
-    (Compile(..),CompileError(..),SourcePos(..),compileError)
+    (Compile(..),CompileError(..),SourcePos,compileError,compile)
 where
 
 import Control.Applicative(Applicative(..))
-import Text.ParserCombinators.Parsec(SourcePos(..))
+import Text.ParserCombinators.Parsec
+    (SourcePos,sourceName,sourceLine,sourceColumn)
 
 newtype Compile a = Compile (Either CompileError a)
 data CompileError = CompileError SourcePos String
-  deriving Show
+
+instance Show CompileError where
+    show (CompileError pos message) =
+        sourceName pos ++ ":" ++ show (sourceLine pos)
+                       ++ ":" ++ show (sourceColumn pos)
+                       ++ ": " ++ message
 
 instance Monad Compile where
     (Compile a) >>= f = either (Compile . Left) f a
@@ -25,3 +31,6 @@ instance Applicative Compile where
 
 compileError :: SourcePos -> String -> Compile a
 compileError pos msg = (Compile . Left . CompileError pos) msg
+
+compile :: Compile a -> Either CompileError a
+compile (Compile result) = result

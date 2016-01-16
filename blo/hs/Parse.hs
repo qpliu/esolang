@@ -1,5 +1,5 @@
 module Parse
-    (Error(..),SourcePos(..),
+    (CompileError(..),SourcePos,
      Identifier(..),Definition(..),
      FuncHeader(..),TypeField(..),Var(..),
      Stmt(..),Expr(..),
@@ -11,7 +11,7 @@ import Control.Monad(unless,void,when)
 import Data.Set(Set,fromList,member)
 import Text.Parsec.Error(errorMessages,errorPos,messageString)
 import Text.ParserCombinators.Parsec
-    (ParseError(..),Parser,SourcePos(..),
+    (ParseError(..),Parser,SourcePos,
      anyChar,char,eof,getPosition,lookAhead,many,many1,manyTill,
      oneOf,optionMaybe,newline,noneOf,
      sepBy,skipMany,string,try,
@@ -19,9 +19,6 @@ import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec as Parsec
 
 import Compile(Compile(..),CompileError(..))
-
-data Error = Error SourcePos String
-  deriving Show
 
 parse :: String -> String -> Compile [Definition]
 parse filename source =
@@ -50,12 +47,15 @@ spaceChars = " \t\v\r" -- does not include newline
 
 nextToken :: Parser (SourcePos,String)
 nextToken = do
-    many (void (oneOf spaceChars) <|> skipLineComment <|> skipBlockComment)
+    many (void (oneOf spaceChars) <|> skipBlockComment)
     pos <- getPosition
-    tok <- singleCharToken <|> continueToken ""
+    tok <- lineComment <|> singleCharToken <|> continueToken ""
     return (pos,tok)
   where
     singleCharToken = fmap (:[]) (oneOf tokenChars)
+    lineComment = do
+        skipLineComment
+        return "\n"
     continueToken pre = do
         rest <- (if pre == "" then many1 else many)
                 (noneOf ('/' : tokenChars ++ spaceChars))

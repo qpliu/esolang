@@ -63,7 +63,7 @@ stmtLeavingScope stmt nextStmt =
     maybe (stmtScope stmt) (subtract (stmtScope stmt) . stmtScope) nextStmt
   where
     subtract scope newScope =
-        filter (maybe False (const True) . flip lookup newScope . fst) scope
+        filter (maybe True (const False) . flip lookup newScope . fst) scope
 
 toLowLevelTypes :: [(AstType,Maybe rtt)] -> Map String (Type rtt)
 toLowLevelTypes astTypes = fromList (map toLowLevelType astTypes)
