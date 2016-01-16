@@ -58,10 +58,9 @@ stmtNext stmt = let (StmtInfo _ next) = stmtInfo stmt in next
 stmtScope :: Stmt rtt rtf -> [(String,Type rtt)]
 stmtScope stmt = let (StmtInfo scope _) = stmtInfo stmt in scope
 
-stmtLeavingScope :: Stmt rtt rtf -> [(String,Type rtt)]
-stmtLeavingScope stmt =
-    maybe (stmtScope stmt) (subtract (stmtScope stmt) . stmtScope)
-          (stmtNext stmt)
+stmtLeavingScope :: Stmt rtt rtf -> Maybe (Stmt rtt rtf) -> [(String,Type rtt)]
+stmtLeavingScope stmt nextStmt =
+    maybe (stmtScope stmt) (subtract (stmtScope stmt) . stmtScope) nextStmt
   where
     subtract scope newScope =
         filter (maybe False (const True) . flip lookup newScope . fst) scope

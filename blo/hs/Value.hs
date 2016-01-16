@@ -1,6 +1,6 @@
 module Value
     (Value(..),Data(..),
-     addVar,reassignVar,copyValue,removeVars,valueBit,valueField,
+     addVar,reassignVar,copyValue,removeVars,valueBit,valueSetBit,valueField,
      refValue,unrefValue)
 where
 
@@ -24,7 +24,7 @@ reassignVar :: String -> Value -> [(String,Value)] -> Memory (Data rtv)
                       -> ([(String,Value)],Memory (Data rtv))
 reassignVar name newVal@(Value newRef _) scope mem = (newScope,newMem)
   where
-    newMem = unref (addRef mem newRef) oldRef
+    newMem = unref mem oldRef
     Just (Value oldRef _) = lookup name scope
     newScope = map updateVal scope
     updateVal var@(varName,_)
@@ -62,14 +62,22 @@ valueBit (Value ref (offset,_,_,_)) index mem = bits !! index
   where
     Data bits _ = deref mem ref
 
+valueSetBit :: Value -> Int -> Bool -> Memory (Data rtv) -> Memory (Data rtv)
+valueSetBit (Value ref (offset,_,_,_)) index bit mem = update mem ref setBit
+  where
+    setBit (Data bits imports) =
+        (Data (take (index + offset) bits ++
+               bit : drop (index + offset + 1) bits)
+              imports)
+
 valueField :: Value -> Int -> Int -> Type rtt -> Value
 valueField (Value ref (offset,importOffset,_,_))
            fieldOffset fieldImportOffset (Type fieldSize fieldRtt) =
     Value ref (offset+fieldOffset,importOffset+fieldImportOffset,
                fieldSize,length fieldRtt)
 
-refValue :: Memory (Data rtv) -> Value -> Memory (Data rtv)
-refValue mem (Value ref _) = addRef mem ref
+refValue :: Value -> Memory (Data rtv) -> Memory (Data rtv)
+refValue (Value ref _) mem = addRef mem ref
 
-unrefValue :: Memory (Data rtv) -> Value -> Memory (Data rtv)
-unrefValue mem (Value ref _) = unref mem ref
+unrefValue :: Value -> Memory (Data rtv) -> Memory (Data rtv)
+unrefValue (Value ref _) mem = unref mem ref
