@@ -11,6 +11,10 @@ import Memory(Memory,Ref,newRef,addRef,unref,deref,update)
 
 data Data rtv = Data [Bool] [rtv]
 data Value = Value Ref (Int,Int,Int,Int)
+  deriving Show
+
+instance Show (Data rtv) where
+    show (Data bits _) = show bits
 
 addVar :: (rtt -> rtv) -> String -> Type rtt -> Memory (Data rtv)
                        -> ((String,Value),Memory (Data rtv))

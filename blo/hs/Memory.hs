@@ -7,7 +7,10 @@ import qualified Data.Map as M
 
 data Memory a = Memory Int (Map Ref (Int,a))
 newtype Ref = Ref Int
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
+
+instance Show a => Show (Memory a) where
+    show (Memory _ m) = show m
 
 newMemory :: Memory a
 newMemory = Memory 0 empty

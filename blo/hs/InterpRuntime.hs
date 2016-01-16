@@ -8,7 +8,7 @@ import Data.Char(chr,ord)
 import System.IO(isEOF)
 
 import Memory(Memory)
-import Value(Value,Data,valueSetBit,valueBit)
+import Value(Value,Data,unrefValue,valueSetBit,valueBit)
 import Runtime
     (RuntimeType(..),RuntimeFunc(..),
      Compile,SourcePos,compileError,
@@ -71,7 +71,7 @@ getByte astType = func
                         ch <- getChar
                         return (foldl (setValue ch value) mem1
                                       [0..min 7 (valueSize - 1)])
-        return (mem2,Nothing)
+        return (unrefValue value mem2,Nothing)
 
 putByte :: AstType -> Mem -> [Value] -> IO (Mem,Maybe Value)
 putByte astType = func
@@ -82,4 +82,4 @@ putByte astType = func
     func mem [value] = do
         putChar (chr (foldl (getValue value mem) 0
                             [0 .. min (astTypeSize astType - 1) 7]))
-        return (mem,Nothing)
+        return (unrefValue value mem,Nothing)

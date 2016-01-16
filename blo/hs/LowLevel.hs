@@ -46,6 +46,7 @@ stmtInfo :: Stmt rtt rtf -> StmtInfo rtt rtf
 stmtInfo (StmtBlock info _) = info
 stmtInfo (StmtVar info _ _ _) = info
 stmtInfo (StmtIf info _ _ _) = info
+stmtInfo (StmtFor info _) = info
 stmtInfo (StmtBreak info) = info
 stmtInfo (StmtReturn info _) = info
 stmtInfo (StmtSetClear info _ _) = info
@@ -66,9 +67,10 @@ stmtLeavingScope stmt nextStmt =
         filter (maybe True (const False) . flip lookup newScope . fst) scope
 
 toLowLevelTypes :: [(AstType,Maybe rtt)] -> Map String (Type rtt)
-toLowLevelTypes astTypes = fromList (map toLowLevelType astTypes)
+toLowLevelTypes astTypes =
+    fromList (("",Type 1 []) : map toLowLevelType astTypes)
   where
-    rttMap = fromList (map toRttMap astTypes)
+    rttMap = fromList (("",[]) : map toRttMap astTypes)
     toRttMap (astType,Nothing) = (astTypeName astType,[])
     toRttMap (astType,Just rtt) = (astTypeName astType,[rtt])
     astTypeRtt (_,(_,_,fieldAstType)) = rttMap M.! astTypeName fieldAstType
