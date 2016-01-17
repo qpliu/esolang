@@ -62,7 +62,7 @@ removeVars vars scope mem = (reverse newScope,newMem)
       | otherwise = (var:scope,mem)
 
 valueBit :: Value -> Int -> Memory (Data rtv) -> Bool
-valueBit (Value ref (offset,_,_,_)) index mem = bits !! index
+valueBit (Value ref (offset,_,_,_)) index mem = bits !! (index + offset)
   where
     Data bits _ = deref mem ref
 
