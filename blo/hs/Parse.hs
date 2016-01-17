@@ -84,7 +84,8 @@ terminateStmt = void (try (token ";") <|> try (token "\n")
 token :: String -> Parser SourcePos
 token tok = do
     (pos,t) <- nextToken
-    unless (t == tok) (fail ("'" ++ tok ++ "'"))
+    unless (t == tok)
+           (fail (if tok == "\n" then "newline" else "'" ++ tok ++ "'"))
     return pos
 
 data Identifier = Identifier SourcePos String
@@ -140,7 +141,7 @@ identifier :: Parser Identifier
 identifier = do
     (pos,tok) <- nextToken
     if member tok nonIdentifiers
-        then fail "Expected identifier"
+        then fail "identifier"
         else return (Identifier pos tok)
   where
     nonIdentifiers = fromList (keywords ++ map (:[]) tokenChars)
@@ -254,6 +255,7 @@ stmtBlock = do
     stmts <- many stmt
     skipNewlines
     token "}"
+    skipNewlines
     return (StmtBlock pos stmts)
 
 stmtVar :: Parser Stmt
