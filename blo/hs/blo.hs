@@ -26,7 +26,8 @@ blo _ = do
 
 compileCode :: String -> String -> Compile (String -> Maybe F)
 compileCode filename source =
-    parse filename source >>= check >>= fmap toLowLevel . annotateRuntime
+    parse filename source >>= check
+                          >>= fmap (flip lookup . toLowLevel) . annotateRuntime
 
 runCode :: (String -> Maybe F) -> IO ()
 runCode fns = run (fns "main")

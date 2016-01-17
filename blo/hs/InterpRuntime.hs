@@ -8,7 +8,9 @@ import Data.Char(chr,ord)
 import System.IO(isEOF)
 
 import Memory(Memory)
-import Value(Value(..),Data,unrefValue,valueSetBit,valueBit)
+import Value
+    (Value(..),Data,
+     unrefValue,valueSetBit,valueBit,runtimeValue,updateRuntimeValue)
 import Runtime
     (RuntimeType(..),RuntimeFunc(..),
      Compile,SourcePos,compileError,
@@ -81,12 +83,34 @@ putByte astType _ = func
 
 pushStack :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
                      -> IO (Mem,Maybe Value)
-pushStack bitType _ mem [stackVal,bitVal] = undefined
+pushStack bitType _ mem [stackVal,bitVal] =
+    return ((unrefValue stackVal . unrefValue bitVal) newMem,Nothing)
+  where
+    bit = valueBit bitVal 0 mem
+    newMem
+      | astTypeSize bitType == 0 = mem
+      | otherwise =
+            updateRuntimeValue stackVal
+                               (\ (IRTVStack bits) -> IRTVStack (bit:bits)) mem
 
 popStack :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
                     -> IO (Mem,Maybe Value)
-popStack bitType _ mem [stackVal,bitVal] = undefined
+popStack bitType (Just makeRetVal) mem [stackVal] =
+    return (unrefValue stackVal mem3,Just retVal)
+  where
+    IRTVStack bits = runtimeValue stackVal mem
+    (retVal,mem1) = makeRetVal mem
+    mem2 | astTypeSize bitType == 0 = mem1
+         | otherwise = valueSetBit retVal 0 (head bits) mem1
+    mem3 = updateRuntimeValue stackVal (const (IRTVStack (tail bits))) mem2
+                
 
 isEmptyStack :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
                         -> IO (Mem,Maybe Value)
-isEmptyStack bitType _ mem [stackVal,bitVal] = undefined
+isEmptyStack bitType (Just makeRetVal) mem [stackVal] =
+    return (unrefValue stackVal mem2,Just retVal)
+  where
+    IRTVStack bits = runtimeValue stackVal mem
+    (retVal,mem1) = makeRetVal mem
+    mem2 | astTypeSize bitType == 0 = mem1
+         | otherwise = valueSetBit retVal 0 (null bits) mem1

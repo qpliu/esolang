@@ -4,7 +4,7 @@ module LowLevel
      toLowLevel)
 where
 
-import Data.Map(Map,empty,fromList,insert)
+import Data.Map(Map,empty,fromList,insert,toList)
 import qualified Data.Map as M
 
 import Compile(Compile,SourcePos,compileError)
@@ -14,8 +14,8 @@ import Check
          astStmtSourcePos)
 import Runtime(RuntimeAst(..))
 
-toLowLevel :: RuntimeAst rtt rtf -> String -> Maybe (Func rtt rtf)
-toLowLevel (RuntimeAst rtTypes rtFuncs) = flip M.lookup funcs
+toLowLevel :: RuntimeAst rtt rtf -> [(String,Func rtt rtf)]
+toLowLevel (RuntimeAst rtTypes rtFuncs) = toList funcs
   where
     types = toLowLevelTypes rtTypes
     funcs = toLowLevelFuncs types rtFuncs
@@ -77,7 +77,8 @@ toLowLevelTypes astTypes =
     toLowLevelType (astType,rtt) =
         (astTypeName astType,
          Type (astTypeSize astType)
-              (concatMap astTypeRtt (astTypeFields astType)))
+              ((maybe id (:) rtt)
+                  (concatMap astTypeRtt (astTypeFields astType))))
 
 toLowLevelFuncs :: Map String (Type rtt) -> [(AstFuncSig,Either AstStmt rtf)]
                                          -> Map String (Func rtt rtf)

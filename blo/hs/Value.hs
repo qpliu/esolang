@@ -1,7 +1,7 @@
 module Value
     (Value(..),Data(..),
      newValue,reassignVar,copyValue,removeVars,valueBit,valueSetBit,valueField,
-     refValue,unrefValue)
+     runtimeValue,updateRuntimeValue,refValue,unrefValue)
 where
 
 import Data.Map(fromList,member)
@@ -14,13 +14,14 @@ data Value = Value Ref (Int,Int,Int,Int)
   deriving Show
 
 instance Show (Data rtv) where
-    show (Data bits _) = show bits
+    show (Data bits rtv) =
+        map (\ b -> if b then '1' else '0') bits ++ "/" ++ show (length rtv)
 
 newValue :: (rtt -> rtv) -> Type rtt -> Memory (Data rtv) -> (Value,Memory (Data rtv))
 newValue newRuntimeValue (Type bitSize rtt) mem = (value,newMem)
   where
     (newMem,ref) = newRef mem (Data (take bitSize (repeat False))
-                              (map newRuntimeValue rtt))
+                                    (map newRuntimeValue rtt))
     value = Value ref (0,0,bitSize,length rtt)
 
 reassignVar :: String -> Value -> [(String,Value)] -> Memory (Data rtv)
@@ -84,3 +85,13 @@ refValue (Value ref _) mem = addRef mem ref
 
 unrefValue :: Value -> Memory (Data rtv) -> Memory (Data rtv)
 unrefValue (Value ref _) mem = unref mem ref
+
+runtimeValue :: Value -> Memory (Data rtv) -> rtv
+runtimeValue (Value ref _) mem = head rtv
+  where
+    Data _ rtv = deref mem ref
+
+updateRuntimeValue :: Value -> (rtv -> rtv) -> Memory (Data rtv)
+                            -> Memory (Data rtv)
+updateRuntimeValue (Value ref _) f mem =
+    update mem ref (\ (Data bits rtv) -> Data bits (f (head rtv) : tail rtv))
