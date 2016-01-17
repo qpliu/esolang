@@ -8,7 +8,7 @@ import Data.Char(chr,ord)
 import System.IO(isEOF)
 
 import Memory(Memory)
-import Value(Value,Data,unrefValue,valueSetBit,valueBit)
+import Value(Value(..),Data,unrefValue,valueSetBit,valueBit)
 import Runtime
     (RuntimeType(..),RuntimeFunc(..),
      Compile,SourcePos,compileError,
@@ -16,16 +16,15 @@ import Runtime
      astTypeName,astTypeSourcePos,astTypeIsImport,astTypeErrorName,astTypeSize)
 
 type Mem = Memory (Data InterpRuntimeValue)
-data InterpRuntimeType = InterpRuntimeType
+data InterpRuntimeType = IRTTStack
 newtype InterpRuntimeFunc =
-    InterpRuntimeFunc (Mem -> [Value] -> IO (Mem, Maybe Value))
-data InterpRuntimeValue = InterpRuntimeValue
+    InterpRuntimeFunc (Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
+                                                  -> IO (Mem,Maybe Value))
+data InterpRuntimeValue = IRTVStack [Bool]
 
 instance RuntimeType InterpRuntimeType where
     annotateType astType
-      | astTypeName astType == "stack" =
-            compileError (astTypeSourcePos astType)
-                         ("Unknown import " ++ astTypeErrorName astType)
+      | astTypeName astType == "stack" = return IRTTStack
       | otherwise =
             compileError (astTypeSourcePos astType)
                          ("Unknown import " ++ astTypeErrorName astType)
@@ -37,27 +36,22 @@ instance RuntimeFunc InterpRuntimeFunc where
         return (InterpRuntimeFunc (putByte astType))
     annotateFunc (AstFuncSig pos name@"pushStack" [(_,stack),(_,bit)] Nothing)
       | astTypeIsImport stack && astTypeName stack == "stack" =
-            compileError pos ("Unknown import func '" ++ name ++ "'")
-      | otherwise =
-            compileError pos ("Unknown import func '" ++ name ++ "'")
+            return (InterpRuntimeFunc (pushStack bit))
     annotateFunc (AstFuncSig pos name@"popStack" [(_,stack)] (Just bit))
       | astTypeIsImport stack && astTypeName stack == "stack" =
-            compileError pos ("Unknown import func '" ++ name ++ "'")
-      | otherwise =
-            compileError pos ("Unknown import func '" ++ name ++ "'")
+            return (InterpRuntimeFunc (popStack bit))
     annotateFunc (AstFuncSig pos name@"isEmptyStack" [(_,stack)] (Just bit))
       | astTypeIsImport stack && astTypeName stack == "stack" =
-            compileError pos ("Unknown import func '" ++ name ++ "'")
-      | otherwise =
-            compileError pos ("Unknown import func '" ++ name ++ "'")
+            return (InterpRuntimeFunc (isEmptyStack bit))
     annotateFunc (AstFuncSig pos name _ _) =
         compileError pos ("Unknown import func '" ++ name ++ "'")
 
 newRuntimeValue :: InterpRuntimeType -> InterpRuntimeValue
-newRuntimeValue rtt = InterpRuntimeValue
+newRuntimeValue IRTTStack = IRTVStack []
 
-getByte :: AstType -> Mem -> [Value] -> IO (Mem,Maybe Value)
-getByte astType = func
+getByte :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
+                   -> IO (Mem,Maybe Value)
+getByte astType _ = func
   where
     valueSize = astTypeSize astType
     setValue ch value mem index =
@@ -73,8 +67,9 @@ getByte astType = func
                                       [0..min 7 (valueSize - 1)])
         return (unrefValue value mem2,Nothing)
 
-putByte :: AstType -> Mem -> [Value] -> IO (Mem,Maybe Value)
-putByte astType = func
+putByte :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
+                   -> IO (Mem,Maybe Value)
+putByte astType _ = func
   where
     getValue value mem byte index
       | valueBit value index mem = setBit byte index
@@ -83,3 +78,15 @@ putByte astType = func
         putChar (chr (foldl (getValue value mem) 0
                             [0 .. min (astTypeSize astType - 1) 7]))
         return (unrefValue value mem,Nothing)
+
+pushStack :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
+                     -> IO (Mem,Maybe Value)
+pushStack bitType _ mem [stackVal,bitVal] = undefined
+
+popStack :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
+                    -> IO (Mem,Maybe Value)
+popStack bitType _ mem [stackVal,bitVal] = undefined
+
+isEmptyStack :: AstType -> Maybe (Mem -> (Value,Mem)) -> Mem -> [Value]
+                        -> IO (Mem,Maybe Value)
+isEmptyStack bitType _ mem [stackVal,bitVal] = undefined

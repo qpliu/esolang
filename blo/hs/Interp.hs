@@ -9,7 +9,7 @@ import LowLevel
 import Memory(Memory)
 import Value
     (Value,Data,
-     addVar,reassignVar,copyValue,removeVars,valueBit,valueSetBit,valueField,
+     newValue,reassignVar,copyValue,removeVars,valueBit,valueSetBit,valueField,
      refValue,unrefValue)
 import InterpRuntime
     (InterpRuntimeType,InterpRuntimeFunc(..),InterpRuntimeValue,
@@ -19,7 +19,8 @@ type Mem = Memory (Data InterpRuntimeValue)
 
 callFunc :: Mem -> [Value] -> Func InterpRuntimeType InterpRuntimeFunc
                 -> IO (Mem, Maybe Value)
-callFunc mem args (ImportFunc _ (InterpRuntimeFunc func)) = func mem args
+callFunc mem args (ImportFunc (FuncSig _ retType) (InterpRuntimeFunc func)) =
+    func (fmap (newValue newRuntimeValue) retType) mem args
 callFunc mem args (Func (FuncSig argTypes retType) stmt) = do
     let scope = zipWith (\ value (name,_) -> (name,value)) args argTypes
     execStmt mem scope stmt
@@ -35,8 +36,8 @@ execStmt mem scope = exec
                   nextStmt
     exec stmt@(StmtBlock _ _) = finishStmt mem scope stmt (stmtNext stmt)
     exec stmt@(StmtVar _ name varType Nothing) =
-        let (var,mem1) = addVar newRuntimeValue name varType mem
-        in  finishStmt mem1 (var:scope) stmt (stmtNext stmt)
+        let (val,mem1) = newValue newRuntimeValue varType mem
+        in  finishStmt mem1 ((name,val):scope) stmt (stmtNext stmt)
     exec stmt@(StmtVar _ name varType (Just expr)) = do
         (mem1,Just value) <- evalExpr mem scope expr
         finishStmt mem1 ((name,value):scope) stmt (stmtNext stmt)

@@ -1,6 +1,6 @@
 module Value
     (Value(..),Data(..),
-     addVar,reassignVar,copyValue,removeVars,valueBit,valueSetBit,valueField,
+     newValue,reassignVar,copyValue,removeVars,valueBit,valueSetBit,valueField,
      refValue,unrefValue)
 where
 
@@ -16,13 +16,12 @@ data Value = Value Ref (Int,Int,Int,Int)
 instance Show (Data rtv) where
     show (Data bits _) = show bits
 
-addVar :: (rtt -> rtv) -> String -> Type rtt -> Memory (Data rtv)
-                       -> ((String,Value),Memory (Data rtv))
-addVar newRuntimeValue name (Type bitSize rtt) mem = ((name,val),newMem)
+newValue :: (rtt -> rtv) -> Type rtt -> Memory (Data rtv) -> (Value,Memory (Data rtv))
+newValue newRuntimeValue (Type bitSize rtt) mem = (value,newMem)
   where
     (newMem,ref) = newRef mem (Data (take bitSize (repeat False))
                               (map newRuntimeValue rtt))
-    val = Value ref (0,0,bitSize,length rtt)
+    value = Value ref (0,0,bitSize,length rtt)
 
 reassignVar :: String -> Value -> [(String,Value)] -> Memory (Data rtv)
                       -> ([(String,Value)],Memory (Data rtv))
