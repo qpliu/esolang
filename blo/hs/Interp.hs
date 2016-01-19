@@ -21,7 +21,7 @@ callFunc :: Mem -> [Value] -> Func InterpRuntimeType InterpRuntimeFunc
                 -> IO (Mem, Maybe Value)
 callFunc mem args (ImportFunc (FuncSig _ retType) (InterpRuntimeFunc func)) =
     func (fmap (newValue newRuntimeValue) retType) mem args
-callFunc mem args (Func (FuncSig argTypes retType) stmt) = do
+callFunc mem args (Func (FuncSig argTypes retType) stmt _) = do
     let scope = zipWith (\ value (name,_) -> (name,value)) args argTypes
     execStmt mem scope stmt
 

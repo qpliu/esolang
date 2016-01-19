@@ -28,7 +28,7 @@ codeGen (types,funcs) =
     uniq = concat . Set.toList . Set.fromList
     maxOffset = maximum (map (\ (_,Type bitSize _) -> bitSize) types)
     maxAliases = maximum (map (funcMaxAliases . snd) funcs)
-    funcMaxAliases (Func _ _) = 4 -- undefined = (Func _ _ maxAliases) = maxAliases
+    funcMaxAliases (Func _ _ maxAliases) = maxAliases
     funcMaxAliases _ = 0
     genCode = gen maxAliases maxOffset
 
@@ -49,7 +49,7 @@ builtinDefns maxAliases = [
 
 codeGenFunc :: (String,Func LLVMRuntimeType LLVMRuntimeFunc) -> CodeGen ()
 codeGenFunc (_,ImportFunc _ (LLVMRuntimeFunc _ importFunc)) = importFunc
-codeGenFunc (name,Func funcSig stmt {- _ -}) = writeFunc name funcSig stmt
+codeGenFunc (name,Func funcSig stmt _) = writeFunc name funcSig stmt
 
 writeRetType :: Maybe (Type LLVMRuntimeType) -> CodeGen ()
 writeRetType Nothing = writeCode "void"
@@ -102,8 +102,32 @@ writeRetParam comma retType = do
 
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
+    writeCode "define void @copy("
+    writeValueType
+    writeCode " %srcval,"
+    writeOffsetType
+    writeCode " %srcoffset,"
+    writeValueType
+    writeCode " %destval,"
+    writeOffsetType
+    writeCode " %destoffset,"
+    writeOffsetType
+    writeCode " %bitsize) {"
     undefined
 
 writeBuiltinAlloc :: Int -> CodeGen ()
 writeBuiltinAlloc n = do
+    writeCode "define "
+    writeValueType
+    writeCode (" @alloc" ++ show n ++ "(")
+    zipWithM_ param ("":repeat ",") [0..n-1]
+    writeCode ") { br label "
+    label <- newLabel
+    writeLabelRef label
+    writeLabel label
     undefined
+  where
+    param comma i = do
+        writeCode comma
+        writeValueType
+        writeCode (" %a" ++ show i)

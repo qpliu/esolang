@@ -56,7 +56,7 @@ writeTemp :: Temp -> CodeGen ()
 writeTemp (Temp t) = writeCode ("%" ++ show t)
 
 writeLabel :: Label -> CodeGen ()
-writeLabel (Label l) = writeCode ("l" ++ show l ++ ":")
+writeLabel (Label l) = writeCode (" l" ++ show l ++ ":")
 
 writeLabelRef :: Label -> CodeGen ()
 writeLabelRef (Label l) = writeCode ("%l" ++ show l)
