@@ -10,7 +10,7 @@ import Compile(Compile,compile)
 import Parse(parse)
 import Check(check)
 import Runtime(RuntimeType,RuntimeFunc,annotateRuntime)
-import LowLevel(Func(..),FuncSig(..),toLowLevel)
+import LowLevel(Type,Func(..),FuncSig(..),toLowLevel)
 import InterpRuntime(InterpRuntimeType,InterpRuntimeFunc)
 import Memory(newMemory)
 import Interp(callFunc)
@@ -22,7 +22,7 @@ main = getArgs >>= blo
 blo :: [String] -> IO ()
 blo [filename] = do
     source <- readFile filename
-    either (die . show) interp (compile (compileCode filename source))
+    either (die . show) (interp . snd) (compile (compileCode filename source))
 blo ["-S",filename] = do
     source <- readFile filename
     either (die . show) (putStrLn . codeGen)
@@ -49,7 +49,7 @@ blo _ = do
                     ++ progName ++ " -o EXECUTABLE SRCFILE")
 
 compileCode :: (RuntimeType rtt, RuntimeFunc rtf) =>
-    String -> String -> Compile [(String,Func rtt rtf)]
+    String -> String -> Compile ([(String,Type rtt)],[(String,Func rtt rtf)])
 compileCode filename source =
     parse filename source >>= check >>= fmap toLowLevel . annotateRuntime
 

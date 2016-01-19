@@ -1,5 +1,6 @@
 module LLVMRuntime
-    (LLVMRuntimeType(..),LLVMRuntimeFunc(..),declarations,importFuncCode)
+    (LLVMRuntimeType(..),LLVMRuntimeFunc(..),
+     importTypeDeclarations,importFuncDeclarations,importFuncCode)
 where
 
 import Runtime
@@ -7,11 +8,14 @@ import Runtime
      AstType(..),AstFuncSig(..),
      astTypeName,astTypeSourcePos,astTypeIsImport,astTypeErrorName,astTypeSize)
 
-data LLVMRuntimeType = LLVMRuntimeType
+data LLVMRuntimeType = LLVMRuntimeType [String]
 data LLVMRuntimeFunc = LLVMRuntimeFunc [String] String
 
-declarations :: LLVMRuntimeFunc -> [String]
-declarations (LLVMRuntimeFunc decls _) = decls
+importTypeDeclarations :: LLVMRuntimeType -> [String]
+importTypeDeclarations (LLVMRuntimeType decls) = decls
+
+importFuncDeclarations :: LLVMRuntimeFunc -> [String]
+importFuncDeclarations (LLVMRuntimeFunc decls _) = decls
 
 importFuncCode :: LLVMRuntimeFunc -> String
 importFuncCode (LLVMRuntimeFunc _ code) = code

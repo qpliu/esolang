@@ -14,8 +14,9 @@ import Check
          astStmtSourcePos)
 import Runtime(RuntimeAst(..))
 
-toLowLevel :: RuntimeAst rtt rtf -> [(String,Func rtt rtf)]
-toLowLevel (RuntimeAst rtTypes rtFuncs) = toList funcs
+toLowLevel :: RuntimeAst rtt rtf -> ([(String,Type rtt)],
+                                     [(String,Func rtt rtf)])
+toLowLevel (RuntimeAst rtTypes rtFuncs) = (toList types,toList funcs)
   where
     types = toLowLevelTypes rtTypes
     funcs = toLowLevelFuncs types rtFuncs
