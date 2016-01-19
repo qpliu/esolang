@@ -1,24 +1,19 @@
 module LLVMRuntime
-    (LLVMRuntimeType(..),LLVMRuntimeFunc(..),
-     importTypeDeclarations,importFuncDeclarations,importFuncCode)
+    (LLVMRuntimeType(..),LLVMRuntimeFunc(..))
 where
 
+import LLVMGen
+    (CodeGen,Label,Temp,
+     newTemp,newLabel,
+     writeCode,writeRefCountType,writeOffsetType,
+     writeTemp,writeLabel,writeLabelRef,writeName)
 import Runtime
     (RuntimeType(..),RuntimeFunc(..),Compile,SourcePos,compileError,
      AstType(..),AstFuncSig(..),
      astTypeName,astTypeSourcePos,astTypeIsImport,astTypeErrorName,astTypeSize)
 
-data LLVMRuntimeType = LLVMRuntimeType [String]
-data LLVMRuntimeFunc = LLVMRuntimeFunc [String] String
-
-importTypeDeclarations :: LLVMRuntimeType -> [String]
-importTypeDeclarations (LLVMRuntimeType decls) = decls
-
-importFuncDeclarations :: LLVMRuntimeFunc -> [String]
-importFuncDeclarations (LLVMRuntimeFunc decls _) = decls
-
-importFuncCode :: LLVMRuntimeFunc -> String
-importFuncCode (LLVMRuntimeFunc _ code) = code
+data LLVMRuntimeType = LLVMRuntimeType [CodeGen ()]
+data LLVMRuntimeFunc = LLVMRuntimeFunc [CodeGen ()] (CodeGen ())
 
 instance RuntimeType LLVMRuntimeType where
     annotateType astType
