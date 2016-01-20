@@ -21,7 +21,7 @@ callFunc :: Mem -> [Value] -> Func InterpRuntimeType InterpRuntimeFunc
                 -> IO (Mem, Maybe Value)
 callFunc mem args (ImportFunc (FuncSig _ retType) (InterpRuntimeFunc func)) =
     func (fmap (newValue newRuntimeValue) retType) mem args
-callFunc mem args (Func (FuncSig argTypes retType) stmt _) = do
+callFunc mem args (Func (FuncSig argTypes retType) stmt) = do
     let scope = zipWith (\ value (name,_) -> (name,value)) args argTypes
     execStmt mem scope stmt
 
@@ -35,10 +35,10 @@ execStmt mem scope = exec
         in  maybe (return (nextMem,Nothing)) (execStmt nextMem nextScope)
                   nextStmt
     exec stmt@(StmtBlock _ _) = finishStmt mem scope stmt (stmtNext stmt)
-    exec stmt@(StmtVar _ name varType Nothing) =
+    exec stmt@(StmtVar _ name varType _ Nothing) =
         let (val,mem1) = newValue newRuntimeValue varType mem
         in  finishStmt mem1 ((name,val):scope) stmt (stmtNext stmt)
-    exec stmt@(StmtVar _ name varType (Just expr)) = do
+    exec stmt@(StmtVar _ name varType _ (Just expr)) = do
         (mem1,Just value) <- evalExpr mem scope expr
         finishStmt mem1 ((name,value):scope) stmt (stmtNext stmt)
     exec stmt@(StmtIf _ expr ifBlock elseBlock) = do

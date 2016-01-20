@@ -56,7 +56,7 @@ compileCode filename source =
 interp :: [(String,Func InterpRuntimeType InterpRuntimeFunc)] -> IO ()
 interp fns = run (lookup "main" fns)
   where
-    run (Just func@(Func (FuncSig [] _) _ _)) =
+    run (Just func@(Func (FuncSig [] _) _)) =
         void (callFunc newMemory [] func)
     run _ = die "No zero-argument main func"
 

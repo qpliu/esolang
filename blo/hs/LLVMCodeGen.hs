@@ -4,6 +4,8 @@ where
 
 import Control.Monad(foldM,unless,zipWithM_)
 import qualified Data.Set as Set
+import Data.Map(Map)
+import qualified Data.Map as Map
 
 import LLVMGen
     (CodeGen,Label,Temp,
@@ -13,8 +15,8 @@ import LLVMGen
      gen)
 import LLVMRuntime(LLVMRuntimeType(..),LLVMRuntimeFunc(..))
 import LowLevel
-    (Type(..),Func(..),FuncSig(..),Stmt(..),Expr(..),
-     stmtLeavingScope,stmtNext)
+    (Type(..),Func(..),FuncSig(..),Stmt(..),Expr(..),StmtKey,
+     funcMaxAliases,stmtLeavingScope,stmtNext,stmtKey)
 
 codeGen :: ([(String,Type LLVMRuntimeType)],
             [(String,Func LLVMRuntimeType LLVMRuntimeFunc)]) -> String
@@ -28,8 +30,6 @@ codeGen (types,funcs) =
     uniq = concat . Set.toList . Set.fromList
     maxOffset = maximum (map (\ (_,Type bitSize _) -> bitSize) types)
     maxAliases = maximum (map (funcMaxAliases . snd) funcs)
-    funcMaxAliases (Func _ _ maxAliases) = maxAliases
-    funcMaxAliases _ = 0
     genCode = gen maxAliases maxOffset
 
     typeDecls (Type _ rtt) = concatMap rttTypeDecls rtt
@@ -49,7 +49,7 @@ builtinDefns maxAliases = [
 
 codeGenFunc :: (String,Func LLVMRuntimeType LLVMRuntimeFunc) -> CodeGen ()
 codeGenFunc (_,ImportFunc _ (LLVMRuntimeFunc _ importFunc)) = importFunc
-codeGenFunc (name,Func funcSig stmt _) = writeFunc name funcSig stmt
+codeGenFunc (name,Func funcSig stmt) = writeFunc name funcSig stmt
 
 writeRetType :: Maybe (Type LLVMRuntimeType) -> CodeGen ()
 writeRetType Nothing = writeCode "void"
@@ -100,6 +100,16 @@ writeRetParam comma retType = do
     writeValueType
     writeCode "* %retval"
 
+writeBranch :: Temp -> CodeGen (Label -> CodeGen (),Label -> CodeGen ())
+writeBranch temp = do
+    writeCode " br i1 "
+    writeTemp temp
+    writeCode ", label "
+    trueLabel <- forwardRefLabel writeLabelRef
+    writeCode ", label "
+    falseLabel <- forwardRefLabel writeLabelRef
+    return (trueLabel,falseLabel)
+
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
     writeCode "define void @copy("
@@ -131,12 +141,8 @@ writeBuiltinCopy = do
     writeOffsetType
     writeCode " "
     writeTemp index
-    writeCode ",%bitsize br i1 "
-    writeTemp cmp
-    writeCode ",label "
-    continueLabelRef <- forwardRefLabel writeLabelRef
-    writeCode ",label "
-    refRetLabel <- forwardRefLabel writeLabelRef
+    writeCode ",%bitsize"
+    (continueLabelRef,retLabelRef) <- writeBranch cmp
     continueLabel <- writeNewLabel
     continueLabelRef continueLabel
     srcIndex <- writeNewTemp
@@ -183,7 +189,7 @@ writeBuiltinCopy = do
     writeCode " br label "
     writeLabelRef loop
     retLabel <- writeNewLabel
-    refRetLabel retLabel
+    retLabelRef retLabel
     writeCode " ret void }"
 
 writeBuiltinAlloc :: Int -> CodeGen ()
@@ -223,12 +229,7 @@ writeBuiltinAlloc n = do
         writeRefCountType
         writeCode " 0,"
         writeTemp refCount
-        writeCode " br i1 "
-        writeTemp cmp
-        writeCode ",label "
-        trueLabelRef <- forwardRefLabel writeLabelRef
-        writeCode ",label "
-        falseLabelRef <- forwardRefLabel writeLabelRef
+        (trueLabelRef,falseLabelRef) <- writeBranch cmp
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
         writeCode " ret "
@@ -236,3 +237,15 @@ writeBuiltinAlloc n = do
         writeCode "* "
         writeTemp ptr
         return falseLabelRef
+
+varMaxAliasesAndSizes :: Stmt LLVMRuntimeType LLVMRuntimeFunc
+                         -> [(StmtKey,(Int,Int))]
+varMaxAliasesAndSizes (StmtBlock _ stmts) =
+    concatMap varMaxAliasesAndSizes stmts
+varMaxAliasesAndSizes stmt@(StmtVar _ _ (Type bitSize _) maxAliases _) =
+    [(stmtKey stmt,(maxAliases,bitSize))]
+varMaxAliasesAndSizes (StmtIf _ _ ifBlock elseBlock) =
+    varMaxAliasesAndSizes ifBlock ++ (maybe [] varMaxAliasesAndSizes elseBlock)
+varMaxAliasesAndSizes (StmtFor _ stmt) = varMaxAliasesAndSizes stmt
+varMaxAliasesAndSizes _ = []
+

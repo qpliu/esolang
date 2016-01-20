@@ -1,13 +1,14 @@
 module LowLevel
-    (Type(..),Func(..),FuncSig(..),StmtInfo(..),Stmt(..),Expr(..),
-     stmtInfo,stmtLeavingScope,stmtNext,stmtScope,
+    (Type(..),Func(..),FuncSig(..),StmtInfo(..),Stmt(..),Expr(..),StmtKey,
+     funcMaxAliases,
+     stmtLeavingScope,stmtNext,stmtScope,stmtKey,
      toLowLevel)
 where
 
 import Data.Map(Map,empty,fromList,insert,toList)
 import qualified Data.Map as M
 
-import Compile(Compile,SourcePos,compileError)
+import Compile(SourcePos)
 import Check
         (AstType(..),AstFuncSig(..),AstStmt(..),AstExpr(..),
          astTypeName,astTypeSize,astTypeFields,astTypeImportSize,
@@ -23,13 +24,15 @@ toLowLevel (RuntimeAst rtTypes rtFuncs) = (toList types,toList funcs)
 
 data Type rtt = Type Int [rtt]
 data Func rtt rtf =
-    Func (FuncSig rtt rtf) (Stmt rtt rtf) Int
+    Func (FuncSig rtt rtf) (Stmt rtt rtf)
   | ImportFunc (FuncSig rtt rtf) rtf
 data FuncSig rtt rtf = FuncSig [(String,Type rtt)] (Maybe (Type rtt))
-data StmtInfo rtt rtf = StmtInfo [(String,Type rtt)] (Maybe (Stmt rtt rtf))
+data StmtInfo rtt rtf =
+    StmtInfo [(String,Type rtt)] (Maybe (Stmt rtt rtf)) StmtKey
 data Stmt rtt rtf =
     StmtBlock    (StmtInfo rtt rtf) [Stmt rtt rtf]
-  | StmtVar      (StmtInfo rtt rtf) String (Type rtt) (Maybe (Expr rtt rtf))
+  | StmtVar      (StmtInfo rtt rtf) String (Type rtt) Int
+                                    (Maybe (Expr rtt rtf))
   | StmtIf       (StmtInfo rtt rtf) (Expr rtt rtf)
                                     (Stmt rtt rtf) (Maybe (Stmt rtt rtf))
   | StmtFor      (StmtInfo rtt rtf) (Stmt rtt rtf)
@@ -42,10 +45,11 @@ data Expr rtt rtf =
     ExprVar String
   | ExprFunc (Func rtt rtf) [Expr rtt rtf]
   | ExprField Int Int (Type rtt) (Expr rtt rtf)
+type StmtKey = SourcePos
 
 stmtInfo :: Stmt rtt rtf -> StmtInfo rtt rtf
 stmtInfo (StmtBlock info _) = info
-stmtInfo (StmtVar info _ _ _) = info
+stmtInfo (StmtVar info _ _ _ _) = info
 stmtInfo (StmtIf info _ _ _) = info
 stmtInfo (StmtFor info _) = info
 stmtInfo (StmtBreak info) = info
@@ -55,10 +59,10 @@ stmtInfo (StmtAssign info _ _) = info
 stmtInfo (StmtExpr info _) = info
 
 stmtNext :: Stmt rtt rtf -> Maybe (Stmt rtt rtf)
-stmtNext stmt = let (StmtInfo _ next) = stmtInfo stmt in next
+stmtNext stmt = let (StmtInfo _ next _) = stmtInfo stmt in next
 
 stmtScope :: Stmt rtt rtf -> [(String,Type rtt)]
-stmtScope stmt = let (StmtInfo scope _) = stmtInfo stmt in scope
+stmtScope stmt = let (StmtInfo scope _ _) = stmtInfo stmt in scope
 
 stmtLeavingScope :: Stmt rtt rtf -> Maybe (Stmt rtt rtf) -> [(String,Type rtt)]
 stmtLeavingScope stmt nextStmt =
@@ -66,6 +70,9 @@ stmtLeavingScope stmt nextStmt =
   where
     subtract scope newScope =
         filter (maybe True (const False) . flip lookup newScope . fst) scope
+
+stmtKey :: Stmt rtt rtf -> StmtKey
+stmtKey stmt = let (StmtInfo _ _ key) = stmtInfo stmt in key
 
 toLowLevelTypes :: [(AstType,Maybe rtt)] -> Map String (Type rtt)
 toLowLevelTypes astTypes =
@@ -100,87 +107,85 @@ toLowLevelFuncs types rtFuncs = funcs
     toFunc (astFuncSig@(AstFuncSig _ name _ _),Right rtf) =
         (name,ImportFunc (toFuncSig astFuncSig) rtf)
     toFunc (astFuncSig@(AstFuncSig _ name params _),Left astStmt) =
-        (name,Func (toFuncSig astFuncSig) (getStmt astStmt) maxAliases)
+        (name,Func (toFuncSig astFuncSig) (getStmt astStmt))
       where
-        (stmts,maxAliases,_) = addStmt empty (empty,0,params) (astStmt,Nothing)
+        (stmts,_) = addStmt empty (empty,params) (astStmt,Nothing)
         getStmt astStmt = stmts M.! astStmtSourcePos astStmt
 
-        addStmt breakLabels (stmtDict,maxAlias,scope) (astStmt,nextAstStmt) =
+        addStmt breakLabels (stmtDict,scope) (astStmt,nextAstStmt) =
             addAstStmt astStmt
           where
             stmtInfo = StmtInfo (map (fmap getType) scope)
                                 (fmap getStmt nextAstStmt)
             addAstStmt (AstStmtBlock pos []) =
-                (insert pos (StmtBlock stmtInfo []) stmtDict,maxAlias,scope)
+                (insert pos (StmtBlock (stmtInfo pos) []) stmtDict,
+                 scope)
             addAstStmt (AstStmtBlock pos astStmts) =
                 let info = StmtInfo (map (fmap getType) scope)
                                     ((Just . getStmt . head) astStmts)
+                                    pos
                     stmts = map getStmt astStmts
-                    (newDict,maxAlias2,_) =
+                    (newDict,_) =
                         foldl (addStmt breakLabels)
-                              (stmtDict,maxAlias,scope)
+                              (stmtDict,scope)
                               (zip astStmts
                                    (map Just (drop 1 astStmts)
                                     ++ [nextAstStmt]))
-                in  (insert pos (StmtBlock info stmts) newDict,maxAlias2,scope)
+                in  (insert pos (StmtBlock info stmts) newDict,scope)
             addAstStmt (AstStmtVar pos (name,astType) astExpr) =
-                (insert pos (StmtVar stmtInfo name (getType astType)
-                                     (fmap toExpr astExpr))
+                (insert pos (StmtVar (stmtInfo pos) name (getType astType)
+                                     varMaxAlias (fmap toExpr astExpr))
                         stmtDict,
-                 max maxAlias newMaxAlias,
                  (name,astType):scope)
               where
-                newMaxAlias
-                  | M.null breakLabels = maxAlias
+                varMaxAlias
+                  | M.null breakLabels = 1
                   | otherwise = 1 + length (filter (canAlias astType)
                                                    (map snd scope))
             addAstStmt (AstStmtIf pos astExpr astIf astElse) =
-                let (dictIf,maxAlias2,_) =
-                        addStmt breakLabels (stmtDict,maxAlias,scope)
-                                (astIf,nextAstStmt)
-                    (dictElse,maxAlias3,_) =
-                        maybe (dictIf,maxAlias2,scope)
-                              (addStmt breakLabels (dictIf,maxAlias2,scope)
+                let (dictIf,_) = addStmt breakLabels (stmtDict,scope)
+                                         (astIf,nextAstStmt)
+                    (dictElse,_) =
+                        maybe (dictIf,scope)
+                              (addStmt breakLabels (dictIf,scope)
                                . flip (,) nextAstStmt)
                               astElse
-                in  (insert pos (StmtIf stmtInfo (toExpr astExpr)
+                in  (insert pos (StmtIf (stmtInfo pos) (toExpr astExpr)
                                         (getStmt astIf)
                                         (fmap getStmt astElse))
                             dictElse,
-                     maxAlias3,
                      scope)
             addAstStmt astForStmt@(AstStmtFor pos label astStmt) =
-                let (dictFor,maxAlias2,_) =
+                let (dictFor,_) =
                         addStmt (insert label nextAstStmt
                                         (insert Nothing nextAstStmt
                                                 breakLabels))
-                                (stmtDict,maxAlias,scope)
+                                (stmtDict,scope)
                                 (astStmt,Just astForStmt)
-                in  (insert pos (StmtFor stmtInfo (getStmt astStmt)) dictFor,
-                     maxAlias2,
+                in  (insert pos (StmtFor (stmtInfo pos) (getStmt astStmt))
+                            dictFor,
                      scope)
             addAstStmt (AstStmtBreak pos label) =
                 let info = StmtInfo (map (fmap getType) scope)
                                     (fmap getStmt (breakLabels M.! label))
-                in  (insert pos (StmtBreak info) stmtDict,maxAlias,scope)
+                                    pos
+                in  (insert pos (StmtBreak info) stmtDict,scope)
             addAstStmt (AstStmtReturn pos astExpr) =
-                (insert pos (StmtReturn stmtInfo (fmap toExpr astExpr))
+                (insert pos (StmtReturn (stmtInfo pos) (fmap toExpr astExpr))
                         stmtDict,
-                 maxAlias,
                  scope)
             addAstStmt (AstStmtSetClear pos bit astExpr) =
-                (insert pos (StmtSetClear stmtInfo bit (toExpr astExpr))
+                (insert pos (StmtSetClear (stmtInfo pos) bit (toExpr astExpr))
                         stmtDict,
-                 maxAlias,
                  scope)
             addAstStmt (AstStmtAssign pos lhs rhs) =
-                (insert pos (StmtAssign stmtInfo (toExpr lhs) (toExpr rhs))
+                (insert pos
+                        (StmtAssign (stmtInfo pos) (toExpr lhs) (toExpr rhs))
                         stmtDict,
-                 maxAlias,
                  scope)
             addAstStmt (AstStmtExpr pos astExpr) =
-                (insert pos (StmtExpr stmtInfo (toExpr astExpr)) stmtDict,
-                 maxAlias,
+                (insert pos (StmtExpr (stmtInfo pos) (toExpr astExpr))
+                        stmtDict,
                  scope)
 
 canAlias :: AstType -> AstType -> Bool
@@ -188,3 +193,15 @@ canAlias astType1 astType2 =
     astType1 == astType2 || any (flip canAlias astType2) fieldTypes
   where
     fieldTypes = map (\ (_,(_,_,astType)) -> astType) (astTypeFields astType1)
+
+funcMaxAliases :: Func rtt rtf -> Int
+funcMaxAliases (ImportFunc _ _) = 0
+funcMaxAliases (Func _ stmt) = stmtMaxAliases stmt
+  where
+    stmtMaxAliases (StmtBlock _ []) = 0
+    stmtMaxAliases (StmtBlock _ stmts) = maximum (map stmtMaxAliases stmts)
+    stmtMaxAliases (StmtVar _ _ _ varAliases _) = varAliases
+    stmtMaxAliases (StmtIf _ _ ifBlock elseBlock) =
+        max (stmtMaxAliases ifBlock) (maybe 0 stmtMaxAliases elseBlock)
+    stmtMaxAliases (StmtFor _ stmt) = stmtMaxAliases stmt
+    stmtMaxAliases _ = 0
