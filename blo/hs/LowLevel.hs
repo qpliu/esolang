@@ -132,8 +132,8 @@ toLowLevelFuncs types rtFuncs = funcs
               where
                 newMaxAlias
                   | M.null breakLabels = maxAlias
-                  | otherwise = length (filter (canAlias astType)
-                                               (map snd scope))
+                  | otherwise = 1 + length (filter (canAlias astType)
+                                                   (map snd scope))
             addAstStmt (AstStmtIf pos astExpr astIf astElse) =
                 let (dictIf,maxAlias2,_) =
                         addStmt breakLabels (stmtDict,maxAlias,scope)

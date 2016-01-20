@@ -2,13 +2,13 @@ module LLVMCodeGen
     (codeGen)
 where
 
-import Control.Monad(unless,zipWithM_)
+import Control.Monad(foldM,unless,zipWithM_)
 import qualified Data.Set as Set
 
 import LLVMGen
     (CodeGen,Label,Temp,
-     newTemp,newLabel,
-     writeCode,writeRefCountType,writeOffsetType,
+     newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,
+     writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,
      gen)
 import LLVMRuntime(LLVMRuntimeType(..),LLVMRuntimeFunc(..))
@@ -74,20 +74,20 @@ writeFunc name (FuncSig params retType) stmt = do
     zipWithM_ writeParam ("":repeat ",") scope
     maybe (return ()) (writeRetParam (if null params then "" else ",")) retType
     writeCode ") {"
-    undefined
+    --error "writeFunc undefined"
     writeCode "}"
 
 writeValueType :: CodeGen ()
 writeValueType = do
     writeCode "{"
     writeRefCountType
-    writeCode ",[0 x i1]}*"
+    writeCode ",[0 x i1]}"
 
 writeParam :: String -> (String,(Int,Type LLVMRuntimeType)) -> CodeGen ()
 writeParam comma (_,(index,Type _ rtt)) = do
     writeCode comma
     writeValueType
-    writeCode (" %value" ++ show index ++ ",")
+    writeCode ("* %value" ++ show index ++ ",")
     writeOffsetType
     writeCode (" %offset" ++ show index)
     unless (null rtt)
@@ -98,36 +98,141 @@ writeRetParam :: String -> Type LLVMRuntimeType -> CodeGen ()
 writeRetParam comma retType = do
     writeCode comma
     writeValueType
-    writeCode " %retval"
+    writeCode "* %retval"
 
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
     writeCode "define void @copy("
     writeValueType
-    writeCode " %srcval,"
+    writeCode "* %srcval,"
     writeOffsetType
     writeCode " %srcoffset,"
     writeValueType
-    writeCode " %destval,"
+    writeCode "* %destval,"
     writeOffsetType
     writeCode " %destoffset,"
     writeOffsetType
-    writeCode " %bitsize) {"
-    undefined
+    writeCode " %bitsize) { entry: br label "
+    refLoop <- forwardRefLabel writeLabelRef
+    loop <- writeNewLabel
+    refLoop loop
+    index <- writeNewTemp
+    writeCode "phi "
+    writeOffsetType
+    writeCode "[0,%entry],"
+    refIterate <- forwardRef (\ ((newIndex,newLabel):_) -> do
+        writeCode "["
+        writeTemp newIndex
+        writeCode ","
+        writeLabelRef newLabel
+        writeCode "]")
+    cmp <- writeNewTemp
+    writeCode "icmp ult "
+    writeOffsetType
+    writeCode " "
+    writeTemp index
+    writeCode ",%bitsize br i1 "
+    writeTemp cmp
+    writeCode ",label "
+    continueLabelRef <- forwardRefLabel writeLabelRef
+    writeCode ",label "
+    refRetLabel <- forwardRefLabel writeLabelRef
+    continueLabel <- writeNewLabel
+    continueLabelRef continueLabel
+    srcIndex <- writeNewTemp
+    writeCode "add "
+    writeOffsetType
+    writeCode " %srcoffset,"
+    writeTemp index
+    srcPtr <- writeNewTemp
+    writeCode "getelementptr "
+    writeValueType
+    writeCode ","
+    writeValueType
+    writeCode "* %srcval,i32 0,i32 1,"
+    writeOffsetType
+    writeCode " "
+    writeTemp srcIndex
+    srcBit <- writeNewTemp
+    writeCode "load i1,i1* "
+    writeTemp srcPtr
+    destIndex <- writeNewTemp
+    writeCode "add "
+    writeOffsetType
+    writeCode " %destoffset,"
+    writeTemp index
+    destPtr <- writeNewTemp
+    writeCode "getelementptr "
+    writeValueType
+    writeCode ","
+    writeValueType
+    writeCode "* %destval,i32 0,i32 1,"
+    writeOffsetType
+    writeCode " "
+    writeTemp destIndex
+    writeCode " store i1 "
+    writeTemp srcBit
+    writeCode ",i1* "
+    writeTemp destPtr
+    newIndex <- writeNewTemp
+    refIterate (newIndex,continueLabel)
+    writeCode "add "
+    writeOffsetType
+    writeCode " 1,"
+    writeTemp index
+    writeCode " br label "
+    writeLabelRef loop
+    retLabel <- writeNewLabel
+    refRetLabel retLabel
+    writeCode " ret void }"
 
 writeBuiltinAlloc :: Int -> CodeGen ()
 writeBuiltinAlloc n = do
     writeCode "define "
     writeValueType
-    writeCode (" @alloc" ++ show n ++ "(")
+    writeCode ("* @alloc" ++ show n ++ "(")
     zipWithM_ param ("":repeat ",") [0..n-1]
-    writeCode ") { br label "
-    label <- newLabel
-    writeLabelRef label
-    writeLabel label
-    undefined
+    writeCode ") {"
+    labelRef <- foldM writeAlloc (const (return ())) [0..n-1]
+    label <- writeNewLabel
+    labelRef label
+    writeCode " ret "
+    writeValueType
+    writeCode "* null }"
   where
     param comma i = do
         writeCode comma
         writeValueType
-        writeCode (" %a" ++ show i)
+        writeCode ("* %a" ++ show i)
+    writeAlloc labelRef i = do
+        label <- writeNewLabel
+        labelRef label
+        ptr <- writeNewTemp
+        writeCode "getelementptr "
+        writeValueType
+        writeCode ","
+        writeValueType
+        writeCode ("* %a" ++ show i ++ ",i32 0,i32 0")
+        refCount <- writeNewTemp
+        writeCode "load "
+        writeRefCountType
+        writeCode "* "
+        writeTemp ptr
+        cmp <- writeNewTemp
+        writeCode "icmp eq "
+        writeRefCountType
+        writeCode " 0,"
+        writeTemp refCount
+        writeCode " br i1 "
+        writeTemp cmp
+        writeCode ",label "
+        trueLabelRef <- forwardRefLabel writeLabelRef
+        writeCode ",label "
+        falseLabelRef <- forwardRefLabel writeLabelRef
+        trueLabel <- writeNewLabel
+        trueLabelRef trueLabel
+        writeCode " ret "
+        writeValueType
+        writeCode "* "
+        writeTemp ptr
+        return falseLabelRef

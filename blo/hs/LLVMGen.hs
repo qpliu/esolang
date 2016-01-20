@@ -1,67 +1,192 @@
 module LLVMGen
     (CodeGen,Label,Temp,
-     newTemp,newLabel,
-     writeCode,writeRefCountType,writeOffsetType,
+     newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,
+     writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,
      gen)
 where
 
-import Control.Monad.State(State,get,put,execState)
+import Control.Applicative(Applicative(..))
+import Control.Monad.State(State,execState,get,put)
 import Data.Char(isAlphaNum,isAscii,ord)
+import Data.Map(Map)
+import qualified Data.Map as M
 
-data CodeGenState = CodeGenState (Temp,Label) (String,String) [String]
+class Gen g where
+    genCode :: String -> g ()
+    genRefCountType :: g String
+    genOffsetType :: g String
 
-type CodeGen a = State CodeGenState a
+data CodeGenState = CodeGenState (Temp,Label,ForwardRef) (String,String)
+                                 (Map ForwardRef [(Temp,Label)])
+                                 [Map ForwardRef [(Temp,Label)] -> String]
+newtype CodeGen a = CodeGen (State CodeGenState a)
 newtype Label = Label Int
 newtype Temp = Temp Int
+newtype ForwardRef = ForwardRef Int
+  deriving (Eq,Ord)
+
+data ForwardRefState = ForwardRefState (String,String) [String]
+newtype ForwardRefGen a = ForwardRefGen (State ForwardRefState a)
+
+instance Monad CodeGen where
+    CodeGen s >>= f = CodeGen (s >>= (\ a -> let CodeGen st = f a in st))
+    return a = CodeGen (return a)
+
+instance Functor CodeGen where
+    fmap f (CodeGen s) = CodeGen (fmap f s)
+
+instance Applicative CodeGen where
+    pure = return
+    f <*> a = f >>= ($ a) . fmap
+    a *> b = a >> b
+    a <* b = a >>= (b >>) . return
+
+instance Gen CodeGen where
+    genCode newcode = do
+        CodeGenState counters auxTypes forwardRefs code <- getCodeGen
+        putCodeGen
+            (CodeGenState counters auxTypes forwardRefs (const newcode:code))
+    genRefCountType = do
+        CodeGenState _ (refCountType,_) _ _ <- getCodeGen
+        return refCountType
+    genOffsetType = do
+        CodeGenState _ (_,offsetType) _ _ <- getCodeGen
+        return offsetType
+
+instance Monad ForwardRefGen where
+    ForwardRefGen s >>= f =
+        ForwardRefGen (s >>= (\ a -> let ForwardRefGen st = f a in st))
+    return a = ForwardRefGen (return a)
+
+instance Functor ForwardRefGen where
+    fmap f (ForwardRefGen s) = ForwardRefGen (fmap f s)
+
+instance Applicative ForwardRefGen where
+    pure = return
+    f <*> a = f >>= ($ a) . fmap
+    a *> b = a >> b
+    a <* b = a >>= (b >>) . return
+
+instance Gen ForwardRefGen where
+    genCode newcode = do
+        ForwardRefState auxTypes code <- getForwardRefGen
+        putForwardRefGen (ForwardRefState auxTypes (newcode:code))
+    genRefCountType = do
+        ForwardRefState (refCountType,_) _ <- getForwardRefGen
+        return refCountType
+    genOffsetType = do
+        ForwardRefState (_,offsetType) _ <- getForwardRefGen
+        return offsetType
 
 gen :: Int -> Int -> CodeGen () -> String
-gen maxRefCount maxOffset codeGen = concat (reverse code)
+gen maxRefCount maxOffset (CodeGen codeGen) =
+    concatMap ($ refData) (reverse code)
   where
-    CodeGenState _ _ code =
-        execState codeGen (CodeGenState (Temp 0,Label 0) auxTypes [])
+    CodeGenState _ _ refData code =
+        execState codeGen (CodeGenState (Temp 0,Label 0,ForwardRef 0)
+                                        auxTypes M.empty [])
     auxTypes = (getAuxType maxRefCount,getAuxType maxOffset)
     getAuxType maxVal | maxVal < 256 = "i8"
                       | maxVal < 65536 = "i16"
                       | otherwise = "i32"
 
+forwardGen :: (String,String) -> ([(Temp,Label)] -> ForwardRefGen ())
+                              -> ForwardRef
+                              -> Map ForwardRef [(Temp,Label)]
+                              -> String
+forwardGen auxTypes forwardRefGen forwardRef refData =
+    concat (reverse code)
+  where
+    ForwardRefGen fwGen = forwardRefGen (refData M.! forwardRef)
+    ForwardRefState _ code = execState fwGen (ForwardRefState auxTypes [])
+
 newTemp :: CodeGen Temp
 newTemp = do
-    CodeGenState (Temp t,label) auxTypes code <- get
-    put (CodeGenState (Temp (t+1),label) auxTypes code)
+    CodeGenState (Temp t,label,forwardRef) auxTypes refData code <- getCodeGen
+    putCodeGen
+        (CodeGenState (Temp (t+1),label,forwardRef) auxTypes refData code)
     return (Temp t)
 
 newLabel :: CodeGen Label
 newLabel = do
-    CodeGenState (temp,Label l) auxTypes code <- get
-    put (CodeGenState (temp,Label (l+1)) auxTypes code)
+    CodeGenState (temp,Label l,forwardRef) auxTypes refData code <- getCodeGen
+    putCodeGen
+        (CodeGenState (temp,Label (l+1),forwardRef) auxTypes refData code)
     return (Label l)
 
-writeCode :: String -> CodeGen ()
-writeCode newcode = do
-    CodeGenState counters auxTypes code <- get
-    put (CodeGenState counters auxTypes (newcode:code))
+writeNewTemp :: CodeGen Temp
+writeNewTemp = do
+    temp <- newTemp
+    writeCode " "
+    writeTemp temp
+    writeCode " = "
+    return temp
 
-writeRefCountType :: CodeGen ()
-writeRefCountType = do
-    CodeGenState counters auxTypes@(refCountType,_) code <- get
-    put (CodeGenState counters auxTypes (refCountType:code))
+writeNewLabel :: CodeGen Label
+writeNewLabel = do
+    label <- newLabel
+    writeLabel label
+    return label
 
-writeOffsetType :: CodeGen ()
-writeOffsetType = do
-    CodeGenState counters auxTypes@(_,offsetType) code <- get
-    put (CodeGenState counters auxTypes (offsetType:code))
+forwardRef :: ([(Temp,Label)] -> ForwardRefGen ())
+              -> CodeGen ((Temp,Label) -> CodeGen ())
+forwardRef fwGen = do
+    CodeGenState (temp,label,ref@(ForwardRef f)) auxTypes refData code <-
+        getCodeGen
+    putCodeGen (CodeGenState (temp,label,ForwardRef (f+1)) auxTypes refData
+                             (newcode auxTypes ref:code))
+    return (saveRefData ref)
+  where
+    newcode auxTypes ref = forwardGen auxTypes fwGen ref
+    saveRefData forwardRef newData = do
+        CodeGenState counters auxTypes refData code <- getCodeGen
+        putCodeGen (CodeGenState counters auxTypes
+                                 (M.alter (add newData) forwardRef refData)
+                                 code)
+    add newData oldData = Just (maybe [newData] (newData:) oldData)
 
-writeTemp :: Temp -> CodeGen ()
+forwardRefTemp :: (Temp -> ForwardRefGen ()) -> CodeGen (Temp -> CodeGen ())
+forwardRefTemp fwGen = do
+    saveRefData <- forwardRef (\ [(temp,_)] -> fwGen temp)
+    return (\ temp -> saveRefData (temp,undefined))
+
+forwardRefLabel :: (Label -> ForwardRefGen ()) -> CodeGen (Label -> CodeGen ())
+forwardRefLabel fwGen = do
+    saveRefData <- forwardRef (\ [(_,label)] -> fwGen label)
+    return (\ label -> saveRefData (undefined,label))
+
+getCodeGen :: CodeGen CodeGenState
+getCodeGen = CodeGen get
+
+putCodeGen :: CodeGenState -> CodeGen ()
+putCodeGen = CodeGen . put
+
+getForwardRefGen :: ForwardRefGen ForwardRefState
+getForwardRefGen = ForwardRefGen get
+
+putForwardRefGen :: ForwardRefState -> ForwardRefGen ()
+putForwardRefGen = ForwardRefGen . put
+
+writeCode :: Gen g => String -> g ()
+writeCode = genCode
+
+writeRefCountType :: (Gen g, Monad g) => g ()
+writeRefCountType = genRefCountType >>= genCode
+
+writeOffsetType :: (Gen g, Monad g) => g ()
+writeOffsetType = genOffsetType >>= genCode
+
+writeTemp :: Gen g => Temp -> g ()
 writeTemp (Temp t) = writeCode ("%" ++ show t)
 
-writeLabel :: Label -> CodeGen ()
+writeLabel :: Gen g => Label -> g ()
 writeLabel (Label l) = writeCode (" l" ++ show l ++ ":")
 
-writeLabelRef :: Label -> CodeGen ()
+writeLabelRef :: Gen g => Label -> g ()
 writeLabelRef (Label l) = writeCode ("%l" ++ show l)
 
-writeName :: String -> CodeGen ()
+writeName :: Gen g => String -> g ()
 writeName "main" = writeCode "main"
 writeName name = writeCode ("_" ++ concatMap escape name)
   where
