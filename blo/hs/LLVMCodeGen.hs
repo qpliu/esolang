@@ -11,7 +11,7 @@ import LLVMGen
     (CodeGen,Label,Temp,
      newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,
      writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
-     writeTemp,writeLabel,writeLabelRef,writeName,
+     writeTemp,writeLabel,writeLabelRef,writeName,writeBranch,
      gen)
 import LLVMRuntime(LLVMRuntimeType(..),LLVMRuntimeFunc(..))
 import LowLevel
@@ -39,7 +39,11 @@ codeGen (types,funcs) =
 
 builtinDecls :: [CodeGen ()]
 builtinDecls = [
-    writeCode "declare void @llvm.memset.p0i8.i8(i8*,i8,i8,i32,i1)"
+    (do writeCode "declare void @llvm.memset.p0i8."
+        writeOffsetType
+        writeCode "(i8*,i8,"
+        writeOffsetType
+        writeCode ",i32,i1)")
     ]
 
 builtinDefns :: Int -> [CodeGen ()]
@@ -69,13 +73,82 @@ writeFunc name (FuncSig params retType) stmt = do
     writeRetType retType
     writeCode " @"
     writeName name
-    let scope = zipWith (\ index param -> fmap ((,) index) param) [0..] params
+    let paramScope =
+            zipWith (\ index param -> fmap ((,) index) param) [0..] params
     writeCode "("
-    zipWithM_ writeParam ("":repeat ",") scope
+    zipWithM_ writeParam ("":repeat ",") paramScope
     maybe (return ()) (writeRetParam (if null params then "" else ",")) retType
     writeCode ") {"
-    --error "writeFunc undefined"
-    writeCode "}"
+    entry <- writeNewLabel
+
+    let varParams = varMaxAliasesAndSizes stmt
+    varAllocSizes <- foldM (\ sizes size -> do
+        bitPtr <- writeNewBitPtr (Right "null") (Right (show size))
+        sizeVar <- writeNewTemp
+        writeCode "ptrtoint i1* "
+        writeTemp bitPtr
+        writeCode " to "
+        writeOffsetType
+        return (Map.insert size sizeVar sizes))
+        Map.empty ((Set.toList . Set.fromList . map (snd . snd)) varParams)
+    varAllocsList <- mapM (\ (varKey,(aliases,size)) -> do
+        allocItems <- (sequence . take aliases . repeat) (do
+            rawPtr <- writeNewTemp
+            writeCode "alloca "
+            writeOffsetType
+            writeCode ","
+            writeOffsetType
+            writeCode " "
+            writeTemp (varAllocSizes Map.! size)
+            allocPtr <- writeNewTemp
+            writeCode "bitcast i8* "
+            writeTemp rawPtr
+            writeCode " to "
+            writeValueType
+            writeCode "*"
+            return (allocPtr,do -- clear alloca
+                writeCode " call void @llvm.memset.p0i8."
+                writeOffsetType
+                writeCode "(i8* "
+                writeTemp rawPtr
+                writeCode ",i8 0,"
+                writeOffsetType
+                writeCode " "
+                writeTemp (varAllocSizes Map.! size)
+                writeCode ",i32 0,i1 0)"))
+        return (varKey,allocItems))
+        varParams
+    varAllocs <- foldM (\ allocs (varKey,items) -> do
+        sequence_ (map snd items) -- clear allocas
+        return (Map.insert varKey (map fst items) allocs))
+        Map.empty varAllocsList
+
+    scope <- foldM (\ vars (name,(index,varType@(Type _ rtt))) -> do
+        value <- writeNewTemp
+        writeCode "select i1 1,"
+        writeValueType
+        writeCode ("* %value" ++ show index ++ ",")
+        writeValueType
+        writeCode "* null"
+        offset <- writeNewTemp
+        writeCode "select i1 1,"
+        writeOffsetType
+        writeCode (" %offset" ++ show index ++ ",")
+        writeOffsetType
+        writeCode " 0"
+        imp <- if null rtt
+            then return Nothing
+            else do
+                imp <- writeNewTemp
+                writeCode ("select i1 1, [" ++ show (length rtt)
+                                            ++ " x i8*] %import" ++ show index)
+                return (Just imp)
+        writeAddRef (value,offset,imp,varType)
+        return (Map.insert name (value,offset,imp,varType) vars))
+        Map.empty paramScope
+
+    writeStmt varAllocs scope Map.empty
+    writeCode " }"
 
 writeValueType :: CodeGen ()
 writeValueType = do
@@ -100,15 +173,59 @@ writeRetParam comma retType = do
     writeValueType
     writeCode "* %retval"
 
-writeBranch :: Temp -> CodeGen (Label -> CodeGen (),Label -> CodeGen ())
-writeBranch temp = do
-    writeCode " br i1 "
-    writeTemp temp
-    writeCode ", label "
-    trueLabel <- forwardRefLabel writeLabelRef
-    writeCode ", label "
-    falseLabel <- forwardRefLabel writeLabelRef
-    return (trueLabel,falseLabel)
+writeNewBitPtr :: Either Temp String -> Either Temp String -> CodeGen Temp
+writeNewBitPtr value index = do
+    bitPtr <- writeNewTemp
+    writeCode "getelementptr "
+    writeValueType
+    writeCode ","
+    writeValueType
+    writeCode "* "
+    either writeTemp writeCode value
+    writeCode ",i32 0,i32 1,"
+    writeOffsetType
+    writeCode " "
+    either writeTemp writeCode index
+    return bitPtr
+
+writeAddRef :: (Temp,Temp,Maybe Temp,Type LLVMRuntimeType) -> CodeGen ()
+writeAddRef (value,_,imp,Type _ rtt) = do
+    refCountPtr <- writeNewTemp
+    writeCode "getelementptr "
+    writeValueType
+    writeCode ","
+    writeValueType
+    writeCode "* "
+    writeTemp value
+    writeCode ",i32 0,i32 0"
+    oldRefCount <- writeNewTemp
+    writeCode "load "
+    writeRefCountType
+    writeCode ","
+    writeRefCountType
+    writeCode "* "
+    writeTemp refCountPtr
+    newRefCount <- writeNewTemp
+    writeCode "add "
+    writeRefCountType
+    writeCode " 1,"
+    writeTemp oldRefCount
+    writeCode " store "
+    writeRefCountType
+    writeCode " "
+    writeTemp newRefCount
+    writeCode ","
+    writeRefCountType
+    writeCode "* "
+    writeTemp refCountPtr
+    -- undefined: rtt addRef
+
+writeStmt :: Map StmtKey [Temp] -> Map String (Temp,Temp,Maybe Temp,
+                                               Type LLVMRuntimeType)
+                                -> Map StmtKey () -- as yet undefined
+                                -> CodeGen ()
+writeStmt varAllocs scope something_undefined_for_forward_refs = do
+    writeCode " ret void" -- undefined
 
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
@@ -122,15 +239,19 @@ writeBuiltinCopy = do
     writeOffsetType
     writeCode " %destoffset,"
     writeOffsetType
-    writeCode " %bitsize) { entry: br label "
-    refLoop <- forwardRefLabel writeLabelRef
+    writeCode " %bitsize) {"
+    entry <- writeNewLabel
+    writeCode " br label "
+    loopRef <- forwardRefLabel writeLabelRef
     loop <- writeNewLabel
-    refLoop loop
+    loopRef loop
     index <- writeNewTemp
     writeCode "phi "
     writeOffsetType
-    writeCode "[0,%entry],"
-    refIterate <- forwardRef (\ ((newIndex,newLabel):_) -> do
+    writeCode "[0,"
+    writeLabelRef entry
+    writeCode "],"
+    iterateRef <- forwardRef (\ ((newIndex,newLabel):_) -> do
         writeCode "["
         writeTemp newIndex
         writeCode ","
@@ -181,7 +302,7 @@ writeBuiltinCopy = do
     writeCode ",i1* "
     writeTemp destPtr
     newIndex <- writeNewTemp
-    refIterate (newIndex,continueLabel)
+    iterateRef (newIndex,continueLabel)
     writeCode "add "
     writeOffsetType
     writeCode " 1,"
@@ -199,6 +320,7 @@ writeBuiltinAlloc n = do
     writeCode ("* @alloc" ++ show n ++ "(")
     zipWithM_ param ("":repeat ",") [0..n-1]
     writeCode ") {"
+    writeNewLabel
     labelRef <- foldM writeAlloc (const (return ())) [0..n-1]
     label <- writeNewLabel
     labelRef label
@@ -248,4 +370,3 @@ varMaxAliasesAndSizes (StmtIf _ _ ifBlock elseBlock) =
     varMaxAliasesAndSizes ifBlock ++ (maybe [] varMaxAliasesAndSizes elseBlock)
 varMaxAliasesAndSizes (StmtFor _ stmt) = varMaxAliasesAndSizes stmt
 varMaxAliasesAndSizes _ = []
-

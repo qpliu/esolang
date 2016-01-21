@@ -77,9 +77,11 @@ skipNewlines :: Parser ()
 skipNewlines = void (many (try (token "\n")))
 
 terminateStmt :: Parser ()
-terminateStmt = void (try (token ";") <|> try (token "\n")
-                                      <|> try (lookAhead (token "{"))
-                                      <|> try (lookAhead (token "}")))
+terminateStmt = do
+    try (token ";") <|> try (token "\n")
+                    <|> try (lookAhead (token "{"))
+                    <|> try (lookAhead (token "}"))
+    skipNewlines
 
 token :: String -> Parser SourcePos
 token tok = do

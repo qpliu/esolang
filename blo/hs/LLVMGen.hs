@@ -2,7 +2,7 @@ module LLVMGen
     (CodeGen,Label,Temp,
      newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,
      writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
-     writeTemp,writeLabel,writeLabelRef,writeName,
+     writeTemp,writeLabel,writeLabelRef,writeName,writeBranch,
      gen)
 where
 
@@ -23,6 +23,7 @@ data CodeGenState = CodeGenState (Temp,Label,ForwardRef) (String,String)
 newtype CodeGen a = CodeGen (State CodeGenState a)
 newtype Label = Label Int
 newtype Temp = Temp Int
+  deriving Eq
 newtype ForwardRef = ForwardRef Int
   deriving (Eq,Ord)
 
@@ -192,3 +193,13 @@ writeName name = writeCode ("_" ++ concatMap escape name)
   where
     escape ch | isAscii ch && isAlphaNum ch = [ch]
               | otherwise = "_" ++ show (ord ch) ++ "_"
+
+writeBranch :: Temp -> CodeGen (Label -> CodeGen (),Label -> CodeGen ())
+writeBranch temp = do
+    writeCode " br i1 "
+    writeTemp temp
+    writeCode ", label "
+    trueLabelRef <- forwardRefLabel writeLabelRef
+    writeCode ", label "
+    falseLabelRef <- forwardRefLabel writeLabelRef
+    return (trueLabelRef,falseLabelRef)

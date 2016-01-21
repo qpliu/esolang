@@ -2,14 +2,17 @@ module Runtime
     (RuntimeAst(..),RuntimeType(..),RuntimeFunc(..),
      Compile,SourcePos,compileError,
      AstType(..),AstFuncSig(..),
-     astTypeSourcePos,astTypeName,astTypeIsImport,astTypeErrorName,astTypeSize,
+     astTypeName,astTypeSize,astTypeImportSize,
+     astTypeErrorName,astTypeSourcePos,astTypeIsImport,
      annotateRuntime)
 where
 
 import Compile(Compile,SourcePos,compileError)
 import Check
     (Ast(..),AstType(..),AstFunc(..),AstFuncSig(..),AstStmt,
-     astTypeSourcePos,astTypeName,astTypeIsImport,astTypeErrorName,astTypeSize)
+     astTypeName,astTypeSize,astTypeImportSize,
+     astTypeErrorName,astTypeSourcePos,astTypeIsImport,
+     astTypeImportSize)
 
 class RuntimeType rtt where
     annotateType :: AstType -> Compile rtt
