@@ -58,6 +58,7 @@ func runtimeLLVMEmitGetByte(ast *Ast, funcDecl *Func, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, "define void @%s({%s, [0 x i1]}* %%a1, %s %%a2) { %%1 = alloca i8, i32 1 %%2 = call i32 @read(i32 0,i8* %%1,i32 1) %%3 = icmp eq i32 1, %%2 br i1 %%3, label %%l2, label %%l1 l1:", LLVMCanonicalName(funcDecl.Name), LLVMRefcountType(ast), LLVMOffsetType(ast)); err != nil {
 		return err
 	}
+	// BUG: this assumes %a2 = 0, need to add it to the getelementptr index
 	i := 4
 	if funcDecl.Params[0].Type.BitSize() >= 9 {
 		if _, err := fmt.Fprintf(w, " %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%a1, i32 0, i32 1, %s 8 store i1 1, i1* %%%d ret void l2: %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%a1, i32 0, i32 1, %s 8 store i1 0, i1* %%%d", i, LLVMRefcountType(ast), LLVMRefcountType(ast), LLVMOffsetType(ast), i, i+1, LLVMRefcountType(ast), LLVMRefcountType(ast), LLVMOffsetType(ast), i+1); err != nil {
@@ -89,6 +90,7 @@ func runtimeLLVMEmitPutByte(ast *Ast, funcDecl *Func, w io.Writer) error {
 		return err
 	}
 	i := 2
+	// BUG: this assumes %a2 = 0, need to add it to the getelementptr index
 	for j := 0; j < 8 && j < funcDecl.Params[0].Type.BitSize(); j++ {
 		if _, err := fmt.Fprintf(w, " %%%d = add %s %%a2, %d %%%d = getelementptr {%s, [0 x i1]}, {%s, [0 x i1]}* %%a1, i32 0, i32 1, %s %%%d %%%d = load i1, i1* %%%d %%%d = zext i1 %%%d to i8 %%%d = shl i8 %%%d, %d %%%d = or i8 %%%d, %%%d", i+1, LLVMOffsetType(ast), j, i+2, LLVMRefcountType(ast), LLVMRefcountType(ast), LLVMOffsetType(ast), i+1, i+3, i+2, i+4, i+3, i+5, i+4, j, i+6, i, i+5); err != nil {
 			return err
