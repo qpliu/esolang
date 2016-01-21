@@ -83,7 +83,7 @@ evalExpr mem scope = eval
     eval (ExprVar varName) =
         let Just value = lookup varName scope
         in  return (refValue value mem,Just value)
-    eval (ExprFunc func exprs) = do
+    eval (ExprFunc func exprs _) = do
         (newMem,args) <- foldM evalParam (mem,[]) exprs
         callFunc newMem (reverse args) func
       where

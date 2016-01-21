@@ -15,8 +15,8 @@ import LLVMGen
      gen)
 import LLVMRuntime(LLVMRuntimeType(..),LLVMRuntimeFunc(..))
 import LowLevel
-    (Type(..),Func(..),FuncSig(..),Stmt(..),Expr(..),StmtKey,
-     funcMaxAliases,stmtLeavingScope,stmtNext,stmtKey)
+    (Type(..),Func(..),FuncSig(..),Stmt(..),Expr(..),InsnId,
+     funcMaxAliases,stmtLeavingScope,stmtNext,stmtId)
 
 codeGen :: ([(String,Type LLVMRuntimeType)],
             [(String,Func LLVMRuntimeType LLVMRuntimeFunc)]) -> String
@@ -147,7 +147,7 @@ writeFunc name (FuncSig params retType) stmt = do
         return (Map.insert name (value,offset,imp,varType) vars))
         Map.empty paramScope
 
-    writeStmt varAllocs scope Map.empty
+    writeStmt varAllocs (entry,scope,Map.empty)
     writeCode " }"
 
 writeValueType :: CodeGen ()
@@ -220,12 +220,16 @@ writeAddRef (value,_,imp,Type _ rtt) = do
     writeTemp refCountPtr
     -- undefined: rtt addRef
 
-writeStmt :: Map StmtKey [Temp] -> Map String (Temp,Temp,Maybe Temp,
-                                               Type LLVMRuntimeType)
-                                -> Map StmtKey () -- as yet undefined
-                                -> CodeGen ()
-writeStmt varAllocs scope something_undefined_for_forward_refs = do
+writeStmt :: Map InsnId [Temp]
+          -> (Label,
+              Map String (Temp,Temp,Maybe Temp, Type LLVMRuntimeType),
+              Map InsnId ()) -- as yet undefined
+          -> CodeGen (Label,
+                      Map String (Temp,Temp,Maybe Temp, Type LLVMRuntimeType),
+                      Map InsnId ()) -- as yet undefined
+writeStmt varAllocs (blockLabel,scope,something_undefined_for_forward_refs) = do
     writeCode " ret void" -- undefined
+    return (blockLabel,scope,something_undefined_for_forward_refs)
 
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
@@ -361,12 +365,26 @@ writeBuiltinAlloc n = do
         return falseLabelRef
 
 varMaxAliasesAndSizes :: Stmt LLVMRuntimeType LLVMRuntimeFunc
-                         -> [(StmtKey,(Int,Int))]
+                         -> [(InsnId,(Int,Int))]
 varMaxAliasesAndSizes (StmtBlock _ stmts) =
     concatMap varMaxAliasesAndSizes stmts
-varMaxAliasesAndSizes stmt@(StmtVar _ _ (Type bitSize _) maxAliases _) =
-    [(stmtKey stmt,(maxAliases,bitSize))]
-varMaxAliasesAndSizes (StmtIf _ _ ifBlock elseBlock) =
-    varMaxAliasesAndSizes ifBlock ++ (maybe [] varMaxAliasesAndSizes elseBlock)
+varMaxAliasesAndSizes stmt@(StmtVar _ _ (Type bitSize _) maxAliases expr) =
+    (stmtId stmt,(maxAliases,bitSize)) : maybe [] exprMaxAliasesAndSizes expr
+varMaxAliasesAndSizes (StmtIf _ expr ifBlock elseBlock) =
+    exprMaxAliasesAndSizes expr ++ varMaxAliasesAndSizes ifBlock
+                                ++ (maybe [] varMaxAliasesAndSizes elseBlock)
 varMaxAliasesAndSizes (StmtFor _ stmt) = varMaxAliasesAndSizes stmt
+varMaxAliasesAndSizes (StmtSetClear _ _ expr) = exprMaxAliasesAndSizes expr
+varMaxAliasesAndSizes (StmtAssign _ lhs rhs) =
+    exprMaxAliasesAndSizes lhs ++ exprMaxAliasesAndSizes rhs
+varMaxAliasesAndSizes (StmtExpr _ expr) = exprMaxAliasesAndSizes expr
 varMaxAliasesAndSizes _ = []
+
+exprMaxAliasesAndSizes :: Expr rtt rtf -> [(InsnId,(Int,Int))]
+exprMaxAliasesAndSizes (ExprField _ _ _ expr) = exprMaxAliasesAndSizes expr
+exprMaxAliasesAndSizes (ExprFunc (Func (FuncSig _ retType) _) exprs
+                                 (maxAliases,insnId)) =
+    concatMap exprMaxAliasesAndSizes exprs ++ maybe [] aliasesAndSizes retType
+  where
+    aliasesAndSizes (Type bitSize _) = [(insnId,(maxAliases,bitSize))]
+exprMaxAliasesAndSizes _ = []

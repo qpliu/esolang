@@ -76,7 +76,7 @@ data AstStmt =
   | AstStmtExpr SourcePos AstExpr
 data AstExpr =
     AstExprVar String AstType
-  | AstExprFunc AstFuncSig [AstExpr]
+  | AstExprFunc SourcePos AstFuncSig [AstExpr]
   | AstExprField Int Int AstType AstExpr
 
 instance Eq AstType where
@@ -138,7 +138,7 @@ astVarType = snd
 
 astExprType :: AstExpr -> AstType
 astExprType (AstExprVar _ astType) = astType
-astExprType (AstExprFunc (AstFuncSig _ _ _ (Just astType)) _) = astType
+astExprType (AstExprFunc _ (AstFuncSig _ _ _ (Just astType)) _) = astType
 astExprType (AstExprField _ _ astType _) = astType
 
 astStmtFallsThru :: AstStmt -> Bool
@@ -298,7 +298,7 @@ checkExpr funcSigs scope expectedType
     checkedParams <- zipWithM (checkExpr funcSigs scope)
                               (map (Just . astVarType) vars)
                               params
-    return (AstExprFunc funcSig checkedParams)
+    return (AstExprFunc pos funcSig checkedParams)
 checkExpr funcSigs scope expectedType
           (ExprField expr (Identifier pos name)) = do
     checkedExpr <- checkExpr funcSigs scope Nothing expr
