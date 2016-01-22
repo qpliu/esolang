@@ -1,7 +1,7 @@
 module LowLevel
     (Type(..),Func(..),FuncSig(..),StmtInfo(..),Stmt(..),Expr(..),InsnId,
      funcMaxAliases,
-     stmtLeavingScope,stmtNext,stmtScope,stmtId,
+     stmtLeavingScope,stmtNext,stmtScope,stmtId,stmtNextId,
      toLowLevel)
 where
 
@@ -73,6 +73,9 @@ stmtLeavingScope stmt nextStmt =
 
 stmtId :: Stmt rtt rtf -> InsnId
 stmtId stmt = let (StmtInfo _ _ insnId) = stmtInfo stmt in insnId
+
+stmtNextId :: Stmt rtt rtf -> Maybe InsnId
+stmtNextId stmt = (fmap stmtId . stmtNext) stmt
 
 toLowLevelTypes :: [(AstType,Maybe rtt)] -> Map String (Type rtt)
 toLowLevelTypes astTypes =
@@ -216,8 +219,14 @@ funcMaxAliases (Func _ stmt) = stmtMaxAliases stmt
   where
     stmtMaxAliases (StmtBlock _ []) = 0
     stmtMaxAliases (StmtBlock _ stmts) = maximum (map stmtMaxAliases stmts)
-    stmtMaxAliases (StmtVar _ _ _ varAliases _) = varAliases
+    stmtMaxAliases (StmtVar _ _ _ varAliases expr) =
+        max varAliases (maybe 0 exprMaxAliases expr)
     stmtMaxAliases (StmtIf _ _ ifBlock elseBlock) =
         max (stmtMaxAliases ifBlock) (maybe 0 stmtMaxAliases elseBlock)
     stmtMaxAliases (StmtFor _ stmt) = stmtMaxAliases stmt
+    stmtMaxAliases (StmtAssign _ _ rhs) = exprMaxAliases rhs
     stmtMaxAliases _ = 0
+
+    exprMaxAliases (ExprVar _) = 0
+    exprMaxAliases (ExprField _ _ _ expr) = exprMaxAliases expr
+    exprMaxAliases (ExprFunc _ _ (maxAliases,_)) = maxAliases

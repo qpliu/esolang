@@ -135,7 +135,8 @@ forwardRef :: ([(Temp,Label)] -> ForwardRefGen ())
 forwardRef fwGen = do
     CodeGenState (temp,label,ref@(ForwardRef f)) auxTypes refData code <-
         getCodeGen
-    putCodeGen (CodeGenState (temp,label,ForwardRef (f+1)) auxTypes refData
+    putCodeGen (CodeGenState (temp,label,ForwardRef (f+1)) auxTypes
+                             (M.insert ref [] refData)
                              (newcode auxTypes ref:code))
     return (saveRefData ref)
   where
@@ -143,19 +144,19 @@ forwardRef fwGen = do
     saveRefData forwardRef newData = do
         CodeGenState counters auxTypes refData code <- getCodeGen
         putCodeGen (CodeGenState counters auxTypes
-                                 (M.alter (add newData) forwardRef refData)
+                                 (M.update (Just . (newData:)) forwardRef
+                                           refData)
                                  code)
-    add newData oldData = Just (maybe [newData] (newData:) oldData)
 
 forwardRefTemp :: (Temp -> ForwardRefGen ()) -> CodeGen (Temp -> CodeGen ())
 forwardRefTemp fwGen = do
     saveRefData <- forwardRef (\ [(temp,_)] -> fwGen temp)
-    return (\ temp -> saveRefData (temp,undefined))
+    return (\ temp -> saveRefData (temp,error "forwardRefTemp"))
 
 forwardRefLabel :: (Label -> ForwardRefGen ()) -> CodeGen (Label -> CodeGen ())
 forwardRefLabel fwGen = do
     saveRefData <- forwardRef (\ [(_,label)] -> fwGen label)
-    return (\ label -> saveRefData (undefined,label))
+    return (\ label -> saveRefData (error "forwardRefLabel",label))
 
 getCodeGen :: CodeGen CodeGenState
 getCodeGen = CodeGen get

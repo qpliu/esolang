@@ -15,8 +15,14 @@ import Runtime
      astTypeName,astTypeSize,astTypeImportSize,
      astTypeErrorName,astTypeSourcePos,astTypeIsImport)
 
-data LLVMRuntimeType = LLVMRuntimeType [CodeGen ()]
-data LLVMRuntimeFunc = LLVMRuntimeFunc [CodeGen ()] (CodeGen ())
+data LLVMRuntimeType =
+    LLVMRuntimeType [CodeGen ()] -- declares
+                    (CodeGen Temp) -- new value
+                    (Temp -> CodeGen ()) -- add ref
+                    (Temp -> CodeGen ()) -- remove ref
+data LLVMRuntimeFunc =
+    LLVMRuntimeFunc [CodeGen ()] -- declares
+                    (CodeGen ()) -- definition
 
 instance RuntimeType LLVMRuntimeType where
     annotateType astType
