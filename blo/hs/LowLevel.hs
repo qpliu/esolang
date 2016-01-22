@@ -1,6 +1,6 @@
 module LowLevel
     (Type(..),Func(..),FuncSig(..),StmtInfo(..),Stmt(..),Expr(..),InsnId,
-     funcMaxAliases,
+     funcMaxAliases,funcType,
      stmtLeavingScope,stmtNext,stmtScope,stmtId,stmtNextId,
      toLowLevel)
 where
@@ -43,7 +43,7 @@ data Stmt rtt rtf =
   | StmtExpr     (StmtInfo rtt rtf) (Expr rtt rtf)
 data Expr rtt rtf =
     ExprVar String
-  | ExprFunc (Func rtt rtf) [Expr rtt rtf] (Int,InsnId)
+  | ExprFunc String (Func rtt rtf) [Expr rtt rtf] (Int,InsnId)
   | ExprField Int Int (Type rtt) (Expr rtt rtf)
 type InsnId = SourcePos
 
@@ -107,14 +107,17 @@ toLowLevelFuncs types rtFuncs = funcs
         ExprField offset importOffset (getType astType)
                   (toAliasableExpr scope astExpr)
     toAliasableExpr scope
-                    (AstExprFunc pos astFuncSig@(AstFuncSig _ _ _ 
+                    (AstExprFunc pos astFuncSig@(AstFuncSig _ funcName _ 
                                                             (Just retType))
                                  astExprs) =
-        ExprFunc (getFunc astFuncSig) (map toExpr astExprs) (maxAliases,pos)
+        ExprFunc funcName (getFunc astFuncSig) (map toExpr astExprs)
+                 (maxAliases,pos)
       where
         maxAliases = 1 + length (filter (canAlias retType) (map snd scope))
-    toAliasableExpr scope (AstExprFunc pos astFuncSig astExprs) =
-        ExprFunc (getFunc astFuncSig) (map toExpr astExprs) (1,pos)
+    toAliasableExpr scope (AstExprFunc pos 
+                                       astFuncSig@(AstFuncSig _ funcName _ _)
+                                       astExprs) =
+        ExprFunc funcName (getFunc astFuncSig) (map toExpr astExprs) (1,pos)
 
     toFunc (astFuncSig@(AstFuncSig _ name _ _),Right rtf) =
         (name,ImportFunc (toFuncSig astFuncSig) rtf)
@@ -229,4 +232,8 @@ funcMaxAliases (Func _ stmt) = stmtMaxAliases stmt
 
     exprMaxAliases (ExprVar _) = 0
     exprMaxAliases (ExprField _ _ _ expr) = exprMaxAliases expr
-    exprMaxAliases (ExprFunc _ _ (maxAliases,_)) = maxAliases
+    exprMaxAliases (ExprFunc _ _ _ (maxAliases,_)) = maxAliases
+
+funcType :: Func rtt rtf -> Maybe (Type rtt)
+funcType (Func (FuncSig _ funcType) _) = funcType
+funcType (ImportFunc (FuncSig _ funcType) _) = funcType
