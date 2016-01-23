@@ -1,0 +1,43 @@
+// Illustrate bug in copy assignments of aliased values with import types
+// the Go implementation of blo.
+// Should output 1001
+// Interpreter in Go outputs 1001
+// Compiler in Go outputs 1010
+// Interpreter in Haskell outputs 1001
+
+import type stack {}
+
+import func pushStack(s stack, b bit)
+import func isEmptyStack(s stack) bit
+
+type bit { b }
+
+type stacks { s1, s2 stack }
+
+type byte { 1, 2, 4, 8, 10, 20, 40, 80 }
+import func putByte(b byte)
+
+func reassign(s stacks) {
+    var temp stacks
+    temp.s1 = s.s1
+    s.s1 = s.s2
+    s.s2 = temp.s1
+}
+
+func printBit(b bit) {
+    var byte byte
+    set byte.20
+    set byte.10
+    byte.1 = b.b
+    putByte(byte)
+}
+
+func main() {
+    var s stacks
+    pushStack(s.s2, isEmptyStack(s.s2))
+    printBit(isEmptyStack(s.s1))
+    printBit(isEmptyStack(s.s2))
+    reassign(s)
+    printBit(isEmptyStack(s.s1))
+    printBit(isEmptyStack(s.s2))
+}

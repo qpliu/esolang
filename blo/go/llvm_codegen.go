@@ -1092,6 +1092,9 @@ func LLVMCodeGenFunc(ast *Ast, funcDecl *Func, w io.Writer) error {
 			ex := st.LValue
 			limpOffset := 0
 		loop:
+			// BUG: Copy assignments of import types fail with
+			// respect to aliasing.  Aliases can even be in
+			// other stack frames.  Need to alloca the import data.
 			for {
 				switch lvalue := ex.(type) {
 				case *ExprField:
