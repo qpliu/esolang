@@ -7,7 +7,8 @@ import Control.Monad(foldM,when)
 import LLVMGen
     (LLVMGen,Label,Temp,
      newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,
-     writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
+     writeNewTemp,writeNewLabel,writeCode,
+     writeRefCountType,writeOffsetType,writeRTTOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,writeBranch)
 import Runtime
     (RuntimeType(..),RuntimeFunc(..),Compile,compileError,
@@ -84,9 +85,10 @@ getByte astType = do
     writeCode ",[0 x i1]}* %value,"
     writeOffsetType
     writeCode " %offset"
-    when (astTypeImportSize astType > 0)
-         (writeCode (", [" ++ show (astTypeImportSize astType)
-                           ++ " x i8*] %import"))
+    when (astTypeImportSize astType > 0) (do
+        writeCode ",i8** %import,"
+        writeRTTOffsetType
+        writeCode " %importoffset")
     writeCode ") {"
     writeNewLabel
     buffer <- writeNewTemp
@@ -147,9 +149,10 @@ putByte astType = do
     writeCode ",[0 x i1]}* %value,"
     writeOffsetType
     writeCode " %offset"
-    when (astTypeImportSize astType > 0)
-         (writeCode (", [" ++ show (astTypeImportSize astType)
-                           ++ " x i8*] %import"))
+    when (astTypeImportSize astType > 0) (do
+        writeCode ",i8** %import,"
+        writeRTTOffsetType
+        writeCode " %importoffset")
     writeCode ") {"
     writeNewLabel
     buffer <- writeNewTemp

@@ -1,7 +1,8 @@
 module LLVMGen
     (LLVMGen,Label,Temp,
      newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,forwardRefInfo,
-     writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
+     writeNewTemp,writeNewLabel,writeCode,
+     writeRefCountType,writeOffsetType,writeRTTOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,writeBranch,
      gen)
 where
@@ -16,9 +17,10 @@ class Gen g where
     genCode :: String -> g ()
     genRefCountType :: g String
     genOffsetType :: g String
+    genRTTOffsetType :: g String
 
 data LLVMGenState fwd =
-    LLVMGenState (Temp,Label,ForwardRef) (String,String)
+    LLVMGenState (Temp,Label,ForwardRef) (String,String,String)
                  (Map ForwardRef [(Temp,Label,Maybe fwd)])
                  [Map ForwardRef [(Temp,Label,Maybe fwd)] -> String]
 newtype LLVMGen fwd a = LLVMGen (State (LLVMGenState fwd) a)
@@ -28,7 +30,7 @@ newtype Temp = Temp Int
 newtype ForwardRef = ForwardRef Int
   deriving (Eq,Ord)
 
-data ForwardRefState = ForwardRefState (String,String) [String]
+data ForwardRefState = ForwardRefState (String,String,String) [String]
 newtype ForwardRefGen a = ForwardRefGen (State ForwardRefState a)
 
 instance Monad (LLVMGen fwd) where
@@ -50,11 +52,14 @@ instance Gen (LLVMGen fwd) where
         putCodeGen
             (LLVMGenState counters auxTypes forwardRefs (const newcode:code))
     genRefCountType = do
-        LLVMGenState _ (refCountType,_) _ _ <- getCodeGen
+        LLVMGenState _ (refCountType,_,_) _ _ <- getCodeGen
         return refCountType
     genOffsetType = do
-        LLVMGenState _ (_,offsetType) _ _ <- getCodeGen
+        LLVMGenState _ (_,offsetType,_) _ _ <- getCodeGen
         return offsetType
+    genRTTOffsetType = do
+        LLVMGenState _ (_,_,rttOffsetType) _ _ <- getCodeGen
+        return rttOffsetType
 
 instance Monad ForwardRefGen where
     ForwardRefGen s >>= f =
@@ -75,28 +80,33 @@ instance Gen ForwardRefGen where
         ForwardRefState auxTypes code <- getForwardRefGen
         putForwardRefGen (ForwardRefState auxTypes (newcode:code))
     genRefCountType = do
-        ForwardRefState (refCountType,_) _ <- getForwardRefGen
+        ForwardRefState (refCountType,_,_) _ <- getForwardRefGen
         return refCountType
     genOffsetType = do
-        ForwardRefState (_,offsetType) _ <- getForwardRefGen
+        ForwardRefState (_,offsetType,_) _ <- getForwardRefGen
         return offsetType
+    genRTTOffsetType = do
+        ForwardRefState (_,_,rttOffsetType) _ <- getForwardRefGen
+        return rttOffsetType
 
-gen :: Int -> Int -> LLVMGen fwd () -> String
-gen maxRefCount maxOffset (LLVMGen codeGen) =
+gen :: Int -> Int -> Int -> LLVMGen fwd () -> String
+gen maxRefCount maxOffset maxRTTOffset (LLVMGen codeGen) =
     concatMap ($ refData) (reverse code)
   where
     LLVMGenState _ _ refData code =
         execState codeGen (LLVMGenState (Temp 0,Label 0,ForwardRef 0)
                                         auxTypes M.empty [])
-    auxTypes = (getAuxType maxRefCount,getAuxType maxOffset)
+    auxTypes =
+        (getAuxType maxRefCount,getAuxType maxOffset,getAuxType maxRTTOffset)
     getAuxType maxVal | maxVal < 256 = "i8"
                       | maxVal < 65536 = "i16"
                       | otherwise = "i32"
 
-forwardGen :: (String,String) -> ([(Temp,Label,Maybe fwd)] -> ForwardRefGen ())
-                              -> ForwardRef
-                              -> Map ForwardRef [(Temp,Label,Maybe fwd)]
-                              -> String
+forwardGen :: (String,String,String)
+           -> ([(Temp,Label,Maybe fwd)] -> ForwardRefGen ())
+           -> ForwardRef
+           -> Map ForwardRef [(Temp,Label,Maybe fwd)]
+           -> String
 forwardGen auxTypes forwardRefGen forwardRef refData =
     concat (reverse code)
   where
@@ -188,6 +198,9 @@ writeRefCountType = genRefCountType >>= genCode
 
 writeOffsetType :: (Gen g, Monad g) => g ()
 writeOffsetType = genOffsetType >>= genCode
+
+writeRTTOffsetType :: (Gen g, Monad g) => g ()
+writeRTTOffsetType = genRTTOffsetType >>= genCode
 
 writeTemp :: Gen g => Temp -> g ()
 writeTemp (Temp t) = writeCode ("%" ++ show t)

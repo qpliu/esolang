@@ -10,7 +10,8 @@ import qualified Data.Map as Map
 import LLVMGen
     (LLVMGen,Label,Temp,
      newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,forwardRefInfo,
-     writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
+     writeNewTemp,writeNewLabel,writeCode,
+     writeRefCountType,writeOffsetType,writeRTTOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,writeBranch,
      gen)
 import LLVMRuntime(LLVMRuntimeType(..),LLVMRuntimeFunc(..))
@@ -24,7 +25,7 @@ type LLVMFuncSig = FuncSig (LLVMRuntimeType FwdScope) (LLVMRuntimeFunc FwdScope)
 type LLVMStmt = Stmt (LLVMRuntimeType FwdScope) (LLVMRuntimeFunc FwdScope)
 type LLVMExpr = Expr (LLVMRuntimeType FwdScope) (LLVMRuntimeFunc FwdScope)
 
-type Val = (Temp,Temp,Maybe Temp,LLVMType)
+type Val = (Temp,Temp,Maybe (Temp,Temp),LLVMType)
 type Scope = (Map String Val)
 newtype FwdScope = FwdScope Scope
 type CodeGen a = LLVMGen FwdScope a
@@ -40,7 +41,8 @@ codeGen (types,funcs) =
     uniq = concat . Set.toList . Set.fromList
     maxOffset = maximum (map (\ (_,Type bitSize _) -> bitSize) types)
     maxAliases = maximum (map (funcMaxAliases . snd) funcs)
-    genCode = gen maxAliases maxOffset
+    maxRTTOffset = maximum (map (\ (_,Type _ rtt) -> length rtt) types)
+    genCode = gen maxAliases maxOffset maxRTTOffset
 
     typeDecls (Type _ rtt) = concatMap rttTypeDecls rtt
     rttTypeDecls (LLVMRuntimeType decls _ _ _) = decls
@@ -58,7 +60,8 @@ builtinDecls = [
 
 builtinDefns :: Int -> [CodeGen ()]
 builtinDefns maxAliases = [
-    writeBuiltinCopy
+    writeBuiltinCopy,
+    writeBuiltinCopyRTT
     ] ++ map writeBuiltinAlloc [2..maxAliases]
 
 codeGenFunc :: (String,LLVMFunc) -> CodeGen ()
@@ -68,11 +71,13 @@ codeGenFunc (name,Func funcSig stmt) = writeFunc name funcSig stmt
 writeRetType :: Maybe LLVMType -> CodeGen ()
 writeRetType Nothing = writeCode "void"
 writeRetType (Just (Type _ rtt)) = do
-    writeCode "{{"
-    writeRefCountType
-    writeCode ",[0 x i1]}*,"
+    writeCode "{"
+    writeValueType
+    writeCode "*,"
     writeOffsetType
-    unless (null rtt) (writeCode (",[" ++ show (length rtt) ++ " x i8*]"))
+    unless (null rtt) (do
+        writeCode ",i8**,"
+        writeRTTOffsetType)
     writeCode "}"
 
 writeFunc :: String -> LLVMFuncSig -> LLVMStmt -> CodeGen ()
@@ -85,7 +90,7 @@ writeFunc name (FuncSig params retType) stmt = do
             zipWith (\ index param -> fmap ((,) index) param) [0..] params
     writeCode "("
     zipWithM_ writeParam ("":repeat ",") paramScope
-    maybe (return ()) (writeRetParam (if null params then "" else ",")) retType
+    writeRetParam (if null params then "" else ",") retType
     writeCode ") {"
     entry <- writeNewLabel
 
@@ -98,8 +103,9 @@ writeFunc name (FuncSig params retType) stmt = do
         writeCode " to "
         writeOffsetType
         return (Map.insert size sizeVar sizes))
-        Map.empty ((Set.toList . Set.fromList . map (snd . snd)) varParams)
-    varAllocsList <- mapM (\ (varKey,(aliases,size)) -> do
+        Map.empty
+        ((Set.toList . Set.fromList . map (snd . fst . snd)) varParams)
+    varAllocsList <- mapM (\ (varKey,((aliases,size),rttsize)) -> do
         allocItems <- (sequence . take aliases . repeat) (do
             allocPtr <- writeNewTemp
             writeCode "alloca "
@@ -108,12 +114,30 @@ writeFunc name (FuncSig params retType) stmt = do
             writeOffsetType
             writeCode " "
             writeTemp (varAllocSizes Map.! size)
-            return (allocPtr))
+            writeRTTPtr <- if rttsize == 0
+                then return (writeCode "null")
+                else do
+                    rttPtr <- writeNewTemp
+                    writeCode "alloca i8*,"
+                    writeRTTOffsetType
+                    writeCode (show rttsize)
+                    return (writeTemp rttPtr)
+            aggregate <- writeNewTemp
+            writeCode "insertvalue {i8*,i8**} undef,i8* "
+            writeTemp allocPtr
+            writeCode ",0"
+            allocItem <- writeNewTemp
+            writeCode "insertvalue {i8*,i8**} "
+            writeTemp aggregate
+            writeCode ",i8** "
+            writeRTTPtr
+            writeCode ",1"
+            return (allocPtr,allocItem))
         return (varKey,(varAllocSizes Map.! size,allocItems)))
         varParams
     varAllocs <- foldM (\ allocs (varKey,(size,items)) -> do
-        mapM_ (writeClearAlloca size) items
-        return (Map.insert varKey (size,items) allocs))
+        mapM_ (writeClearAlloca size . fst) items
+        return (Map.insert varKey (size,map snd items) allocs))
         Map.empty varAllocsList
 
     scope <- foldM (\ vars (name,(index,varType@(Type _ rtt))) -> do
@@ -133,9 +157,15 @@ writeFunc name (FuncSig params retType) stmt = do
             then return Nothing
             else do
                 imp <- writeNewTemp
-                writeCode ("select i1 1, [" ++ show (length rtt)
-                                            ++ " x i8*] %import" ++ show index)
-                return (Just imp)
+                writeCode ("select i1 1,i8** %import" ++ show index
+                                                      ++ ",i8** null")
+                impOffset <- writeNewTemp
+                writeCode "select i1 1,"
+                writeRTTOffsetType
+                writeCode (" %importoffset" ++ show index ++ ",")
+                writeRTTOffsetType
+                writeCode " 0"
+                return (Just (imp,impOffset))
         writeAddRef (value,offset,imp,varType)
         return (Map.insert name (value,offset,imp,varType) vars))
         Map.empty paramScope
@@ -161,6 +191,12 @@ writeValueType = do
     writeRefCountType
     writeCode ",[0 x i1]}"
 
+writeAllocItemType :: CodeGen ()
+writeAllocItemType = do
+    writeCode "{"
+    writeValueType
+    writeCode ",i8**}"
+
 writeParam :: String -> (String,(Int,LLVMType)) -> CodeGen ()
 writeParam comma (_,(index,Type _ rtt)) = do
     writeCode comma
@@ -168,15 +204,18 @@ writeParam comma (_,(index,Type _ rtt)) = do
     writeCode ("* %value" ++ show index ++ ",")
     writeOffsetType
     writeCode (" %offset" ++ show index)
-    unless (null rtt)
-        (writeCode (",[" ++ show (length rtt) ++ " x i8*] %import"
-                         ++ show index))
+    unless (null rtt) (do
+        writeCode (",i8** %import" ++ show index ++ ",")
+        writeRTTOffsetType
+        writeCode (" %importoffset" ++ show index))
 
-writeRetParam :: String -> LLVMType -> CodeGen ()
+writeRetParam :: String -> Maybe LLVMType -> CodeGen ()
 writeRetParam comma retType = do
-    writeCode comma
-    writeValueType
-    writeCode "* %retval"
+    maybe (return ()) (const (do
+            writeCode comma
+            writeAllocItemType
+            writeCode " %retval"))
+        retType
 
 writeNewBitPtr :: Either Temp String -> Either Temp String -> CodeGen Temp
 writeNewBitPtr value index = do
@@ -258,39 +297,73 @@ writeUnref var@(value,_,_,_) = do
     writeTemp refCountPtr
     writeRTTUnref var
 
-writeNewRTT :: LLVMType -> CodeGen (Maybe Temp)
-writeNewRTT (Type _ []) = return Nothing
-writeNewRTT (Type _ rtt) = do
-    rttlist <- mapM (\ (LLVMRuntimeType _ newrtt _ _) -> newrtt) rtt
-    Right imp <- foldM (\ lastImp (rttval,i) -> do
-        nextImp <- writeNewTemp
-        writeCode ("insertvalue [" ++ show (length rttlist) ++ " x i8*] ")
-        either writeCode writeTemp lastImp
-        writeCode ",i8* "
-        writeTemp rttval
-        writeCode ("," ++ show i)
-        return (Right nextImp)) (Left "undef") (zip rttlist [0..])
+writeNewRTT :: Temp -> LLVMType -> CodeGen (Maybe Temp)
+writeNewRTT allocItem (Type _ []) = return Nothing
+writeNewRTT allocItem (Type _ rtt) = do
+    imp <- writeNewTemp
+    writeCode "extractvalue "
+    writeAllocItemType
+    writeCode " "
+    writeTemp allocItem
+    writeCode ",1"
+    zipWithM_ (\ (LLVMRuntimeType _ newrtt _ _) i -> do
+            rttval <- newrtt
+            rttPtr <- writeNewTemp
+            writeCode "getelementptr i8*,i8** "
+            writeTemp imp
+            writeCode ","
+            writeRTTOffsetType
+            writeCode (" " ++ show i)
+            writeCode " store i8* "
+            writeTemp rttval
+            writeCode ",i8** "
+            writeTemp rttPtr)
+        rtt [0..]
     return (Just imp)
 
 writeRTTAddRef :: Val -> CodeGen ()
 writeRTTAddRef (_,_,Nothing,_) = return ()
-writeRTTAddRef (_,_,Just imp,Type _ rtt) =
-    mapM_ (\ (LLVMRuntimeType _ _ addref _,i) -> do
-        rttval <- writeNewTemp
-        writeCode ("extractvalue [" ++ show (length rtt) ++ " x i8*] ")
-        writeTemp imp
-        writeCode ("," ++ show i)
-        addref rttval) (zip rtt [0..])
+writeRTTAddRef (_,_,Just (imp,impOffset),Type _ rtt) =
+    zipWithM_ (\ (LLVMRuntimeType _ _ addref _) i -> do
+            index <- writeNewTemp
+            writeCode "add "
+            writeRTTOffsetType
+            writeCode (" " ++ show i ++ ",")
+            writeTemp impOffset
+            rttPtr <- writeNewTemp
+            writeCode "getelementptr i8*,i8** "
+            writeTemp imp
+            writeCode ","
+            writeRTTOffsetType
+            writeCode " "
+            writeTemp index
+            rttval <- writeNewTemp
+            writeCode "load i8*,i8** "
+            writeTemp rttPtr
+            addref rttval)
+        rtt [0..]
 
 writeRTTUnref :: Val -> CodeGen ()
 writeRTTUnref (_,_,Nothing,_) = return ()
-writeRTTUnref (_,_,Just imp,Type _ rtt) =
-    mapM_ (\ (LLVMRuntimeType _ _ _ unref,i) -> do
-        rttval <- writeNewTemp
-        writeCode ("extractvalue [" ++ show (length rtt) ++ " x i8*] ")
-        writeTemp imp
-        writeCode ("," ++ show i)
-        unref rttval) (zip rtt [0..])
+writeRTTUnref (_,_,Just (imp,impOffset),Type _ rtt) =
+    zipWithM_ (\ (LLVMRuntimeType _ _ _ unref) i -> do
+            index <- writeNewTemp
+            writeCode "add "
+            writeRTTOffsetType
+            writeCode (" " ++ show i ++ ",")
+            writeTemp impOffset
+            rttPtr <- writeNewTemp
+            writeCode "getelementptr i8*,i8** "
+            writeTemp imp
+            writeCode ","
+            writeRTTOffsetType
+            writeCode " "
+            writeTemp index
+            rttval <- writeNewTemp
+            writeCode "load i8*,i8** "
+            writeTemp rttPtr
+            unref rttval)
+        rtt [0..]
 
 writeStmt :: Map InsnId (Temp,[Temp])
           -> (Label,Bool,Bool,Scope,
@@ -387,18 +460,15 @@ writeStmt varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms) stmt =
         (blockLabel,scope,branchFroms) <- checkNewBlock
         lval <- wExpr lhs
         rval <- wExpr rhs
-        writeCopyBits lval rval
-        -- undefined: if ultimately ExprVar, update var rtt
+        writeCopyValue lval rval
         writeRTTUnref rval
         writeRTTUnref lval
-        (updatedScope,fellThru) <- updateScope undefined
+        (updatedScope,fellThru) <- updateScope scope
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtExpr _ expr@(ExprFunc _ func _ _)) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        maybe (void (writeCallFunc expr))
-              (const (do val <- wExpr expr
-                         writeRTTUnref val))
-              (funcType func)
+        retVal <- writeCallFunc expr
+        maybe (return ()) writeRTTUnref retVal
         (updatedScope,fellThru) <- updateScope scope
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtExpr _ expr) = do
@@ -414,30 +484,8 @@ writeStmt varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms) stmt =
         return val
     wExpr expr@(ExprFunc _ func _ _)  = do
         let Just retType@(Type _ rtt) = funcType func
-        Just ret <- writeCallFunc expr
-        value <- writeNewTemp
-        writeCode "extractvalue "
-        writeRetType (Just retType)
-        writeCode " "
-        writeTemp ret
-        writeCode ",0"
-        offset <- writeNewTemp
-        writeCode "extractvalue "
-        writeRetType (Just retType)
-        writeCode " "
-        writeTemp ret
-        writeCode ",1"
-        imp <- if null rtt
-            then return Nothing
-            else do
-                imp <- writeNewTemp
-                writeCode "extractvalue "
-                writeRetType (Just retType)
-                writeCode " "
-                writeTemp ret
-                writeCode ",2"
-                return (Just imp)
-        return (value,offset,imp,retType)
+        Just retVal <- writeCallFunc expr
+        return retVal
     wExpr (ExprField bitOffset impOffset exprType@(Type _ rtt) expr) = do
         (value,offset,imp,_) <- wExpr expr
         newOffset <- if bitOffset == 0
@@ -450,26 +498,18 @@ writeStmt varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms) stmt =
                 writeTemp offset
                 return newOffset
         newImp <- if null rtt
-            then return Nothing
-            else do
-                Right newImp <- foldM (\ lastImp i -> do
-                    extract <- writeNewTemp
-                    writeCode ("extractvalue [" ++ show (length rtt)
-                                                ++ " x i8*] ")
-                    either writeCode writeTemp lastImp
-                    writeCode ("," ++ show (i + impOffset))
-                    newImp <- writeNewTemp
-                    writeCode ("insertvalue [" ++ show (length rtt)
-                                               ++ " x i8*] ")
-                    writeTemp extract
-                    writeCode ("," ++ show i)
-                    return (Right newImp)) (Left "undef") [0..length rtt - 1]
-                return (Just newImp)
+                then return Nothing
+                else if impOffset == 0
+                    then return imp
+                    else do
+                        let Just (baseImp,baseImpOffset) = imp
+                        newImpOffset <- writeNewTemp
+                        writeCode " add "
+                        writeRTTOffsetType
+                        writeCode (" " ++ show impOffset ++ ",")
+                        writeTemp baseImpOffset
+                        return (Just (baseImp,newImpOffset))
         return (value,newOffset,newImp,exprType)
-
-    exprVarName (ExprVar varName) = Just varName
-    exprVarName (ExprFunc _ _ _ _) = Nothing
-    exprVarName (ExprField _ _ _ expr) = exprVarName expr
 
     writeCallFunc (ExprFunc funcName func argExprs (maxAliases,insnId)) = do
         args <- mapM wExpr argExprs
@@ -492,21 +532,56 @@ writeStmt varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms) stmt =
             writeOffsetType
             writeCode " "
             writeTemp offs
-            maybe (return ()) (\ imp -> do
-                writeCode (",[" ++ show (length rtt) ++ " x i8*] ")
-                writeTemp imp)
+            maybe (return ()) (\ (impVal,impOffset) -> do
+                writeCode ",i8** "
+                writeTemp impVal
+                writeCode ","
+                writeRTTOffsetType
+                writeCode " "
+                writeTemp impOffset)
                 imp
             return ",")
             "" args
         maybe (return ()) (\ retAlloc -> do
             writeCode comma
-            writeValueType
-            writeCode "* "
+            writeAllocItemType
+            writeCode " "
             writeTemp retAlloc)
             retAlloc
         writeCode ")"
         mapM_ writeRTTUnref args
-        return retVal
+        maybe (return Nothing) (\ retType@(Type _ rtt) -> do
+                let Just ret = retVal
+                value <- writeNewTemp
+                writeCode "extractvalue "
+                writeRetType (Just retType)
+                writeCode " "
+                writeTemp ret
+                writeCode ",0"
+                offset <- writeNewTemp
+                writeCode "extractvalue "
+                writeRetType (Just retType)
+                writeCode " "
+                writeTemp ret
+                writeCode ",1"
+                imp <- if null rtt
+                    then return Nothing
+                    else do
+                        imp <- writeNewTemp
+                        writeCode "extractvalue "
+                        writeRetType (Just retType)
+                        writeCode " "
+                        writeTemp ret
+                        writeCode ",2"
+                        impOffset <- writeNewTemp
+                        writeCode "extractvalue "
+                        writeRetType (Just retType)
+                        writeCode " "
+                        writeTemp ret
+                        writeCode ",3"
+                        return (Just (imp,impOffset))
+                return (Just (value,offset,imp,retType)))
+            (funcType func)
 
     writeGetAlloc insnId = do
         let (allocSize,allocs) = varAllocs Map.! insnId
@@ -525,8 +600,8 @@ writeStmt varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms) stmt =
         when inLoop (writeClearAlloca alloc allocSize)
         return alloc
 
-    writeCopyBits (destval,destoffset,_,Type bitsize rtt)
-                  (srcval,srcoffset,_,_) = do
+    writeCopyValue (destval,destoffset,destimp,Type bitsize rtt)
+                   (srcval,srcoffset,srcimp,_) = do
         writeCode " call void @copy("
         writeValueType
         writeCode " "
@@ -546,6 +621,24 @@ writeStmt varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms) stmt =
         writeCode ","
         writeOffsetType
         writeCode (" " ++ show bitsize ++ ")")
+        when (length rtt > 0) (do
+            let Just (destimpval,destimpoffset) = destimp
+            let Just (srcimpval,srcimpoffset) = srcimp
+            writeCode " call void @copyrtt(i8** "
+            writeTemp srcimpval
+            writeCode ","
+            writeRTTOffsetType
+            writeCode " "
+            writeTemp srcimpoffset
+            writeCode ",i8** "
+            writeTemp destimpval
+            writeCode ","
+            writeRTTOffsetType
+            writeCode " "
+            writeTemp destimpoffset
+            writeCode ","
+            writeRTTOffsetType
+            writeCode (" " ++ show (length rtt) ++ ")"))
 
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
@@ -633,10 +726,84 @@ writeBuiltinCopy = do
     retLabelRef retLabel
     writeCode " ret void }"
 
+writeBuiltinCopyRTT :: CodeGen ()
+writeBuiltinCopyRTT = do
+    writeCode "define void @copyrtt(i8** %srcval,"
+    writeRTTOffsetType
+    writeCode " %srcoffset,i8** %destval,"
+    writeRTTOffsetType
+    writeCode " %destoffset,"
+    writeRTTOffsetType
+    writeCode " %size) {"
+    entry <- writeNewLabel
+    writeCode " br label "
+    loopRef <- forwardRefLabel writeLabelRef
+    loop <- writeNewLabel
+    loopRef loop
+    index <- writeNewTemp
+    writeCode "phi "
+    writeRTTOffsetType
+    writeCode "[0,"
+    writeLabelRef entry
+    writeCode "],"
+    iterateRef <- forwardRef (\ ((newIndex,newLabel,_):_) -> do
+        writeCode "["
+        writeTemp newIndex
+        writeCode ","
+        writeLabelRef newLabel
+        writeCode "]")
+    cmp <- writeNewTemp
+    writeCode "icmp ult "
+    writeRTTOffsetType
+    writeCode " "
+    writeTemp index
+    writeCode ",%size"
+    (continueLabelRef,retLabelRef) <- writeBranch cmp
+    continueLabel <- writeNewLabel
+    continueLabelRef continueLabel
+    srcIndex <- writeNewTemp
+    writeCode "add "
+    writeRTTOffsetType
+    writeCode " %srcoffset,"
+    writeTemp index
+    srcPtr <- writeNewTemp
+    writeCode "getelementptr i8*,i8** %srcval,"
+    writeRTTOffsetType
+    writeCode " "
+    writeTemp srcIndex
+    srcVal <- writeNewTemp
+    writeCode "load i8*,i8** "
+    writeTemp srcPtr
+    destIndex <- writeNewTemp
+    writeCode "add "
+    writeRTTOffsetType
+    writeCode " %destoffset,"
+    writeTemp index
+    destPtr <- writeNewTemp
+    writeCode "getelementptr i8*,i8** %destval,"
+    writeRTTOffsetType
+    writeCode " "
+    writeTemp destIndex
+    writeCode " store i8* "
+    writeTemp srcVal
+    writeCode ",i8** "
+    writeTemp destPtr
+    newIndex <- writeNewTemp
+    iterateRef (newIndex,continueLabel,Nothing)
+    writeCode "add "
+    writeRTTOffsetType
+    writeCode " 1,"
+    writeTemp index
+    writeCode " br label "
+    writeLabelRef loop
+    retLabel <- writeNewLabel
+    retLabelRef retLabel
+    writeCode " ret void }"
+
 writeBuiltinAlloc :: Int -> CodeGen ()
 writeBuiltinAlloc n = do
     writeCode "define "
-    writeValueType
+    writeAllocItemType
     writeCode ("* @alloc" ++ show n ++ "(")
     zipWithM_ param ("":repeat ",") [0..n-1]
     writeCode ") {"
@@ -645,17 +812,21 @@ writeBuiltinAlloc n = do
     label <- writeNewLabel
     labelRef label
     writeCode " ret "
-    writeValueType
-    writeCode "* null }"
+    writeAllocItemType
+    writeCode "* undef }"
   where
     param comma i = do
         writeCode comma
-        writeCode ("i8* %a" ++ show i)
+        writeCode ("{i8*,i8**} %a" ++ show i)
     writeAlloc labelRef i = do
         label <- writeNewLabel
         labelRef label
+        rawPtr <- writeNewTemp
+        writeCode ("extractvalue {i8*,i8**} %a" ++ show i ++ ",0")
         allocPtr <- writeNewTemp
-        writeCode ("bitcast i8* %a" ++ show i ++ " to ")
+        writeCode "bitcast i8* "
+        writeTemp rawPtr
+        writeCode " to "
         writeValueType
         writeCode "*"
         ptr <- writeNewTemp
@@ -679,17 +850,35 @@ writeBuiltinAlloc n = do
         (trueLabelRef,falseLabelRef) <- writeBranch cmp
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
-        writeCode " ret "
+        impPtr <- writeNewTemp
+        writeCode ("extractvalue {i8*,i8**} %a" ++ show i ++ ",1")
+        halfAllocItem <- writeNewTemp
+        writeCode "insertvalue "
+        writeAllocItemType
+        writeCode " undef,"
         writeValueType
         writeCode "* "
         writeTemp allocPtr
+        writeCode ",0"
+        allocItem <- writeNewTemp
+        writeCode "insertvalue "
+        writeAllocItemType
+        writeCode " "
+        writeTemp halfAllocItem
+        writeCode ",i8** "
+        writeTemp impPtr
+        writeCode ",1"
+        writeCode " ret "
+        writeAllocItemType
+        writeTemp allocItem
         return falseLabelRef
 
-varMaxAliasesAndSizes :: LLVMStmt -> [(InsnId,(Int,Int))]
+varMaxAliasesAndSizes :: LLVMStmt -> [(InsnId,((Int,Int),Int))]
 varMaxAliasesAndSizes (StmtBlock _ stmts) =
     concatMap varMaxAliasesAndSizes stmts
-varMaxAliasesAndSizes stmt@(StmtVar _ _ (Type bitSize _) maxAliases expr) =
-    (stmtId stmt,(maxAliases,bitSize)) : maybe [] exprMaxAliasesAndSizes expr
+varMaxAliasesAndSizes stmt@(StmtVar _ _ (Type bitSize rtt) maxAliases expr) =
+    (stmtId stmt,((maxAliases,bitSize),length rtt))
+        : maybe [] exprMaxAliasesAndSizes expr
 varMaxAliasesAndSizes (StmtIf _ expr ifBlock elseBlock) =
     exprMaxAliasesAndSizes expr ++ varMaxAliasesAndSizes ifBlock
                                 ++ (maybe [] varMaxAliasesAndSizes elseBlock)
@@ -700,11 +889,12 @@ varMaxAliasesAndSizes (StmtAssign _ lhs rhs) =
 varMaxAliasesAndSizes (StmtExpr _ expr) = exprMaxAliasesAndSizes expr
 varMaxAliasesAndSizes _ = []
 
-exprMaxAliasesAndSizes :: Expr rtt rtf -> [(InsnId,(Int,Int))]
+exprMaxAliasesAndSizes :: Expr rtt rtf -> [(InsnId,((Int,Int),Int))]
 exprMaxAliasesAndSizes (ExprField _ _ _ expr) = exprMaxAliasesAndSizes expr
 exprMaxAliasesAndSizes (ExprFunc _ (Func (FuncSig _ retType) _) exprs
                                  (maxAliases,insnId)) =
     concatMap exprMaxAliasesAndSizes exprs ++ maybe [] aliasesAndSizes retType
   where
-    aliasesAndSizes (Type bitSize _) = [(insnId,(maxAliases,bitSize))]
+    aliasesAndSizes (Type bitSize rtt) =
+        [(insnId,((maxAliases,bitSize),length rtt))]
 exprMaxAliasesAndSizes _ = []
