@@ -87,11 +87,14 @@ unrefValue :: Value -> Memory (Data rtv) -> Memory (Data rtv)
 unrefValue (Value ref _) mem = unref mem ref
 
 runtimeValue :: Value -> Memory (Data rtv) -> rtv
-runtimeValue (Value ref _) mem = head rtv
+runtimeValue (Value ref (_,importOffset,_,_)) mem =
+    head (drop importOffset rtv)
   where
     Data _ rtv = deref mem ref
 
 updateRuntimeValue :: Value -> (rtv -> rtv) -> Memory (Data rtv)
                             -> Memory (Data rtv)
-updateRuntimeValue (Value ref _) f mem =
-    update mem ref (\ (Data bits rtv) -> Data bits (f (head rtv) : tail rtv))
+updateRuntimeValue (Value ref (_,importOffset,_,_)) f mem =
+    update mem ref (\ (Data bits rtv) ->
+        Data bits (take importOffset rtv ++ f (head (drop importOffset rtv))
+                                         : (drop (importOffset+1) rtv)))
