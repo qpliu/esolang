@@ -5,7 +5,7 @@ where
 import Control.Monad(foldM,when)
 
 import LLVMGen
-    (CodeGen,Label,Temp,
+    (LLVMGen,Label,Temp,
      newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,
      writeNewTemp,writeNewLabel,writeCode,writeRefCountType,writeOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,writeBranch)
@@ -15,16 +15,16 @@ import Runtime
      astTypeName,astTypeSize,astTypeImportSize,
      astTypeErrorName,astTypeSourcePos,astTypeIsImport)
 
-data LLVMRuntimeType =
-    LLVMRuntimeType [CodeGen ()] -- declares
-                    (CodeGen Temp) -- new value
-                    (Temp -> CodeGen ()) -- add ref
-                    (Temp -> CodeGen ()) -- remove ref
-data LLVMRuntimeFunc =
-    LLVMRuntimeFunc [CodeGen ()] -- declares
-                    (CodeGen ()) -- definition
+data LLVMRuntimeType fwd =
+    LLVMRuntimeType [LLVMGen fwd ()] -- declares
+                    (LLVMGen fwd Temp) -- new value
+                    (Temp -> LLVMGen fwd ()) -- add ref
+                    (Temp -> LLVMGen fwd ()) -- remove ref
+data LLVMRuntimeFunc fwd =
+    LLVMRuntimeFunc [LLVMGen fwd ()] -- declares
+                    (LLVMGen fwd ()) -- definition
 
-instance RuntimeType LLVMRuntimeType where
+instance RuntimeType (LLVMRuntimeType fwd) where
     annotateType astType
       | astTypeName astType == "stack" && astTypeIsImport astType =
             compileError (astTypeSourcePos astType)
@@ -33,7 +33,7 @@ instance RuntimeType LLVMRuntimeType where
         compileError (astTypeSourcePos astType)
                      ("Unknown import " ++ astTypeErrorName astType)
 
-instance RuntimeFunc LLVMRuntimeFunc where
+instance RuntimeFunc (LLVMRuntimeFunc fwd) where
     annotateFunc (AstFuncSig pos name@"getByte" [(_,astType)] Nothing)
       | astTypeImportSize astType == 0 =
         return (LLVMRuntimeFunc [writeCode "declare i32 @read(i32,i8*,i32)"]
@@ -60,7 +60,7 @@ instance RuntimeFunc LLVMRuntimeFunc where
     annotateFunc (AstFuncSig pos name _ _) =
         compileError pos ("Unknown import func '" ++ name ++ "'")
 
-writeNewBitPtr :: Either Temp String -> Temp -> CodeGen Temp
+writeNewBitPtr :: Either Temp String -> Temp -> LLVMGen fwd Temp
 writeNewBitPtr value index = do
     bitPtr <- writeNewTemp
     writeCode "getelementptr {"
@@ -75,7 +75,7 @@ writeNewBitPtr value index = do
     writeTemp index
     return bitPtr
 
-getByte :: AstType -> CodeGen ()
+getByte :: AstType -> LLVMGen fwd ()
 getByte astType = do
     writeCode "define void @"
     writeName "getByte"
@@ -138,7 +138,7 @@ getByte astType = do
         [0..min 7 (astTypeSize astType - 1)]
     writeCode " ret void }"
 
-putByte :: AstType -> CodeGen ()
+putByte :: AstType -> LLVMGen fwd ()
 putByte astType = do
     writeCode "define void @"
     writeName "putByte"
