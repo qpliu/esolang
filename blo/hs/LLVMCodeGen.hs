@@ -52,10 +52,8 @@ codeGen (types,funcs) =
 builtinDecls :: [CodeGen ()]
 builtinDecls = [
     (do writeCode "declare void @llvm.memset.p0i8."
-        writeOffsetType
-        writeCode "(i8*,i8,"
-        writeOffsetType
-        writeCode ",i32,i1)")
+        writeOffsetType "(i8*,i8,"
+        writeOffsetType ",i32,i1)")
     ]
 
 builtinDefns :: Int -> [CodeGen ()]
@@ -71,8 +69,7 @@ codeGenFunc (name,Func funcSig stmt) = writeFunc name funcSig stmt
 writeFunc :: String -> LLVMFuncSig -> LLVMStmt -> CodeGen ()
 writeFunc name (FuncSig params retType) stmt = do
     writeCode "define "
-    writeRetType retType
-    writeCode " @"
+    writeRetType retType " @"
     writeName name
     let paramScope =
             zipWith (\ index param -> fmap ((,) index) param) [0..] params
@@ -85,41 +82,29 @@ writeFunc name (FuncSig params retType) stmt = do
     let varParams = varMaxAliasesAndSizes stmt
     varAllocSizes <- foldM (\ sizes size -> do
         bitPtr <- writeNewBitPtr (Right "null") (Right (show size))
-        sizeVar <- writeNewTemp
-        writeCode "ptrtoint i1* "
-        writeTemp bitPtr
-        writeCode " to "
-        writeOffsetType
+        sizeVar <- writeNewTemp "ptrtoint i1* "
+        writeTemp bitPtr " to "
+        writeOffsetType ""
         return (Map.insert size sizeVar sizes))
         Map.empty
         ((Set.toList . Set.fromList . map (snd . fst . snd)) varParams)
     varAllocsList <- mapM (\ (varKey,((aliases,size),rttsize)) -> do
         allocItems <- (sequence . take aliases . repeat) (do
-            allocPtr <- writeNewTemp
-            writeCode "alloca "
-            writeOffsetType
-            writeCode ","
-            writeOffsetType
-            writeCode " "
-            writeTemp (varAllocSizes Map.! size)
+            allocPtr <- writeNewTemp "alloca "
+            writeOffsetType ","
+            writeOffsetType " "
+            writeTemp (varAllocSizes Map.! size) ""
             writeRTTPtr <- if rttsize == 0
-                then return (writeCode "null")
+                then return (writeCode . ("null" ++))
                 else do
-                    rttPtr <- writeNewTemp
-                    writeCode "alloca i8*,"
-                    writeRTTOffsetType
-                    writeCode (show rttsize)
+                    rttPtr <- writeNewTemp "alloca i8*,"
+                    writeRTTOffsetType (show rttsize)
                     return (writeTemp rttPtr)
-            aggregate <- writeNewTemp
-            writeCode "insertvalue {i8*,i8**} undef,i8* "
-            writeTemp allocPtr
-            writeCode ",0"
-            allocItem <- writeNewTemp
-            writeCode "insertvalue {i8*,i8**} "
-            writeTemp aggregate
-            writeCode ",i8** "
-            writeRTTPtr
-            writeCode ",1"
+            aggregate <- writeNewTemp "insertvalue {i8*,i8**} undef,i8* "
+            writeTemp allocPtr ",0"
+            allocItem <- writeNewTemp "insertvalue {i8*,i8**} "
+            writeTemp aggregate ",i8** "
+            writeRTTPtr ",1"
             return (allocPtr,allocItem))
         return (varKey,(varAllocSizes Map.! size,allocItems)))
         varParams
@@ -129,30 +114,21 @@ writeFunc name (FuncSig params retType) stmt = do
         Map.empty varAllocsList
 
     scope <- foldM (\ vars (name,(index,varType@(Type _ rtt))) -> do
-        value <- writeNewTemp
-        writeCode "select i1 1,"
-        writeValueType
-        writeCode ("* %value" ++ show index ++ ",")
-        writeValueType
-        writeCode "* null"
-        offset <- writeNewTemp
-        writeCode "select i1 1,"
-        writeOffsetType
-        writeCode (" %offset" ++ show index ++ ",")
-        writeOffsetType
-        writeCode " 0"
+        value <- writeNewTemp "select i1 1,"
+        writeValueType ("* %value" ++ show index ++ ",")
+        writeValueType "* null"
+        offset <- writeNewTemp "select i1 1,"
+        writeOffsetType (" %offset" ++ show index ++ ",")
+        writeOffsetType " 0"
         imp <- if null rtt
             then return Nothing
             else do
-                imp <- writeNewTemp
-                writeCode ("select i1 1,i8** %import" ++ show index
-                                                      ++ ",i8** null")
-                impOffset <- writeNewTemp
-                writeCode "select i1 1,"
-                writeRTTOffsetType
-                writeCode (" %importoffset" ++ show index ++ ",")
-                writeRTTOffsetType
-                writeCode " 0"
+                imp <-
+                    writeNewTemp ("select i1 1,i8** %import" ++ show index
+                                                             ++ ",i8** null")
+                impOffset <- writeNewTemp "select i1 1,"
+                writeRTTOffsetType (" %importoffset" ++ show index ++ ",")
+                writeRTTOffsetType " 0"
                 return (Just (imp,impOffset))
         writeAddRef (value,offset,imp,varType)
         return (Map.insert name (value,offset,imp,varType) vars))
@@ -161,163 +137,115 @@ writeFunc name (FuncSig params retType) stmt = do
     writeStmt (length params) varAllocs (entry,False,True,scope,Map.empty) stmt
     writeCode " }"
 
-writeRetType :: Maybe LLVMType -> CodeGen ()
-writeRetType Nothing = writeCode "void"
-writeRetType (Just (Type _ rtt)) = do
+writeRetType :: Maybe LLVMType -> String -> CodeGen ()
+writeRetType Nothing code = writeCode ("void" ++ code)
+writeRetType (Just (Type _ rtt)) code = do
     writeCode "{"
-    writeValueType
-    writeCode "*,"
-    writeOffsetType
+    writeValueType "*,"
+    writeOffsetType ""
     unless (null rtt) (do
         writeCode ",i8**,"
-        writeRTTOffsetType)
-    writeCode "}"
+        writeRTTOffsetType "")
+    writeCode ("}" ++ code)
 
 writeClearAlloca :: Temp -> Temp -> CodeGen ()
 writeClearAlloca ptr size = do
     writeCode " call void @llvm.memset.p0i8."
-    writeOffsetType
-    writeCode "(i8* "
-    writeTemp ptr
-    writeCode ",i8 0,"
-    writeOffsetType
-    writeCode " "
-    writeTemp size
-    writeCode ",i32 0,i1 0)"
+    writeOffsetType "(i8* "
+    writeTemp ptr ",i8 0,"
+    writeOffsetType " "
+    writeTemp size ",i32 0,i1 0)"
 
-writeValueType :: CodeGen ()
-writeValueType = do
+writeValueType :: String -> CodeGen ()
+writeValueType code = do
     writeCode "{"
-    writeRefCountType
-    writeCode ",[0 x i1]}"
+    writeRefCountType (",[0 x i1]}" ++ code)
 
-writeAllocItemType :: CodeGen ()
-writeAllocItemType = do
+writeAllocItemType :: String -> CodeGen ()
+writeAllocItemType code = do
     writeCode "{"
-    writeValueType
-    writeCode "*,i8**}"
+    writeValueType ("*,i8**}" ++ code)
 
 writeParam :: String -> (String,(Int,LLVMType)) -> CodeGen ()
 writeParam comma (_,(index,Type _ rtt)) = do
     writeCode comma
-    writeValueType
-    writeCode ("* %value" ++ show index ++ ",")
-    writeOffsetType
-    writeCode (" %offset" ++ show index)
+    writeValueType ("* %value" ++ show index ++ ",")
+    writeOffsetType (" %offset" ++ show index)
     unless (null rtt) (do
         writeCode (",i8** %import" ++ show index ++ ",")
-        writeRTTOffsetType
-        writeCode (" %importoffset" ++ show index))
+        writeRTTOffsetType (" %importoffset" ++ show index))
 
 writeRetParam :: String -> Maybe LLVMType -> CodeGen ()
 writeRetParam comma retType = do
     maybe (return ()) (const (do
             writeCode comma
-            writeAllocItemType
-            writeCode " %retval"))
+            writeAllocItemType " %retval"))
         retType
 
 writeNewBitPtr :: Either Temp String -> Either Temp String -> CodeGen Temp
 writeNewBitPtr value index = do
-    bitPtr <- writeNewTemp
-    writeCode "getelementptr "
-    writeValueType
-    writeCode ","
-    writeValueType
-    writeCode "* "
-    either writeTemp writeCode value
+    bitPtr <- writeNewTemp "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    either (flip writeTemp "") writeCode value
     writeCode ",i32 0,i32 1,"
-    writeOffsetType
-    writeCode " "
-    either writeTemp writeCode index
+    writeOffsetType " "
+    either (flip writeTemp "") writeCode index
     return bitPtr
 
 writeAddRef :: Val -> CodeGen ()
 writeAddRef var@(value,_,_,_) = do
-    refCountPtr <- writeNewTemp
-    writeCode "getelementptr "
-    writeValueType
-    writeCode ","
-    writeValueType
-    writeCode "* "
-    writeTemp value
-    writeCode ",i32 0,i32 0"
-    oldRefCount <- writeNewTemp
-    writeCode "load "
-    writeRefCountType
-    writeCode ","
-    writeRefCountType
-    writeCode "* "
-    writeTemp refCountPtr
-    newRefCount <- writeNewTemp
-    writeCode "add "
-    writeRefCountType
-    writeCode " 1,"
-    writeTemp oldRefCount
-    writeCode " store "
-    writeRefCountType
-    writeCode " "
-    writeTemp newRefCount
-    writeCode ","
-    writeRefCountType
-    writeCode "* "
-    writeTemp refCountPtr
+    refCountPtr <- writeNewTemp "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeTemp value ",i32 0,i32 0"
+    oldRefCount <- writeNewTemp "load "
+    writeRefCountType ","
+    writeRefCountType "* "
+    writeTemp refCountPtr ""
+    newRefCount <- writeNewTemp "add "
+    writeRefCountType " 1,"
+    writeTemp oldRefCount " store "
+    writeRefCountType " "
+    writeTemp newRefCount ","
+    writeRefCountType "* "
+    writeTemp refCountPtr ""
     writeRTTAddRef var
 
 writeUnref :: Val -> CodeGen ()
 writeUnref var@(value,_,_,_) = do
-    refCountPtr <- writeNewTemp
-    writeCode "getelementptr "
-    writeValueType
-    writeCode ","
-    writeValueType
-    writeCode "* "
-    writeTemp value
-    writeCode ",i32 0,i32 0"
-    oldRefCount <- writeNewTemp
-    writeCode "load "
-    writeRefCountType
-    writeCode ","
-    writeRefCountType
-    writeCode "* "
-    writeTemp refCountPtr
-    newRefCount <- writeNewTemp
-    writeCode "sub "
-    writeRefCountType
-    writeCode " "
-    writeTemp oldRefCount
-    writeCode ",1"
+    refCountPtr <- writeNewTemp "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeTemp value ",i32 0,i32 0"
+    oldRefCount <- writeNewTemp "load "
+    writeRefCountType ","
+    writeRefCountType "* "
+    writeTemp refCountPtr ""
+    newRefCount <- writeNewTemp "sub "
+    writeRefCountType " "
+    writeTemp oldRefCount ",1"
     writeCode " store "
-    writeRefCountType
-    writeCode " "
-    writeTemp newRefCount
-    writeCode ","
-    writeRefCountType
-    writeCode "* "
-    writeTemp refCountPtr
+    writeRefCountType " "
+    writeTemp newRefCount ","
+    writeRefCountType "* "
+    writeTemp refCountPtr ""
     writeRTTUnref var
 
 writeNewRTT :: Temp -> LLVMType -> CodeGen (Maybe Temp)
 writeNewRTT allocItem (Type _ []) = return Nothing
 writeNewRTT allocItem (Type _ rtt) = do
-    imp <- writeNewTemp
-    writeCode "extractvalue "
-    writeAllocItemType
-    writeCode " "
-    writeTemp allocItem
-    writeCode ",1"
+    imp <- writeNewTemp "extractvalue "
+    writeAllocItemType " "
+    writeTemp allocItem ",1"
     zipWithM_ (\ (LLVMRuntimeType _ newrtt _ _) i -> do
             rttval <- newrtt
-            rttPtr <- writeNewTemp
-            writeCode "getelementptr i8*,i8** "
-            writeTemp imp
-            writeCode ","
-            writeRTTOffsetType
-            writeCode (" " ++ show i)
+            rttPtr <- writeNewTemp "getelementptr i8*,i8** "
+            writeTemp imp ","
+            writeRTTOffsetType (" " ++ show i)
             writeCode " store i8* "
-            writeTemp rttval
-            writeCode ",i8** "
-            writeTemp rttPtr)
+            writeTemp rttval ",i8** "
+            writeTemp rttPtr "")
         rtt [0..]
     return (Just imp)
 
@@ -325,21 +253,15 @@ writeRTTAddRef :: Val -> CodeGen ()
 writeRTTAddRef (_,_,Nothing,_) = return ()
 writeRTTAddRef (_,_,Just (imp,impOffset),Type _ rtt) =
     zipWithM_ (\ (LLVMRuntimeType _ _ addref _) i -> do
-            index <- writeNewTemp
-            writeCode "add "
-            writeRTTOffsetType
-            writeCode (" " ++ show i ++ ",")
-            writeTemp impOffset
-            rttPtr <- writeNewTemp
-            writeCode "getelementptr i8*,i8** "
-            writeTemp imp
-            writeCode ","
-            writeRTTOffsetType
-            writeCode " "
-            writeTemp index
-            rttval <- writeNewTemp
-            writeCode "load i8*,i8** "
-            writeTemp rttPtr
+            index <- writeNewTemp "add "
+            writeRTTOffsetType (" " ++ show i ++ ",")
+            writeTemp impOffset ""
+            rttPtr <- writeNewTemp "getelementptr i8*,i8** "
+            writeTemp imp ","
+            writeRTTOffsetType " "
+            writeTemp index ""
+            rttval <- writeNewTemp "load i8*,i8** "
+            writeTemp rttPtr ""
             addref rttval)
         rtt [0..]
 
@@ -347,21 +269,15 @@ writeRTTUnref :: Val -> CodeGen ()
 writeRTTUnref (_,_,Nothing,_) = return ()
 writeRTTUnref (_,_,Just (imp,impOffset),Type _ rtt) =
     zipWithM_ (\ (LLVMRuntimeType _ _ _ unref) i -> do
-            index <- writeNewTemp
-            writeCode "add "
-            writeRTTOffsetType
-            writeCode (" " ++ show i ++ ",")
-            writeTemp impOffset
-            rttPtr <- writeNewTemp
-            writeCode "getelementptr i8*,i8** "
-            writeTemp imp
-            writeCode ","
-            writeRTTOffsetType
-            writeCode " "
-            writeTemp index
-            rttval <- writeNewTemp
-            writeCode "load i8*,i8** "
-            writeTemp rttPtr
+            index <- writeNewTemp "add "
+            writeRTTOffsetType (" " ++ show i ++ ",")
+            writeTemp impOffset ""
+            rttPtr <- writeNewTemp "getelementptr i8*,i8** "
+            writeTemp imp ","
+            writeRTTOffsetType " "
+            writeTemp index ""
+            rttval <- writeNewTemp "load i8*,i8** "
+            writeTemp rttPtr ""
             unref rttval)
         rtt [0..]
 
@@ -381,7 +297,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
       | Map.member sid branchFroms = do
             newBlockLabel <- writeNewLabel
             mapM_ (($ newBlockLabel) . fst) (branchFroms Map.! sid)
-            -- update scope, emit phi instructions
+            -- undefined update scope, emit phi instructions
             return (newBlockLabel,scope,Map.delete sid branchFroms)
       | fellThru = return (blockLabel,scope,branchFroms)
       | otherwise = error "not fellThru and not br target"
@@ -424,46 +340,31 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         (blockLabel,scope,branchFroms) <- checkNewBlock
         val <- maybe (do
                 allocItem <- writeGetAlloc sid
-                value <- writeNewTemp
-                writeCode "extractvalue "
-                writeAllocItemType
-                writeCode " "
-                writeTemp allocItem
-                writeCode ",0"
-                offset <- writeNewTemp
-                writeCode "select i1 1,"
-                writeOffsetType
-                writeCode " 0,"
-                writeOffsetType
-                writeCode " 0"
+                value <- writeNewTemp "extractvalue "
+                writeAllocItemType " "
+                writeTemp allocItem ",0"
+                offset <- writeNewTemp "select i1 1,"
+                writeOffsetType " 0,"
+                writeOffsetType " 0"
                 imp <- if null rtt
                     then return Nothing
                     else do
-                        imp <- writeNewTemp
-                        writeCode "extractvalue "
-                        writeAllocItemType
-                        writeCode " "
-                        writeTemp allocItem
-                        writeCode ",1"
+                        imp <- writeNewTemp "extractvalue "
+                        writeAllocItemType " "
+                        writeTemp allocItem ",1"
                         zipWithM_ (\ (LLVMRuntimeType _ rttinit _ _) i -> do
                                 rttval <- rttinit
-                                rttPtr <- writeNewTemp
-                                writeCode "getelementptr i8*,i8** "
-                                writeTemp imp
-                                writeCode ","
-                                writeRTTOffsetType
-                                writeCode (" " ++ show i)
+                                rttPtr <-
+                                    writeNewTemp "getelementptr i8*,i8** "
+                                writeTemp imp ","
+                                writeRTTOffsetType (" " ++ show i)
                                 writeCode " store i8* "
-                                writeTemp rttval
-                                writeCode ",i8** "
-                                writeTemp rttPtr)
+                                writeTemp rttval ",i8** "
+                                writeTemp rttPtr "")
                             rtt [0..]
-                        impOffset <- writeNewTemp
-                        writeCode "select i1 1,"
-                        writeRTTOffsetType
-                        writeCode " 0,"
-                        writeRTTOffsetType
-                        writeCode " 0"
+                        impOffset <- writeNewTemp "select i1 1,"
+                        writeRTTOffsetType " 0,"
+                        writeRTTOffsetType " 0"
                         return (Just (imp,impOffset))
                 let val = (value,offset,imp,varType)
                 writeAddRef val
@@ -481,9 +382,8 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         (blockLabel,scope,branchFroms) <- checkNewBlock
         (condValue,condOffset,_,_) <- wExpr expr
         bitPtr <- writeNewBitPtr (Left condValue) (Left condOffset)
-        bit <- writeNewTemp
-        writeCode "load i1,i1* "
-        writeTemp bitPtr
+        bit <- writeNewTemp "load i1,i1* "
+        writeTemp bitPtr ""
         (trueLabelRef,falseLabelRef) <- writeBranch bit
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
@@ -538,118 +438,76 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                                 label <- writeNewLabel
                                 labelRef label)
                             labelRef
-                        cmp <- writeNewTemp
-                        writeCode "icmp eq "
-                        writeValueType
-                        writeCode ("* %value" ++ show paramIndex ++ ",")
-                        writeTemp value
+                        cmp <- writeNewTemp "icmp eq "
+                        writeValueType ("* %value" ++ show paramIndex ++ ",")
+                        writeTemp value ""
                         (trueLabelRef,falseLabelRef) <- writeBranch cmp
                         trueLabel <- writeNewLabel
                         trueLabelRef trueLabel
-                        retval1 <- writeNewTemp
-                        writeCode "insertvalue "
-                        writeRetType (Just retType)
-                        writeCode " undef,"
-                        writeValueType
-                        writeCode "* "
-                        writeTemp value
-                        writeCode ",0"
-                        retval2 <- writeNewTemp
-                        writeCode "insertvalue "
-                        writeRetType (Just retType)
-                        writeCode " "
-                        writeTemp retval1
-                        writeCode ","
-                        writeOffsetType
-                        writeCode " "
-                        writeTemp offset
-                        writeCode ",1"
+                        retval1 <- writeNewTemp "insertvalue "
+                        writeRetType (Just retType) " undef,"
+                        writeValueType "* "
+                        writeTemp value ",0"
+                        retval2 <- writeNewTemp "insertvalue "
+                        writeRetType (Just retType) " "
+                        writeTemp retval1 ","
+                        writeOffsetType " "
+                        writeTemp offset ",1"
                         retval <- maybe (return retval2)
                             (\ (imp,impOffset) -> do
-                                retval3 <- writeNewTemp
-                                writeCode "insertvalue "
-                                writeRetType (Just retType)
-                                writeCode " "
-                                writeTemp retval2
-                                writeCode ",i8** "
-                                writeTemp imp
-                                writeCode ",2"
-                                retval4 <- writeNewTemp
-                                writeCode "insertvalue "
-                                writeRetType (Just retType)
-                                writeCode " "
-                                writeTemp retval3
-                                writeCode ","
-                                writeRTTOffsetType
-                                writeCode " "
-                                writeTemp impOffset
-                                writeCode ",3"
+                                retval3 <- writeNewTemp "insertvalue "
+                                writeRetType (Just retType) " "
+                                writeTemp retval2 ",i8** "
+                                writeTemp imp ",2"
+                                retval4 <- writeNewTemp "insertvalue "
+                                writeRetType (Just retType) " "
+                                writeTemp retval3 ","
+                                writeRTTOffsetType " "
+                                writeTemp impOffset ",3"
                                 return retval4)
                             imp
                         writeCode "ret "
-                        writeRetType (Just retType)
-                        writeCode " "
-                        writeTemp retval
+                        writeRetType (Just retType) " "
+                        writeTemp retval ""
                         return (Just falseLabelRef))
                     Nothing [0..nparams - 1]
                 maybe (return ()) (\ labelRef -> do
                         label <- writeNewLabel
                         labelRef label)
                     labelRef
-                retAlloc <- writeNewTemp
-                writeCode "extractvalue "
-                writeAllocItemType
-                writeCode " %retval,0"
+                retAlloc <- writeNewTemp "extractvalue "
+                writeAllocItemType " %retval,0"
                 retImpAlloc <- maybe (return Nothing) (const (do
-                        retImpAlloc <- writeNewTemp
-                        writeCode "extractvalue "
-                        writeAllocItemType
-                        writeCode " %retval,1"
+                        retImpAlloc <- writeNewTemp "extractvalue "
+                        writeAllocItemType " %retval,1"
                         return (Just (retImpAlloc,error "retImpAllocOffset"))))
                     imp
                 writeCopyValue
                     (retAlloc,error "retAllocOffset",retImpAlloc,retType)
                     val True
-                retval1 <- writeNewTemp
-                writeCode "insertvalue "
-                writeRetType (Just retType)
-                writeCode " undef,"
-                writeValueType
-                writeCode "* "
-                writeTemp retAlloc
-                writeCode ",0"
-                retval2 <- writeNewTemp
-                writeCode "insertvalue "
-                writeRetType (Just retType)
-                writeCode " "
-                writeTemp retval1
-                writeCode ","
-                writeOffsetType
-                writeCode " 0,1"
+                retval1 <- writeNewTemp "insertvalue "
+                writeRetType (Just retType) " undef,"
+                writeValueType "* "
+                writeTemp retAlloc ",0"
+                retval2 <- writeNewTemp "insertvalue "
+                writeRetType (Just retType) " "
+                writeTemp retval1 ","
+                writeOffsetType " 0,1"
                 retval <- maybe (return retval2)
                     (\ (imp,impOffset) -> do
-                        retval3 <- writeNewTemp
-                        writeCode "insertvalue "
-                        writeRetType (Just retType)
-                        writeCode " "
-                        writeTemp retval2
-                        writeCode ",i8** "
-                        writeTemp imp
-                        writeCode ",2"
-                        retval4 <- writeNewTemp
-                        writeCode "insertvalue "
-                        writeRetType (Just retType)
-                        writeCode " "
-                        writeTemp retval3
-                        writeCode ","
-                        writeRTTOffsetType
-                        writeCode " 0,3"
+                        retval3 <- writeNewTemp "insertvalue "
+                        writeRetType (Just retType) " "
+                        writeTemp retval2 ",i8** "
+                        writeTemp imp ",2"
+                        retval4 <- writeNewTemp "insertvalue "
+                        writeRetType (Just retType) " "
+                        writeTemp retval3 ","
+                        writeRTTOffsetType " 0,3"
                         return retval4)
                     imp
                 writeCode "ret "
-                writeRetType (Just retType)
-                writeCode " "
-                writeTemp retval)
+                writeRetType (Just retType) " "
+                writeTemp retval "")
             exprVal
         -- this should be the last stmt in a StmtBlock
         return (blockLabel,inLoop,False,updatedScope,branchFroms)
@@ -658,7 +516,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         val@(value,offset,_,_) <- wExpr expr
         bitPtr <- writeNewBitPtr (Left value) (Left offset)
         writeCode (" store i1 " ++ (if bit then "1" else "0") ++ ",i1* ")
-        writeTemp bitPtr
+        writeTemp bitPtr ""
         writeRTTUnref val
         (updatedScope,fellThru) <- updateScope scope
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
@@ -706,11 +564,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         newOffset <- if bitOffset == 0
             then return offset
             else do
-                newOffset <- writeNewTemp
-                writeCode "add "
-                writeOffsetType
-                writeCode (" " ++ show bitOffset ++ ",")
-                writeTemp offset
+                newOffset <- writeNewTemp "add "
+                writeOffsetType (" " ++ show bitOffset ++ ",")
+                writeTemp offset ""
                 return newOffset
         newImp <- if null rtt
                 then return Nothing
@@ -718,11 +574,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                     then return imp
                     else do
                         let Just (baseImp,baseImpOffset) = imp
-                        newImpOffset <- writeNewTemp
-                        writeCode " add "
-                        writeRTTOffsetType
-                        writeCode (" " ++ show impOffset ++ ",")
-                        writeTemp baseImpOffset
+                        newImpOffset <- writeNewTemp " add "
+                        writeRTTOffsetType (" " ++ show impOffset ++ ",")
+                        writeTemp baseImpOffset ""
                         return (Just (baseImp,newImpOffset))
         return (value,newOffset,newImp,exprType)
 
@@ -732,68 +586,50 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                           (const (fmap Just (writeGetAlloc insnId)))
                           (funcType func)
         retVal <- maybe (writeCode " " >> return Nothing)
-                        (const (fmap Just writeNewTemp)) (funcType func)
+                        (const (fmap Just (writeNewTemp "")))
+                        (funcType func)
         writeCode "call "
-        writeRetType (funcType func)
-        writeCode " @"
+        writeRetType (funcType func) " @"
         writeName funcName
         writeCode "("
         comma <- foldM (\ comma (val,offs,imp,Type _ rtt) -> do
             writeCode comma
-            writeValueType
-            writeCode "* "
-            writeTemp val
-            writeCode ","
-            writeOffsetType
-            writeCode " "
-            writeTemp offs
+            writeValueType "* "
+            writeTemp val ","
+            writeOffsetType " "
+            writeTemp offs ""
             maybe (return ()) (\ (impVal,impOffset) -> do
                 writeCode ",i8** "
-                writeTemp impVal
-                writeCode ","
-                writeRTTOffsetType
-                writeCode " "
-                writeTemp impOffset)
+                writeTemp impVal ","
+                writeRTTOffsetType " "
+                writeTemp impOffset "")
                 imp
             return ",")
             "" args
         maybe (return ()) (\ retAlloc -> do
             writeCode comma
-            writeAllocItemType
-            writeCode " "
-            writeTemp retAlloc)
+            writeAllocItemType " "
+            writeTemp retAlloc "")
             retAlloc
         writeCode ")"
         mapM_ writeRTTUnref args
         maybe (return Nothing) (\ retType@(Type _ rtt) -> do
                 let Just ret = retVal
-                value <- writeNewTemp
-                writeCode "extractvalue "
-                writeRetType (Just retType)
-                writeCode " "
-                writeTemp ret
-                writeCode ",0"
-                offset <- writeNewTemp
-                writeCode "extractvalue "
-                writeRetType (Just retType)
-                writeCode " "
-                writeTemp ret
-                writeCode ",1"
+                value <- writeNewTemp "extractvalue "
+                writeRetType (Just retType) " "
+                writeTemp ret ",0"
+                offset <- writeNewTemp "extractvalue "
+                writeRetType (Just retType) " "
+                writeTemp ret ",1"
                 imp <- if null rtt
                     then return Nothing
                     else do
-                        imp <- writeNewTemp
-                        writeCode "extractvalue "
-                        writeRetType (Just retType)
-                        writeCode " "
-                        writeTemp ret
-                        writeCode ",2"
-                        impOffset <- writeNewTemp
-                        writeCode "extractvalue "
-                        writeRetType (Just retType)
-                        writeCode " "
-                        writeTemp ret
-                        writeCode ",3"
+                        imp <- writeNewTemp "extractvalue "
+                        writeRetType (Just retType) " "
+                        writeTemp ret ",2"
+                        impOffset <- writeNewTemp "extractvalue "
+                        writeRetType (Just retType) " "
+                        writeTemp ret ",3"
                         return (Just (imp,impOffset))
                 return (Just (value,offset,imp,retType)))
             (funcType func)
@@ -803,155 +639,103 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         allocItem <- if length allocs == 1
             then return (head allocs)
             else do
-                alloc <- writeNewTemp
-                writeCode " call "
-                writeAllocItemType
-                writeCode (" @alloc" ++ show (length allocs) ++ "(")
+                alloc <- writeNewTemp " call "
+                writeAllocItemType (" @alloc" ++ show (length allocs) ++ "(")
                 zipWithM_ (\ comma alloc -> do
                         writeCode comma
-                        writeAllocItemType
-                        writeCode " "
-                        writeTemp alloc)
+                        writeAllocItemType " "
+                        writeTemp alloc "")
                     ("":repeat ",") allocs
                 writeCode ")"
                 return alloc
         when inLoop (do
-            allocPtr <- writeNewTemp
-            writeCode "extractvalue "
-            writeAllocItemType
-            writeCode " "
-            writeTemp allocItem
-            writeCode ",0"
-            rawPtr <- writeNewTemp
-            writeCode "bitcast "
-            writeValueType
-            writeCode "* "
-            writeTemp allocPtr
-            writeCode " to i8*"
+            allocPtr <- writeNewTemp "extractvalue "
+            writeAllocItemType " "
+            writeTemp allocItem ",0"
+            rawPtr <- writeNewTemp "bitcast "
+            writeValueType "* "
+            writeTemp allocPtr " to i8*"
             writeClearAlloca rawPtr allocSize)
         return allocItem
 
     writeCopyValue (destval,destoffset,destimp,Type bitsize rtt)
                    (srcval,srcoffset,srcimp,_) zeroDestOffset = do
         writeCode " call void @copy("
-        writeValueType
-        writeCode " "
-        writeTemp srcval
-        writeCode ","
-        writeOffsetType
-        writeCode " "
-        writeTemp srcoffset
-        writeCode ","
-        writeValueType
-        writeCode " "
-        writeTemp destval
-        writeCode ","
-        writeOffsetType
-        writeCode " "
-        if zeroDestOffset then writeCode "0" else writeTemp destoffset
-        writeCode ","
-        writeOffsetType
-        writeCode (" " ++ show bitsize ++ ")")
+        writeValueType " "
+        writeTemp srcval ","
+        writeOffsetType " "
+        writeTemp srcoffset ","
+        writeValueType " "
+        writeTemp destval ","
+        writeOffsetType " "
+        if zeroDestOffset then writeCode "0," else writeTemp destoffset ","
+        writeOffsetType (" " ++ show bitsize ++ ")")
         when (length rtt > 0) (do
             let Just (destimpval,destimpoffset) = destimp
             let Just (srcimpval,srcimpoffset) = srcimp
             writeCode " call void @copyrtt(i8** "
-            writeTemp srcimpval
-            writeCode ","
-            writeRTTOffsetType
-            writeCode " "
-            writeTemp srcimpoffset
-            writeCode ",i8** "
-            writeTemp destimpval
-            writeCode ","
-            writeRTTOffsetType
-            writeCode " "
-            if zeroDestOffset then writeCode "0" else writeTemp destimpoffset
-            writeCode ","
-            writeRTTOffsetType
-            writeCode (" " ++ show (length rtt) ++ ")"))
+            writeTemp srcimpval ","
+            writeRTTOffsetType " "
+            writeTemp srcimpoffset ",i8** "
+            writeTemp destimpval ","
+            writeRTTOffsetType " "
+            if zeroDestOffset
+                then writeCode "0,"
+                else writeTemp destimpoffset ","
+            writeRTTOffsetType (" " ++ show (length rtt) ++ ")"))
 
 writeBuiltinCopy :: CodeGen ()
 writeBuiltinCopy = do
     writeCode "define void @copy("
-    writeValueType
-    writeCode "* %srcval,"
-    writeOffsetType
-    writeCode " %srcoffset,"
-    writeValueType
-    writeCode "* %destval,"
-    writeOffsetType
-    writeCode " %destoffset,"
-    writeOffsetType
-    writeCode " %bitsize) {"
+    writeValueType "* %srcval,"
+    writeOffsetType " %srcoffset,"
+    writeValueType "* %destval,"
+    writeOffsetType " %destoffset,"
+    writeOffsetType " %bitsize) {"
     entry <- writeNewLabel
     writeCode " br label "
     loopRef <- forwardRefLabel writeLabelRef
     loop <- writeNewLabel
     loopRef loop
-    index <- writeNewTemp
-    writeCode "phi "
-    writeOffsetType
-    writeCode "[0,"
+    index <- writeNewTemp "phi "
+    writeOffsetType "[0,"
     writeLabelRef entry
     writeCode "],"
     iterateRef <- forwardRef (\ ((newIndex,newLabel,_):_) -> do
         writeCode "["
-        writeTemp newIndex
-        writeCode ","
+        writeTemp newIndex ","
         writeLabelRef newLabel
         writeCode "]")
-    cmp <- writeNewTemp
-    writeCode "icmp ult "
-    writeOffsetType
-    writeCode " "
-    writeTemp index
-    writeCode ",%bitsize"
+    cmp <- writeNewTemp "icmp ult "
+    writeOffsetType " "
+    writeTemp index ",%bitsize"
     (continueLabelRef,retLabelRef) <- writeBranch cmp
     continueLabel <- writeNewLabel
     continueLabelRef continueLabel
-    srcIndex <- writeNewTemp
-    writeCode "add "
-    writeOffsetType
-    writeCode " %srcoffset,"
-    writeTemp index
-    srcPtr <- writeNewTemp
-    writeCode "getelementptr "
-    writeValueType
-    writeCode ","
-    writeValueType
-    writeCode "* %srcval,i32 0,i32 1,"
-    writeOffsetType
-    writeCode " "
-    writeTemp srcIndex
-    srcBit <- writeNewTemp
-    writeCode "load i1,i1* "
-    writeTemp srcPtr
-    destIndex <- writeNewTemp
-    writeCode "add "
-    writeOffsetType
-    writeCode " %destoffset,"
-    writeTemp index
-    destPtr <- writeNewTemp
-    writeCode "getelementptr "
-    writeValueType
-    writeCode ","
-    writeValueType
-    writeCode "* %destval,i32 0,i32 1,"
-    writeOffsetType
-    writeCode " "
-    writeTemp destIndex
-    writeCode " store i1 "
-    writeTemp srcBit
-    writeCode ",i1* "
-    writeTemp destPtr
-    newIndex <- writeNewTemp
+    srcIndex <- writeNewTemp "add "
+    writeOffsetType " %srcoffset,"
+    writeTemp index ""
+    srcPtr <- writeNewTemp "getelementptr "
+    writeValueType ","
+    writeValueType "* %srcval,i32 0,i32 1,"
+    writeOffsetType " "
+    writeTemp srcIndex ""
+    srcBit <- writeNewTemp "load i1,i1* "
+    writeTemp srcPtr ""
+    destIndex <- writeNewTemp "add "
+    writeOffsetType " %destoffset,"
+    writeTemp index ""
+    destPtr <- writeNewTemp "getelementptr "
+    writeValueType ","
+    writeValueType "* %destval,i32 0,i32 1,"
+    writeOffsetType " "
+    writeTemp destIndex " store i1 "
+    writeTemp srcBit ",i1* "
+    writeTemp destPtr ""
+    newIndex <- writeNewTemp "add "
     iterateRef (newIndex,continueLabel,Nothing)
-    writeCode "add "
-    writeOffsetType
-    writeCode " 1,"
-    writeTemp index
-    writeCode " br label "
+    writeOffsetType " 1,"
+    writeTemp index " br label "
     writeLabelRef loop
     retLabel <- writeNewLabel
     retLabelRef retLabel
@@ -960,72 +744,49 @@ writeBuiltinCopy = do
 writeBuiltinCopyRTT :: CodeGen ()
 writeBuiltinCopyRTT = do
     writeCode "define void @copyrtt(i8** %srcval,"
-    writeRTTOffsetType
-    writeCode " %srcoffset,i8** %destval,"
-    writeRTTOffsetType
-    writeCode " %destoffset,"
-    writeRTTOffsetType
-    writeCode " %size) {"
+    writeRTTOffsetType " %srcoffset,i8** %destval,"
+    writeRTTOffsetType " %destoffset,"
+    writeRTTOffsetType " %size) {"
     entry <- writeNewLabel
     writeCode " br label "
     loopRef <- forwardRefLabel writeLabelRef
     loop <- writeNewLabel
     loopRef loop
-    index <- writeNewTemp
-    writeCode "phi "
-    writeRTTOffsetType
-    writeCode "[0,"
+    index <- writeNewTemp "phi "
+    writeRTTOffsetType "[0,"
     writeLabelRef entry
     writeCode "],"
     iterateRef <- forwardRef (\ ((newIndex,newLabel,_):_) -> do
         writeCode "["
-        writeTemp newIndex
-        writeCode ","
+        writeTemp newIndex ","
         writeLabelRef newLabel
         writeCode "]")
-    cmp <- writeNewTemp
-    writeCode "icmp ult "
-    writeRTTOffsetType
-    writeCode " "
-    writeTemp index
-    writeCode ",%size"
+    cmp <- writeNewTemp "icmp ult "
+    writeRTTOffsetType " "
+    writeTemp index ",%size"
     (continueLabelRef,retLabelRef) <- writeBranch cmp
     continueLabel <- writeNewLabel
     continueLabelRef continueLabel
-    srcIndex <- writeNewTemp
-    writeCode "add "
-    writeRTTOffsetType
-    writeCode " %srcoffset,"
-    writeTemp index
-    srcPtr <- writeNewTemp
-    writeCode "getelementptr i8*,i8** %srcval,"
-    writeRTTOffsetType
-    writeCode " "
-    writeTemp srcIndex
-    srcVal <- writeNewTemp
-    writeCode "load i8*,i8** "
-    writeTemp srcPtr
-    destIndex <- writeNewTemp
-    writeCode "add "
-    writeRTTOffsetType
-    writeCode " %destoffset,"
-    writeTemp index
-    destPtr <- writeNewTemp
-    writeCode "getelementptr i8*,i8** %destval,"
-    writeRTTOffsetType
-    writeCode " "
-    writeTemp destIndex
-    writeCode " store i8* "
-    writeTemp srcVal
-    writeCode ",i8** "
-    writeTemp destPtr
-    newIndex <- writeNewTemp
+    srcIndex <- writeNewTemp "add "
+    writeRTTOffsetType " %srcoffset,"
+    writeTemp index ""
+    srcPtr <- writeNewTemp "getelementptr i8*,i8** %srcval,"
+    writeRTTOffsetType " "
+    writeTemp srcIndex ""
+    srcVal <- writeNewTemp "load i8*,i8** "
+    writeTemp srcPtr ""
+    destIndex <- writeNewTemp "add "
+    writeRTTOffsetType " %destoffset,"
+    writeTemp index ""
+    destPtr <- writeNewTemp "getelementptr i8*,i8** %destval,"
+    writeRTTOffsetType " "
+    writeTemp destIndex " store i8* "
+    writeTemp srcVal ",i8** "
+    writeTemp destPtr ""
+    newIndex <- writeNewTemp "add "
     iterateRef (newIndex,continueLabel,Nothing)
-    writeCode "add "
-    writeRTTOffsetType
-    writeCode " 1,"
-    writeTemp index
-    writeCode " br label "
+    writeRTTOffsetType " 1,"
+    writeTemp index " br label "
     writeLabelRef loop
     retLabel <- writeNewLabel
     retLabelRef retLabel
@@ -1034,8 +795,7 @@ writeBuiltinCopyRTT = do
 writeBuiltinAlloc :: Int -> CodeGen ()
 writeBuiltinAlloc n = do
     writeCode "define "
-    writeAllocItemType
-    writeCode (" @alloc" ++ show n ++ "(")
+    writeAllocItemType (" @alloc" ++ show n ++ "(")
     zipWithM_ param ("":repeat ",") [0..n-1]
     writeCode ") {"
     writeNewLabel
@@ -1043,8 +803,7 @@ writeBuiltinAlloc n = do
     label <- writeNewLabel
     labelRef label
     writeCode " ret "
-    writeAllocItemType
-    writeCode " undef }"
+    writeAllocItemType " undef }"
   where
     param comma i = do
         writeCode comma
@@ -1052,57 +811,35 @@ writeBuiltinAlloc n = do
     writeAlloc labelRef i = do
         label <- writeNewLabel
         labelRef label
-        rawPtr <- writeNewTemp
-        writeCode ("extractvalue {i8*,i8**} %a" ++ show i ++ ",0")
-        allocPtr <- writeNewTemp
-        writeCode "bitcast i8* "
-        writeTemp rawPtr
-        writeCode " to "
-        writeValueType
-        writeCode "*"
-        ptr <- writeNewTemp
-        writeCode "getelementptr "
-        writeValueType
-        writeCode ","
-        writeValueType
-        writeCode "* "
-        writeTemp allocPtr
-        writeCode ",i32 0,i32 0"
-        refCount <- writeNewTemp
-        writeCode "load "
-        writeRefCountType
-        writeCode "* "
-        writeTemp ptr
-        cmp <- writeNewTemp
-        writeCode "icmp eq "
-        writeRefCountType
-        writeCode " 0,"
-        writeTemp refCount
+        rawPtr <- writeNewTemp ("extractvalue {i8*,i8**} %a" ++ show i ++ ",0")
+        allocPtr <- writeNewTemp "bitcast i8* "
+        writeTemp rawPtr " to "
+        writeValueType "*"
+        ptr <- writeNewTemp "getelementptr "
+        writeValueType ","
+        writeValueType "* "
+        writeTemp allocPtr ",i32 0,i32 0"
+        refCount <- writeNewTemp "load "
+        writeRefCountType "* "
+        writeTemp ptr ""
+        cmp <- writeNewTemp "icmp eq "
+        writeRefCountType " 0,"
+        writeTemp refCount ""
         (trueLabelRef,falseLabelRef) <- writeBranch cmp
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
-        impPtr <- writeNewTemp
-        writeCode ("extractvalue {i8*,i8**} %a" ++ show i ++ ",1")
-        halfAllocItem <- writeNewTemp
-        writeCode "insertvalue "
-        writeAllocItemType
-        writeCode " undef,"
-        writeValueType
-        writeCode "* "
-        writeTemp allocPtr
-        writeCode ",0"
-        allocItem <- writeNewTemp
-        writeCode "insertvalue "
-        writeAllocItemType
-        writeCode " "
-        writeTemp halfAllocItem
-        writeCode ",i8** "
-        writeTemp impPtr
-        writeCode ",1"
+        impPtr <- writeNewTemp ("extractvalue {i8*,i8**} %a" ++ show i ++ ",1")
+        halfAllocItem <- writeNewTemp "insertvalue "
+        writeAllocItemType " undef,"
+        writeValueType "* "
+        writeTemp allocPtr ",0"
+        allocItem <- writeNewTemp "insertvalue "
+        writeAllocItemType " "
+        writeTemp halfAllocItem ",i8** "
+        writeTemp impPtr ",1"
         writeCode " ret "
-        writeAllocItemType
-        writeCode " "
-        writeTemp allocItem
+        writeAllocItemType " "
+        writeTemp allocItem ""
         return falseLabelRef
 
 varMaxAliasesAndSizes :: LLVMStmt -> [(InsnId,((Int,Int),Int))]

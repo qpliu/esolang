@@ -63,17 +63,13 @@ instance RuntimeFunc (LLVMRuntimeFunc fwd) where
 
 writeNewBitPtr :: Either Temp String -> Temp -> LLVMGen fwd Temp
 writeNewBitPtr value index = do
-    bitPtr <- writeNewTemp
-    writeCode "getelementptr {"
-    writeRefCountType
-    writeCode ",[0 x i1]},{"
-    writeRefCountType
-    writeCode ",[0 x i1]}* "
-    either writeTemp writeCode value
+    bitPtr <- writeNewTemp "getelementptr {"
+    writeRefCountType ",[0 x i1]},{"
+    writeRefCountType ",[0 x i1]}* "
+    either (flip writeTemp "") writeCode value
     writeCode ",i32 0,i32 1,"
-    writeOffsetType
-    writeCode " "
-    writeTemp index
+    writeOffsetType " "
+    writeTemp index ""
     return bitPtr
 
 getByte :: AstType -> LLVMGen fwd ()
@@ -81,62 +77,44 @@ getByte astType = do
     writeCode "define void @"
     writeName "getByte"
     writeCode "({"
-    writeRefCountType
-    writeCode ",[0 x i1]}* %value,"
-    writeOffsetType
-    writeCode " %offset"
+    writeRefCountType ",[0 x i1]}* %value,"
+    writeOffsetType " %offset"
     when (astTypeImportSize astType > 0) (do
         writeCode ",i8** %import,"
-        writeRTTOffsetType
-        writeCode " %importoffset")
+        writeRTTOffsetType " %importoffset")
     writeCode ") {"
     writeNewLabel
-    buffer <- writeNewTemp
-    writeCode "alloca i8,i32 1"
-    count <- writeNewTemp
-    writeCode "call i32 @read(i32 0,i8* "
-    writeTemp buffer
-    writeCode ",i32 1)"
-    cmp <- writeNewTemp
-    writeCode "icmp ne i32 1,"
-    writeTemp count
+    buffer <- writeNewTemp "alloca i8,i32 1"
+    count <- writeNewTemp "call i32 @read(i32 0,i8* "
+    writeTemp buffer ",i32 1)"
+    cmp <- writeNewTemp "icmp ne i32 1,"
+    writeTemp count ""
     when (astTypeSize astType > 8) (do
-        index <- writeNewTemp
-        writeCode "add "
-        writeOffsetType
-        writeCode " %offset,8"
+        index <- writeNewTemp "add "
+        writeOffsetType " %offset,8"
         eofBitPtr <- writeNewBitPtr (Right "%value") index
         writeCode " store i1 "
-        writeTemp cmp
-        writeCode " ,i1* "
-        writeTemp eofBitPtr)
+        writeTemp cmp " ,i1* "
+        writeTemp eofBitPtr "")
     (eofLabelRef,okLabelRef) <- writeBranch cmp
     eofLabel <- writeNewLabel
     eofLabelRef eofLabel
     writeCode " ret void"
     okLabel <- writeNewLabel
     okLabelRef okLabel
-    byte <- writeNewTemp
-    writeCode "load i8,i8* "
-    writeTemp buffer
+    byte <- writeNewTemp "load i8,i8* "
+    writeTemp buffer ""
     mapM_ (\ i -> do
-        index <- writeNewTemp
-        writeCode "add "
-        writeOffsetType
-        writeCode (" %offset," ++ show i)
+        index <- writeNewTemp "add "
+        writeOffsetType (" %offset," ++ show i)
         bitPtr <- writeNewBitPtr (Right "%value") index
-        shifted <- writeNewTemp
-        writeCode "lshr i8 "
-        writeTemp byte
-        writeCode ("," ++ show i)
-        bit <- writeNewTemp
-        writeCode "trunc i8 "
-        writeTemp shifted
-        writeCode " to i1"
+        shifted <- writeNewTemp "lshr i8 "
+        writeTemp byte ("," ++ show i)
+        bit <- writeNewTemp "trunc i8 "
+        writeTemp shifted " to i1"
         writeCode " store i1 "
-        writeTemp bit
-        writeCode ",i1* "
-        writeTemp bitPtr)
+        writeTemp bit ",i1* "
+        writeTemp bitPtr "")
         [0..min 7 (astTypeSize astType - 1)]
     writeCode " ret void }"
 
@@ -145,50 +123,33 @@ putByte astType = do
     writeCode "define void @"
     writeName "putByte"
     writeCode "({"
-    writeRefCountType
-    writeCode ",[0 x i1]}* %value,"
-    writeOffsetType
-    writeCode " %offset"
+    writeRefCountType ",[0 x i1]}* %value,"
+    writeOffsetType " %offset"
     when (astTypeImportSize astType > 0) (do
         writeCode ",i8** %import,"
-        writeRTTOffsetType
-        writeCode " %importoffset")
+        writeRTTOffsetType " %importoffset")
     writeCode ") {"
     writeNewLabel
-    buffer <- writeNewTemp
-    writeCode "alloca i8,i32 1"
-    accumulator <- writeNewTemp
-    writeCode "select i1 1,i8 0,i8 0"
+    buffer <- writeNewTemp "alloca i8,i32 1"
+    accumulator <- writeNewTemp "select i1 1,i8 0,i8 0"
     byte <- foldM (\ oldAccumulator i -> do
-        index <- writeNewTemp
-        writeCode "add "
-        writeOffsetType
-        writeCode (" %offset," ++ show i)
+        index <- writeNewTemp "add "
+        writeOffsetType (" %offset," ++ show i)
         bitPtr <- writeNewBitPtr (Right "%value") index
-        bit <- writeNewTemp
-        writeCode "load i1,i1* "
-        writeTemp bitPtr
-        extended <- writeNewTemp
-        writeCode "zext i1 "
-        writeTemp bit
-        writeCode " to i8"
-        shifted <- writeNewTemp
-        writeCode "shl i8 "
-        writeTemp extended
-        writeCode ("," ++ show i)
-        newAccumulator <- writeNewTemp
-        writeCode "or i8 "
-        writeTemp oldAccumulator
-        writeCode ","
-        writeTemp extended
+        bit <- writeNewTemp "load i1,i1* "
+        writeTemp bitPtr ""
+        extended <- writeNewTemp "zext i1 "
+        writeTemp bit " to i8"
+        shifted <- writeNewTemp "shl i8 "
+        writeTemp extended ("," ++ show i)
+        newAccumulator <- writeNewTemp "or i8 "
+        writeTemp oldAccumulator ","
+        writeTemp extended ""
         return newAccumulator)
         accumulator [0..min 7 (astTypeSize astType - 1)]
     writeCode " store i8 "
-    writeTemp byte
-    writeCode ",i8* "
-    writeTemp buffer
-    writeNewTemp
-    writeCode " call i32 @write(i32 1,i8* "
-    writeTemp buffer
-    writeCode ",i32 1)"
+    writeTemp byte ",i8* "
+    writeTemp buffer ""
+    writeNewTemp " call i32 @write(i32 1,i8* "
+    writeTemp buffer ",i32 1)"
     writeCode " ret void }"

@@ -127,12 +127,11 @@ newLabel = do
         (LLVMGenState (temp,Label (l+1),forwardRef) auxTypes refData code)
     return (Label l)
 
-writeNewTemp :: LLVMGen fwd Temp
-writeNewTemp = do
+writeNewTemp :: String -> LLVMGen fwd Temp
+writeNewTemp code = do
     temp <- newTemp
     writeCode " "
-    writeTemp temp
-    writeCode " = "
+    writeTemp temp (" = " ++ code)
     return temp
 
 writeNewLabel :: LLVMGen fwd Label
@@ -193,17 +192,17 @@ putForwardRefGen = ForwardRefGen . put
 writeCode :: Gen g => String -> g ()
 writeCode = genCode
 
-writeRefCountType :: (Gen g, Monad g) => g ()
-writeRefCountType = genRefCountType >>= genCode
+writeRefCountType :: (Gen g, Monad g) => String -> g ()
+writeRefCountType code = genRefCountType >>= genCode >> genCode code
 
-writeOffsetType :: (Gen g, Monad g) => g ()
-writeOffsetType = genOffsetType >>= genCode
+writeOffsetType :: (Gen g, Monad g) => String -> g ()
+writeOffsetType code = genOffsetType >>= genCode >> genCode code
 
-writeRTTOffsetType :: (Gen g, Monad g) => g ()
-writeRTTOffsetType = genRTTOffsetType >>= genCode
+writeRTTOffsetType :: (Gen g, Monad g) => String -> g ()
+writeRTTOffsetType code = genRTTOffsetType >>= genCode >> genCode code
 
-writeTemp :: Gen g => Temp -> g ()
-writeTemp (Temp t) = writeCode ("%" ++ show t)
+writeTemp :: Gen g => Temp -> String -> g ()
+writeTemp (Temp t) code  = writeCode ("%" ++ show t ++ code)
 
 writeLabel :: Gen g => Label -> g ()
 writeLabel (Label l) = writeCode (" l" ++ show l ++ ":")
@@ -222,8 +221,7 @@ writeBranch :: Temp
             -> LLVMGen fwd (Label -> LLVMGen fwd (),Label -> LLVMGen fwd ())
 writeBranch temp = do
     writeCode " br i1 "
-    writeTemp temp
-    writeCode ", label "
+    writeTemp temp ", label "
     trueLabelRef <- forwardRefLabel writeLabelRef
     writeCode ", label "
     falseLabelRef <- forwardRefLabel writeLabelRef
