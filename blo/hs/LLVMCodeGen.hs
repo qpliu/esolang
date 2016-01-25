@@ -2,7 +2,7 @@ module LLVMCodeGen
     (codeGen)
 where
 
-import Control.Monad(foldM,unless,void,when,zipWithM_)
+import Control.Monad(foldM,foldM_,unless,void,when,zipWithM_)
 import qualified Data.Set as Set
 import Data.Map(Map)
 import qualified Data.Map as Map
@@ -27,7 +27,7 @@ type LLVMExpr = Expr (LLVMRuntimeType FwdScope) (LLVMRuntimeFunc FwdScope)
 
 type Val = (Temp,Temp,Maybe (Temp,Temp),LLVMType)
 type Scope = (Map String Val)
-newtype FwdScope = FwdScope (Maybe Scope)
+newtype FwdScope = FwdScope (Maybe (Label,Scope))
 type CodeGen a = LLVMGen FwdScope a
 
 codeGen :: ([(String,LLVMType)],[(String,LLVMFunc)]) -> String
@@ -109,7 +109,7 @@ writeFunc name (FuncSig params retType) stmt = do
         return (varKey,(varAllocSizes Map.! size,allocItems)))
         varParams
     varAllocs <- foldM (\ allocs (varKey,(size,items)) -> do
-        mapM_ (writeClearAlloca size . fst) items
+        mapM_ (flip writeClearAlloca size . fst) items
         return (Map.insert varKey (size,map snd items) allocs))
         Map.empty varAllocsList
 
@@ -295,23 +295,70 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
     nsid = stmtNextId stmt
     checkNewBlock
       | Map.member sid branchFroms = do
-            newBlockLabel <- writeNewLabel
-            mapM_ (($ newBlockLabel) . fst) (branchFroms Map.! sid)
-            -- undefined update scope, emit phi instructions
-            return (newBlockLabel,scope,Map.delete sid branchFroms)
+            (newBlockLabel,newScope,newBranchFroms,finalScopeRef) <- newBlock
+            finalScopeRef (FwdScope Nothing)
+            return (newBlockLabel,newScope,newBranchFroms)
       | fellThru = return (blockLabel,scope,branchFroms)
       | otherwise = error "not fellThru and not br target"
-    updateScope newScope = do
+    newBlock = do
+        newBlockLabel <- writeNewLabel
+        mapM_ (($ newBlockLabel) . fst)
+              (maybe [] id (Map.lookup sid branchFroms))
+        newScope <- mapM (\ (name,(_,_,_,varType@(Type _ rtt))) -> do
+                value <- newTemp
+                offset <- newTemp
+                imp <- if null rtt
+                    then return Nothing
+                    else do
+                        imp <- newTemp
+                        impOffset <- newTemp
+                        return (Just (imp,impOffset))
+                return (name,(value,offset,imp,varType)))
+            (Map.toList scope)
+        let predScopes = maybe [(blockLabel,scope)] (map snd)
+                               (Map.lookup sid branchFroms)
+        lastScopeRef <- forwardRefInfo (\ (FwdScope lastScope) -> do
+            mapM_ (\ (name,(value,offset,imp,_)) -> do
+                    let phiargs = maybe id (:) lastScope predScopes
+                    writeTemp value " = phi "
+                    writeCode "{"
+                    writeRefCountType ",[0 x i1]}* "
+                    writePhiArgs name phiargs (\ (value,_,_,_) -> value)
+                    writeTemp offset " = phi "
+                    writeOffsetType " "
+                    writePhiArgs name phiargs (\ (_,offset,_,_) -> value)
+                    undefined -- emit phi arguments
+                    maybe (return ()) (\ (imp,impOffset) -> do
+                            writeTemp imp " = phi i8** "
+                            writePhiArgs name phiargs
+                                (\ (_,_,Just (imp,_),_) -> imp)
+                            writeTemp impOffset " = phi "
+                            writeRTTOffsetType " "
+                            writePhiArgs name phiargs
+                                (\ (_,_,Just (_,impOffset),_) -> impOffset))
+                        imp)
+                newScope)
+        return (newBlockLabel,Map.fromList newScope,Map.delete sid branchFroms,
+                lastScopeRef)
+    writePhiArgs name phiargs getarg = do
+        foldM_ (\ comma (predLabel,predScope) -> do
+                writeCode (comma ++ "[")
+                writeTemp (getarg (predScope Map.! name)) ","
+                writeLabel predLabel
+                writeCode "]"
+                return ",")
+            "" phiargs
+    updateScope newScope afterReturn = do
         updatedScope <- foldM (\ scope (varName,varType) -> do
                 writeUnref (scope Map.! varName)
                 return (Map.delete varName scope))
             newScope (stmtLeavingScope stmt (stmtNext stmt))
-        maybe (do writeCode " ret void"
+        maybe (do unless afterReturn (writeCode " ret void")
                   return (updatedScope,False))
               (const (return (updatedScope,True)))
               nsid
     branchNext newBlockLabel newScope = do
-        (updatedScope,fellThru) <- updateScope newScope
+        (updatedScope,fellThru) <- updateScope newScope False
         if not fellThru
             then return (newBlockLabel,inLoop,False,updatedScope,branchFroms)
             else do
@@ -330,7 +377,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
 
     w (StmtBlock _ []) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        (updatedScope,fellThru) <- updateScope scope
+        (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtBlock _ stmts) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
@@ -376,7 +423,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                 return val)
             expr
         (updatedScope,fellThru) <-
-            updateScope (Map.insert varName val scope)
+            updateScope (Map.insert varName val scope) False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtIf _ expr ifBlock elseBlock) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
@@ -408,20 +455,32 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                     else branchNext falseBlockLabel falseScope)
             elseBlock
     w (StmtFor _ stmt) = do
-        newBlockLabel <- writeNewLabel
-        -- setup forward ref for finalScope
-        -- generate new scope from forward refs and predecessors
+        loopLabelRef <- if fellThru
+            then do
+                writeCode " br label "
+                forwardRefLabel writeLabelRef
+            else return (const (return ()))
+        (blockLabel,scope,branchFroms,finalScopeRef) <- newBlock
+        loopLabelRef blockLabel
         (finalBlockLabel,_,finalFellThru,finalScope,branchFroms) <-
             writeStmt nparams varAllocs
-                      (newBlockLabel,True,True,scope,branchFroms) stmt
-        if finalFellThru
+                      (blockLabel,True,True,scope,branchFroms) stmt
+        branchFroms <- if finalFellThru
             then do
-                -- send Just finalScope back
+                finalScopeRef (FwdScope (Just (finalBlockLabel,finalScope)))
                 writeCode " br label "
-                writeLabel newBlockLabel
-            else do
-                -- send Nothing back
-                undefined
+                writeLabelRef blockLabel
+                return branchFroms
+            else
+                maybe (do
+                        finalScopeRef (FwdScope Nothing)
+                        return branchFroms)
+                      (\ comeFroms -> do
+                        finalScopeRef
+                            (FwdScope (Just (finalBlockLabel,finalScope)))
+                        mapM_ (($ blockLabel) . fst) comeFroms
+                        return (Map.delete sid branchFroms))
+                      (Map.lookup sid branchFroms)
         return (finalBlockLabel,inLoop,False,finalScope,branchFroms)
     w (StmtBreak _) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
@@ -430,7 +489,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
     w (StmtReturn _ expr) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
         exprVal <- maybe (return Nothing) (fmap Just . wExpr) expr
-        (updatedScope,_) <- updateScope scope
+        (updatedScope,_) <- updateScope scope True
         maybe (writeCode " ret void")
             (\ val@(value,offset,imp,retType@(Type bitSize rtt)) -> do
                 labelRef <- foldM (\ labelRef paramIndex -> do
@@ -466,7 +525,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                                 writeTemp impOffset ",3"
                                 return retval4)
                             imp
-                        writeCode "ret "
+                        writeCode " ret "
                         writeRetType (Just retType) " "
                         writeTemp retval ""
                         return (Just falseLabelRef))
@@ -505,7 +564,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                         writeRTTOffsetType " 0,3"
                         return retval4)
                     imp
-                writeCode "ret "
+                writeCode " ret "
                 writeRetType (Just retType) " "
                 writeTemp retval "")
             exprVal
@@ -518,7 +577,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         writeCode (" store i1 " ++ (if bit then "1" else "0") ++ ",i1* ")
         writeTemp bitPtr ""
         writeRTTUnref val
-        (updatedScope,fellThru) <- updateScope scope
+        (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtAssign _ lhs@(ExprVar varName) rhs) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
@@ -528,7 +587,8 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         writeRTTUnref rval
         writeRTTUnref lval
         writeUnref lval
-        (updatedScope,fellThru) <- updateScope (Map.insert varName rval scope)
+        (updatedScope,fellThru) <-
+            updateScope (Map.insert varName rval scope) False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtAssign _ lhs rhs) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
@@ -536,19 +596,19 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         rval <- wExpr rhs
         writeRTTUnref lval
         writeCopyValue lval rval False
-        (updatedScope,fellThru) <- updateScope scope
+        (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtExpr _ expr@(ExprFunc _ func _ _)) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
         retVal <- writeCallFunc expr
         maybe (return ()) writeRTTUnref retVal
-        (updatedScope,fellThru) <- updateScope scope
+        (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtExpr _ expr) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
         val <- wExpr expr
         writeRTTUnref val
-        (updatedScope,fellThru) <- updateScope scope
+        (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
 
     wExpr (ExprVar varName) = do
