@@ -144,7 +144,7 @@ putByte astType = do
         writeTemp extended ("," ++ show i)
         newAccumulator <- writeNewTemp "or i8 "
         writeTemp oldAccumulator ","
-        writeTemp extended ""
+        writeTemp shifted ""
         return newAccumulator)
         accumulator [0..min 7 (astTypeSize astType - 1)]
     writeCode " store i8 "

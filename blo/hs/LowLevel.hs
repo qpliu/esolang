@@ -66,10 +66,14 @@ stmtScope stmt = let (StmtInfo scope _ _) = stmtInfo stmt in scope
 
 stmtLeavingScope :: Stmt rtt rtf -> Maybe (Stmt rtt rtf) -> [(String,Type rtt)]
 stmtLeavingScope stmt nextStmt =
-    maybe (stmtScope stmt) (subtract (stmtScope stmt) . stmtScope) nextStmt
+    maybe (stmtScopeOnExit stmt)
+          (subtract (stmtScopeOnExit stmt) . stmtScope) nextStmt
   where
     subtract scope newScope =
         filter (maybe True (const False) . flip lookup newScope . fst) scope
+    stmtScopeOnExit (StmtVar _ name varType _ _) =
+        (name,varType):stmtScope stmt
+    stmtScopeOnExit stmt = stmtScope stmt
 
 stmtId :: Stmt rtt rtf -> InsnId
 stmtId stmt = let (StmtInfo _ _ insnId) = stmtInfo stmt in insnId
@@ -190,9 +194,10 @@ toLowLevelFuncs types rtFuncs = funcs
                                     pos
                 in  (insert pos (StmtBreak info) stmtDict,scope)
             addAstStmt (AstStmtReturn pos astExpr) =
-                (insert pos (StmtReturn (stmtInfo pos) (fmap toExpr astExpr))
-                        stmtDict,
-                 scope)
+                let info = StmtInfo (map (fmap getType) scope) Nothing pos
+                in  (insert pos (StmtReturn info (fmap toExpr astExpr))
+                            stmtDict,
+                     scope)
             addAstStmt (AstStmtSetClear pos bit astExpr) =
                 (insert pos (StmtSetClear (stmtInfo pos) bit (toExpr astExpr))
                         stmtDict,

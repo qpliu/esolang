@@ -3,3 +3,6 @@ blo: blo.hs Check.hs Compile.hs Interp.hs InterpRuntime.hs LLVMCodeGen.hs LLVMGe
 
 clean:
 	$(RM) blo *.hi *.o
+
+test:
+	runghc Test

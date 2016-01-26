@@ -163,8 +163,7 @@ writeValueType code = do
 
 writeAllocItemType :: String -> CodeGen ()
 writeAllocItemType code = do
-    writeCode "{"
-    writeValueType ("*,i8**}" ++ code)
+    writeCode ("{i8*,i8**}" ++ code)
 
 writeParam :: String -> (String,(Int,LLVMType)) -> CodeGen ()
 writeParam comma (_,(index,Type _ rtt)) = do
@@ -320,18 +319,21 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         lastScopeRef <- forwardRefInfo (\ (FwdScope lastScope) -> do
             mapM_ (\ (name,(value,offset,imp,_)) -> do
                     let phiargs = maybe id (:) lastScope predScopes
+                    writeCode " "
                     writeTemp value " = phi "
                     writeCode "{"
                     writeRefCountType ",[0 x i1]}* "
                     writePhiArgs name phiargs (\ (value,_,_,_) -> value)
+                    writeCode " "
                     writeTemp offset " = phi "
                     writeOffsetType " "
-                    writePhiArgs name phiargs (\ (_,offset,_,_) -> value)
-                    undefined -- emit phi arguments
+                    writePhiArgs name phiargs (\ (_,offset,_,_) -> offset)
                     maybe (return ()) (\ (imp,impOffset) -> do
+                            writeCode " "
                             writeTemp imp " = phi i8** "
                             writePhiArgs name phiargs
                                 (\ (_,_,Just (imp,_),_) -> imp)
+                            writeCode " "
                             writeTemp impOffset " = phi "
                             writeRTTOffsetType " "
                             writePhiArgs name phiargs
@@ -344,7 +346,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         foldM_ (\ comma (predLabel,predScope) -> do
                 writeCode (comma ++ "[")
                 writeTemp (getarg (predScope Map.! name)) ","
-                writeLabel predLabel
+                writeLabelRef predLabel
                 writeCode "]"
                 return ",")
             "" phiargs
@@ -357,7 +359,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                   return (updatedScope,False))
               (const (return (updatedScope,True)))
               nsid
-    branchNext newBlockLabel newScope = do
+    branchNext newBlockLabel newScope branchFroms = do
         (updatedScope,fellThru) <- updateScope newScope False
         if not fellThru
             then return (newBlockLabel,inLoop,False,updatedScope,branchFroms)
@@ -387,9 +389,12 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         (blockLabel,scope,branchFroms) <- checkNewBlock
         val <- maybe (do
                 allocItem <- writeGetAlloc sid
-                value <- writeNewTemp "extractvalue "
+                rawPtr <- writeNewTemp "extractvalue "
                 writeAllocItemType " "
                 writeTemp allocItem ",0"
+                value <- writeNewTemp "bitcast i8* "
+                writeTemp rawPtr " to "
+                writeValueType "*"
                 offset <- writeNewTemp "select i1 1,"
                 writeOffsetType " 0,"
                 writeOffsetType " 0"
@@ -417,7 +422,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                 writeAddRef val
                 return val)
             (\ expr -> do
-                val <- wExpr expr
+                val <- wExpr scope expr
                 writeAddRef val
                 writeRTTUnref val
                 return val)
@@ -427,7 +432,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtIf _ expr ifBlock elseBlock) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        (condValue,condOffset,_,_) <- wExpr expr
+        (condValue,condOffset,_,_) <- wExpr scope expr
         bitPtr <- writeNewBitPtr (Left condValue) (Left condOffset)
         bit <- writeNewTemp "load i1,i1* "
         writeTemp bitPtr ""
@@ -440,19 +445,19 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         branchFroms <- if not trueFellThru
             then return branchFroms
             else do
-                (_,_,_,_,branchFroms) <- branchNext trueBlockLabel trueScope
+                (_,_,_,_,branchFroms) <-
+                    branchNext trueBlockLabel trueScope branchFroms
                 return branchFroms
         falseLabel <- writeNewLabel
         falseLabelRef falseLabel
-        maybe (branchNext falseLabel scope) (\ elseBlock -> do
+        maybe (branchNext falseLabel scope branchFroms) (\ elseBlock -> do
                 (falseBlockLabel,_,falseFellThru,falseScope,branchFroms) <-
                     writeStmt nparams varAllocs
                               (falseLabel,inLoop,True,scope,branchFroms)
                               elseBlock
                 if not falseFellThru
-                    then return (falseBlockLabel,inLoop,False,falseScope,
-                                 branchFroms)
-                    else branchNext falseBlockLabel falseScope)
+                    then return (blockLabel,inLoop,False,scope,branchFroms)
+                    else branchNext falseBlockLabel falseScope branchFroms)
             elseBlock
     w (StmtFor _ stmt) = do
         loopLabelRef <- if fellThru
@@ -485,10 +490,10 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
     w (StmtBreak _) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
         -- this should be the last stmt in a StmtBlock
-        branchNext blockLabel scope
+        branchNext blockLabel scope branchFroms
     w (StmtReturn _ expr) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        exprVal <- maybe (return Nothing) (fmap Just . wExpr) expr
+        exprVal <- maybe (return Nothing) (fmap Just . (wExpr scope)) expr
         (updatedScope,_) <- updateScope scope True
         maybe (writeCode " ret void")
             (\ val@(value,offset,imp,retType@(Type bitSize rtt)) -> do
@@ -534,8 +539,11 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                         label <- writeNewLabel
                         labelRef label)
                     labelRef
-                retAlloc <- writeNewTemp "extractvalue "
+                retAllocRawPtr <- writeNewTemp "extractvalue "
                 writeAllocItemType " %retval,0"
+                retAlloc <- writeNewTemp "bitcast i8* "
+                writeTemp retAllocRawPtr " to "
+                writeValueType "*"
                 retImpAlloc <- maybe (return Nothing) (const (do
                         retImpAlloc <- writeNewTemp "extractvalue "
                         writeAllocItemType " %retval,1"
@@ -572,7 +580,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         return (blockLabel,inLoop,False,updatedScope,branchFroms)
     w (StmtSetClear _ bit expr) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        val@(value,offset,_,_) <- wExpr expr
+        val@(value,offset,_,_) <- wExpr scope expr
         bitPtr <- writeNewBitPtr (Left value) (Left offset)
         writeCode (" store i1 " ++ (if bit then "1" else "0") ++ ",i1* ")
         writeTemp bitPtr ""
@@ -581,8 +589,8 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtAssign _ lhs@(ExprVar varName) rhs) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        lval <- wExpr lhs
-        rval <- wExpr rhs
+        lval <- wExpr scope lhs
+        rval <- wExpr scope rhs
         writeAddRef rval
         writeRTTUnref rval
         writeRTTUnref lval
@@ -592,35 +600,35 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtAssign _ lhs rhs) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        lval <- wExpr lhs
-        rval <- wExpr rhs
+        lval <- wExpr scope lhs
+        rval <- wExpr scope rhs
         writeRTTUnref lval
         writeCopyValue lval rval False
         (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtExpr _ expr@(ExprFunc _ func _ _)) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        retVal <- writeCallFunc expr
+        retVal <- writeCallFunc scope expr
         maybe (return ()) writeRTTUnref retVal
         (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
     w (StmtExpr _ expr) = do
         (blockLabel,scope,branchFroms) <- checkNewBlock
-        val <- wExpr expr
+        val <- wExpr scope expr
         writeRTTUnref val
         (updatedScope,fellThru) <- updateScope scope False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
 
-    wExpr (ExprVar varName) = do
+    wExpr scope (ExprVar varName) = do
         let val = scope Map.! varName
         writeRTTAddRef val
         return val
-    wExpr expr@(ExprFunc _ func _ _)  = do
+    wExpr scope expr@(ExprFunc _ func _ _)  = do
         let Just retType@(Type _ rtt) = funcType func
-        Just retVal <- writeCallFunc expr
+        Just retVal <- writeCallFunc scope expr
         return retVal
-    wExpr (ExprField bitOffset impOffset exprType@(Type _ rtt) expr) = do
-        (value,offset,imp,_) <- wExpr expr
+    wExpr scope (ExprField bitOffset impOffset exprType@(Type _ rtt) expr) = do
+        (value,offset,imp,_) <- wExpr scope expr
         newOffset <- if bitOffset == 0
             then return offset
             else do
@@ -640,8 +648,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                         return (Just (baseImp,newImpOffset))
         return (value,newOffset,newImp,exprType)
 
-    writeCallFunc (ExprFunc funcName func argExprs (maxAliases,insnId)) = do
-        args <- mapM wExpr argExprs
+    writeCallFunc scope
+                  (ExprFunc funcName func argExprs (maxAliases,insnId)) = do
+        args <- mapM (wExpr scope) argExprs
         retAlloc <- maybe (return Nothing)
                           (const (fmap Just (writeGetAlloc insnId)))
                           (funcType func)
@@ -709,12 +718,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                 writeCode ")"
                 return alloc
         when inLoop (do
-            allocPtr <- writeNewTemp "extractvalue "
+            rawPtr <- writeNewTemp "extractvalue "
             writeAllocItemType " "
             writeTemp allocItem ",0"
-            rawPtr <- writeNewTemp "bitcast "
-            writeValueType "* "
-            writeTemp allocPtr " to i8*"
             writeClearAlloca rawPtr allocSize)
         return allocItem
 
@@ -867,11 +873,12 @@ writeBuiltinAlloc n = do
   where
     param comma i = do
         writeCode comma
-        writeCode ("{i8*,i8**} %a" ++ show i)
+        writeAllocItemType (" %a" ++ show i)
     writeAlloc labelRef i = do
         label <- writeNewLabel
         labelRef label
-        rawPtr <- writeNewTemp ("extractvalue {i8*,i8**} %a" ++ show i ++ ",0")
+        rawPtr <- writeNewTemp "extractvalue "
+        writeAllocItemType (" %a" ++ show i ++ ",0")
         allocPtr <- writeNewTemp "bitcast i8* "
         writeTemp rawPtr " to "
         writeValueType "*"
@@ -888,7 +895,8 @@ writeBuiltinAlloc n = do
         (trueLabelRef,falseLabelRef) <- writeBranch cmp
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
-        impPtr <- writeNewTemp ("extractvalue {i8*,i8**} %a" ++ show i ++ ",1")
+        impPtr <- writeNewTemp "extractvalue "
+        writeAllocItemType (" %a" ++ show i ++ ",1")
         halfAllocItem <- writeNewTemp "insertvalue "
         writeAllocItemType " undef,"
         writeValueType "* "
