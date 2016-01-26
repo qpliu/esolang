@@ -708,7 +708,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         allocItem <- if length allocs == 1
             then return (head allocs)
             else do
-                alloc <- writeNewTemp " call "
+                alloc <- writeNewTemp "call "
                 writeAllocItemType (" @alloc" ++ show (length allocs) ++ "(")
                 zipWithM_ (\ comma alloc -> do
                         writeCode comma
@@ -727,11 +727,11 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
     writeCopyValue (destval,destoffset,destimp,Type bitsize rtt)
                    (srcval,srcoffset,srcimp,_) zeroDestOffset = do
         writeCode " call void @copy("
-        writeValueType " "
+        writeValueType "* "
         writeTemp srcval ","
         writeOffsetType " "
         writeTemp srcoffset ","
-        writeValueType " "
+        writeValueType "* "
         writeTemp destval ","
         writeOffsetType " "
         if zeroDestOffset then writeCode "0," else writeTemp destoffset ","
@@ -865,7 +865,9 @@ writeBuiltinAlloc n = do
     zipWithM_ param ("":repeat ",") [0..n-1]
     writeCode ") {"
     writeNewLabel
-    labelRef <- foldM writeAlloc (const (return ())) [0..n-1]
+    writeCode " br label "
+    labelRef <- forwardRefLabel writeLabelRef
+    labelRef <- foldM writeAlloc labelRef [0..n-1]
     label <- writeNewLabel
     labelRef label
     writeCode " ret "
@@ -895,19 +897,8 @@ writeBuiltinAlloc n = do
         (trueLabelRef,falseLabelRef) <- writeBranch cmp
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
-        impPtr <- writeNewTemp "extractvalue "
-        writeAllocItemType (" %a" ++ show i ++ ",1")
-        halfAllocItem <- writeNewTemp "insertvalue "
-        writeAllocItemType " undef,"
-        writeValueType "* "
-        writeTemp allocPtr ",0"
-        allocItem <- writeNewTemp "insertvalue "
-        writeAllocItemType " "
-        writeTemp halfAllocItem ",i8** "
-        writeTemp impPtr ",1"
         writeCode " ret "
-        writeAllocItemType " "
-        writeTemp allocItem ""
+        writeAllocItemType (" %a" ++ show i)
         return falseLabelRef
 
 varMaxAliasesAndSizes :: LLVMStmt -> [(InsnId,((Int,Int),Int))]
