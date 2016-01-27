@@ -98,7 +98,7 @@ writeFunc name (FuncSig params retType) stmt = do
                 then return (writeCode . ("null" ++))
                 else do
                     rttPtr <- writeNewTemp "alloca i8*,"
-                    writeRTTOffsetType (show rttsize)
+                    writeRTTOffsetType (" "++show rttsize)
                     return (writeTemp rttPtr)
             aggregate <- writeNewTemp "insertvalue {i8*,i8**} undef,i8* "
             writeTemp allocPtr ",0"
@@ -889,6 +889,7 @@ writeBuiltinAlloc n = do
         writeValueType "* "
         writeTemp allocPtr ",i32 0,i32 0"
         refCount <- writeNewTemp "load "
+        writeRefCountType ","
         writeRefCountType "* "
         writeTemp ptr ""
         cmp <- writeNewTemp "icmp eq "

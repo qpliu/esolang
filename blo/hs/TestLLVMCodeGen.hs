@@ -2,15 +2,9 @@ module TestLLVMCodeGen
     (tests)
 where
 
-import Test.HUnit
-    (Assertion,Test(..),assertEqual,assertFailure)
+import Test.HUnit(Assertion,Test(..))
 
-import Compile(compile)
-import Parse(parse)
-import Check(check)
-import LowLevel(toLowLevel)
-import LLVMCodeGen(codeGen)
-import Runtime(annotateRuntime)
+import TestLLVM(alloc2,prologue,testCodeGen)
 
 tests :: Test
 tests = TestList [
@@ -44,20 +38,6 @@ tests = TestList [
     TestCase testVarInLoop,
     TestCase testVarInLoop2,
     TestCase testVarInLoop3
-    ]
-
-testCodeGen :: String -> String -> String -> Assertion
-testCodeGen label srccode expected =
-    either (assertFailure . show) (assertEqual label expected)
-           (compile (parse "(test)" srccode
-                        >>= check
-                        >>= fmap (codeGen . toLowLevel) . annotateRuntime))
-
-prologue :: String
-prologue = concat [
-    "declare void @llvm.memset.p0i8.i8(i8*,i8,i8,i32,i1)",
-    "define void @copy({i8,[0 x i1]}* %srcval,i8 %srcoffset,{i8,[0 x i1]}* %destval,i8 %destoffset,i8 %bitsize) { l0: br label %l1 l1: %0 = phi i8[0,%l0],[%7,%l2] %1 = icmp ult i8 %0,%bitsize br i1 %1, label %l2, label %l3 l2: %2 = add i8 %srcoffset,%0 %3 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %srcval,i32 0,i32 1,i8 %2 %4 = load i1,i1* %3 %5 = add i8 %destoffset,%0 %6 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %destval,i32 0,i32 1,i8 %5 store i1 %4,i1* %6 %7 = add i8 1,%0 br label %l1 l3: ret void }",
-    "define void @copyrtt(i8** %srcval,i8 %srcoffset,i8** %destval,i8 %destoffset,i8 %size) { l0: br label %l1 l1: %0 = phi i8[0,%l0],[%7,%l2] %1 = icmp ult i8 %0,%size br i1 %1, label %l2, label %l3 l2: %2 = add i8 %srcoffset,%0 %3 = getelementptr i8*,i8** %srcval,i8 %2 %4 = load i8*,i8** %3 %5 = add i8 %destoffset,%0 %6 = getelementptr i8*,i8** %destval,i8 %5 store i8* %4,i8** %6 %7 = add i8 1,%0 br label %l1 l3: ret void }"
     ]
 
 testSimple :: Assertion
@@ -1033,8 +1013,7 @@ testVarInLoop =
 testVarInLoop2 :: Assertion
 testVarInLoop2 =
     testCodeGen "testVarInLoop2" "type a{a}func TestVarInLoop2(){var a a;for{var b a;a=b}}"
-        (prologue ++
-	    "define {i8*,i8**} @alloc2({i8*,i8**} %a0,{i8*,i8**} %a1) { l0: br label %l1 l1: %0 = extractvalue {i8*,i8**} %a0,0 %1 = bitcast i8* %0 to {i8,[0 x i1]}* %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %1,i32 0,i32 0 %3 = load i8* %2 %4 = icmp eq i8 0,%3 br i1 %4, label %l2, label %l3 l2: ret {i8*,i8**} %a0 l3: %5 = extractvalue {i8*,i8**} %a1,0 %6 = bitcast i8* %5 to {i8,[0 x i1]}* %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0 %8 = load i8* %7 %9 = icmp eq i8 0,%8 br i1 %9, label %l4, label %l5 l4: ret {i8*,i8**} %a1 l5: ret {i8*,i8**} undef }" ++
+        (prologue ++ alloc2 ++
             "define void @_TestVarInLoop2() {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
@@ -1090,8 +1069,7 @@ testVarInLoop2 =
 testVarInLoop3 :: Assertion
 testVarInLoop3 =
     testCodeGen "testVarInLoop3" "type a{a}func TestVarInLoop3(a a){for{var b a;a.a=b.a}}"
-        (prologue ++
-	    "define {i8*,i8**} @alloc2({i8*,i8**} %a0,{i8*,i8**} %a1) { l0: br label %l1 l1: %0 = extractvalue {i8*,i8**} %a0,0 %1 = bitcast i8* %0 to {i8,[0 x i1]}* %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %1,i32 0,i32 0 %3 = load i8* %2 %4 = icmp eq i8 0,%3 br i1 %4, label %l2, label %l3 l2: ret {i8*,i8**} %a0 l3: %5 = extractvalue {i8*,i8**} %a1,0 %6 = bitcast i8* %5 to {i8,[0 x i1]}* %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0 %8 = load i8* %7 %9 = icmp eq i8 0,%8 br i1 %9, label %l4, label %l5 l4: ret {i8*,i8**} %a1 l5: ret {i8*,i8**} undef }" ++
+        (prologue ++ alloc2 ++
             "define void @_TestVarInLoop3({i8,[0 x i1]}* %value0,i8 %offset0) {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
