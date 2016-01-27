@@ -186,7 +186,7 @@ stackNew = do
     writeTemp offsetPtr " to i32"
     stack <- writeNewTemp "call i8* @malloc(i32 "
     writeTemp allocSize ")"
-    writeCode " call @llvm.memset.p0i8.i32(i8* "
+    writeCode " call void @llvm.memset.p0i8.i32(i8* "
     writeTemp stack ",i8 0,i32 0,i32 0,i1 0)"
     return stack
 
@@ -197,7 +197,8 @@ stackAddRef rawPtr = do
     writeStackType "*"
     refCountPtr <- writeNewTemp "getelementptr "
     writeStackType ","
-    writeStackType "*,i32 0,i32 0"
+    writeStackType "* "
+    writeTemp stack ",i32 0,i32 0"
     refCount <- writeNewTemp "load i32,i32* "
     writeTemp refCountPtr ""
     newRefCount <- writeNewTemp "add i32 1,"
@@ -219,7 +220,8 @@ unrefStack = do
     writeStackType "*"
     refCountPtr <- writeNewTemp "getelementptr "
     writeStackType ","
-    writeStackType "*,i32 0,i32 0"
+    writeStackType "* "
+    writeTemp stack ",i32 0,i32 0"
     refCount <- writeNewTemp "load i32,i32* "
     writeTemp refCountPtr ""
     newRefCount <- writeNewTemp "sub i32 "
@@ -248,10 +250,10 @@ pushStack stackType bitType = do
     writeCode "define void @"
     writeName "pushStack"
     writeCode "("
-    writeValueType " %stackvalue,"
+    writeValueType "* %stackvalue,"
     writeOffsetType " %stackoffset,i8** %stackimp,"
     writeRTTOffsetType " %stackimpoffset,"
-    writeValueType " %bitvalue,"
+    writeValueType "* %bitvalue,"
     writeOffsetType " %bitoffset) {"
     writeNewLabel
     when (astTypeSize bitType > 0) writeFuncBody
@@ -369,9 +371,8 @@ popStack :: AstType -> AstType -> LLVMGen fwd ()
 popStack stackType bitType = do
     writeCode "define {"
     writeValueType "*,"
-    writeOffsetType ",i8**,"
-    writeRTTOffsetType "} @"
-    writeName "pushStack"
+    writeOffsetType "} @"
+    writeName "popStack"
     writeCode "("
     writeValueType "* %stackvalue,"
     writeOffsetType " %stackoffset,i8** %stackimp,"
@@ -432,8 +433,8 @@ popStack stackType bitType = do
         writeValueType "* "
         writeTemp retValValue ",i32 0,i32 1,"
         writeOffsetType " 0"
-        writeCode " store i8 "
-        writeTemp bit ",i8* "
+        writeCode " store i1 "
+        writeTemp bit ",i1* "
         writeTemp bitPtr "")
     writeCode " br label "
     retLabelRef2 <- forwardRefLabel writeLabelRef
@@ -459,8 +460,7 @@ isEmptyStack :: AstType -> AstType -> LLVMGen fwd ()
 isEmptyStack stackType bitType = do
     writeCode "define {"
     writeValueType "*,"
-    writeOffsetType ",i8**,"
-    writeRTTOffsetType "} @"
+    writeOffsetType "} @"
     writeName "isEmptyStack"
     writeCode "("
     writeValueType "* %stackvalue,"
@@ -492,8 +492,8 @@ isEmptyStack stackType bitType = do
         writeValueType "* "
         writeTemp retValValue ",i32 0,i32 1,"
         writeOffsetType " 0"
-        writeCode " store i8 "
-        writeTemp bit ",i8* "
+        writeCode " store i1 "
+        writeTemp bit ",i1* "
         writeTemp bitPtr "")
     retVal1 <- writeNewTemp "insertvalue {"
     writeValueType "*,"

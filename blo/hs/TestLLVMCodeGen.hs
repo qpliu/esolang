@@ -33,6 +33,7 @@ tests = TestList [
     TestCase testAssign,
     TestCase testAssign2,
     TestCase testFuncall,
+    TestCase testFuncall2,
     TestCase testVarInitializer,
     TestCase testVarInitializer2,
     TestCase testVarInLoop,
@@ -874,6 +875,44 @@ testFuncall =
             " %13 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %12,0" ++
             " %14 = insertvalue {{i8,[0 x i1]}*,i8} %13,i8 0,1" ++
             " ret {{i8,[0 x i1]}*,i8} %14" ++
+            " }")
+
+testFuncall2 :: Assertion
+testFuncall2 =
+    testCodeGen "testFuncall2" "type a{a}func TestFuncall2()a{TestFuncall2();var a a;return a}"
+        (prologue ++
+            "define {{i8,[0 x i1]}*,i8} @_TestFuncall2({i8*,i8**} %retval) {" ++
+            " l0:" ++
+            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
+            " %1 = ptrtoint i1* %0 to i8" ++
+            " %2 = alloca i8,i8 %1" ++
+            " %3 = insertvalue {i8*,i8**} undef,i8* %2,0" ++
+            " %4 = insertvalue {i8*,i8**} %3,i8** null,1" ++
+            " %5 = alloca i8,i8 %1" ++
+            " %6 = insertvalue {i8*,i8**} undef,i8* %5,0" ++
+            " %7 = insertvalue {i8*,i8**} %6,i8** null,1" ++
+            " call void @llvm.memset.p0i8.i8(i8* %2,i8 0,i8 %1,i32 0,i1 0)" ++
+            " call void @llvm.memset.p0i8.i8(i8* %5,i8 0,i8 %1,i32 0,i1 0)" ++
+            " %8 = call {{i8,[0 x i1]}*,i8} @_TestFuncall2({i8*,i8**} %4)" ++
+            " %9 = extractvalue {{i8,[0 x i1]}*,i8} %8,0" ++
+            " %10 = extractvalue {{i8,[0 x i1]}*,i8} %8,1" ++
+            " %11 = extractvalue {i8*,i8**} %7,0" ++
+            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
+            " %13 = select i1 1,i8 0,i8 0" ++
+            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
+            " %15 = load i8,i8* %14" ++
+            " %16 = add i8 1,%15" ++
+            " store i8 %16,i8* %14" ++
+            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
+            " %18 = load i8,i8* %17" ++
+            " %19 = sub i8 %18,1" ++
+            " store i8 %19,i8* %17" ++
+            " %20 = extractvalue {i8*,i8**} %retval,0" ++
+            " %21 = bitcast i8* %20 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %12,i8 %13,{i8,[0 x i1]}* %21,i8 0,i8 1)" ++
+            " %22 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %21,0" ++
+            " %23 = insertvalue {{i8,[0 x i1]}*,i8} %22,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %23" ++
             " }")
 
 testVarInitializer :: Assertion
