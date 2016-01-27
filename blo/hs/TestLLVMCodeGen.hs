@@ -4,7 +4,7 @@ where
 
 import Test.HUnit(Assertion,Test(..))
 
-import TestLLVM(alloc2,prologue,testCodeGen)
+import TestLLVM(testCodeGen,prologue,alloc2Defn)
 
 tests :: Test
 tests = TestList [
@@ -88,7 +88,7 @@ testSimple2 =
             " %7 = sub i8 %6,1" ++
             " store i8 %7,i8* %5" ++
             " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
-            " br i1 %8, label %l1, label %l2" ++
+            " br i1 %8,label %l1,label %l2" ++
             " l1:" ++
             " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
             " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 %1,1" ++
@@ -209,7 +209,7 @@ testIf =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %6 = load i1,i1* %5" ++
-            " br i1 %6, label %l1, label %l2" ++
+            " br i1 %6,label %l1,label %l2" ++
             " l1:" ++
             " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " store i1 1,i1* %7" ++
@@ -240,7 +240,7 @@ testIf2 =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %6 = load i1,i1* %5" ++
-            " br i1 %6, label %l1, label %l2" ++
+            " br i1 %6,label %l1,label %l2" ++
             " l1:" ++
             " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " store i1 1,i1* %7" ++
@@ -279,7 +279,7 @@ testIf3 =
             " store i8 %9,i8* %7" ++
             " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %11 = load i1,i1* %10" ++
-            " br i1 %11, label %l1, label %l2" ++
+            " br i1 %11,label %l1,label %l2" ++
             " l1:" ++
             " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " store i1 1,i1* %12" ++
@@ -295,7 +295,7 @@ testIf3 =
             " l2:" ++
             " %19 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 1,i8 %6" ++
             " %20 = load i1,i1* %19" ++
-            " br i1 %20, label %l3, label %l4" ++
+            " br i1 %20,label %l3,label %l4" ++
             " l3:" ++
             " %21 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " store i1 0,i1* %21" ++
@@ -334,7 +334,7 @@ testIf4 =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %6 = load i1,i1* %5" ++
-            " br i1 %6, label %l1, label %l2" ++
+            " br i1 %6,label %l1,label %l2" ++
             " l1:" ++
             " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " store i1 1,i1* %7" ++
@@ -367,7 +367,7 @@ testIf5 =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %6 = load i1,i1* %5" ++
-            " br i1 %6, label %l1, label %l2" ++
+            " br i1 %6,label %l1,label %l2" ++
             " l1:" ++
             " br label %l3" ++
             " l2:" ++
@@ -397,7 +397,7 @@ testIf6 =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %6 = load i1,i1* %5" ++
-            " br i1 %6, label %l1, label %l2" ++
+            " br i1 %6,label %l1,label %l2" ++
             " l1:" ++
             " br label %l3" ++
             " l2:" ++
@@ -427,7 +427,7 @@ testIf7 =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
             " %6 = load i1,i1* %5" ++
-            " br i1 %6, label %l1, label %l2" ++
+            " br i1 %6,label %l1,label %l2" ++
             " l1:" ++
             " br label %l3" ++
             " l2:" ++
@@ -572,7 +572,7 @@ testScope4 =
             " store i1 1,i1* %11" ++
             " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " %13 = load i1,i1* %12" ++
-            " br i1 %13, label %l1, label %l2" ++
+            " br i1 %13,label %l1,label %l2" ++
             " l1:" ++
             " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " store i1 1,i1* %14" ++
@@ -610,7 +610,7 @@ testScope5 =
             " store i8 %10,i8* %8" ++
             " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " %12 = load i1,i1* %11" ++
-            " br i1 %12, label %l1, label %l2" ++
+            " br i1 %12,label %l1,label %l2" ++
             " l1:" ++
             " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " store i1 1,i1* %13" ++
@@ -650,7 +650,7 @@ testScope6 =
             " store i8 %10,i8* %8" ++
             " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " %12 = load i1,i1* %11" ++
-            " br i1 %12, label %l1, label %l2" ++
+            " br i1 %12,label %l1,label %l2" ++
             " l1:" ++
             " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " store i1 1,i1* %13" ++
@@ -662,7 +662,7 @@ testScope6 =
             " %15 = phi i8 [%7,%l2],[%7,%l1]" ++
             " %16 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 1,i8 %15" ++
             " %17 = load i1,i1* %16" ++
-            " br i1 %17, label %l4, label %l5" ++
+            " br i1 %17,label %l4,label %l5" ++
             " l4:" ++
             " %18 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 1,i8 %15" ++
             " store i1 1,i1* %18" ++
@@ -700,7 +700,7 @@ testScope7 =
             " store i8 %10,i8* %8" ++
             " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " %12 = load i1,i1* %11" ++
-            " br i1 %12, label %l1, label %l2" ++
+            " br i1 %12,label %l1,label %l2" ++
             " l1:" ++
             " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
             " %14 = load i8,i8* %13" ++
@@ -862,7 +862,7 @@ testFuncall =
             " %7 = sub i8 %6,1" ++
             " store i8 %7,i8* %5" ++
             " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
-            " br i1 %8, label %l1, label %l2" ++
+            " br i1 %8,label %l1,label %l2" ++
             " l1:" ++
             " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
             " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 %1,1" ++
@@ -970,7 +970,7 @@ testVarInitializer2 =
             " %6 = load i8,i8* %5" ++
             " %7 = sub i8 %6,1 store i8 %7,i8* %5" ++
             " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
-            " br i1 %8, label %l1, label %l2" ++
+            " br i1 %8,label %l1,label %l2" ++
             " l1:" ++
             " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
             " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 %1,1" ++
@@ -1013,7 +1013,7 @@ testVarInLoop =
 testVarInLoop2 :: Assertion
 testVarInLoop2 =
     testCodeGen "testVarInLoop2" "type a{a}func TestVarInLoop2(){var a a;for{var b a;a=b}}"
-        (prologue ++ alloc2 ++
+        (prologue ++ alloc2Defn ++
             "define void @_TestVarInLoop2() {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
@@ -1069,7 +1069,7 @@ testVarInLoop2 =
 testVarInLoop3 :: Assertion
 testVarInLoop3 =
     testCodeGen "testVarInLoop3" "type a{a}func TestVarInLoop3(a a){for{var b a;a.a=b.a}}"
-        (prologue ++ alloc2 ++
+        (prologue ++ alloc2Defn ++
             "define void @_TestVarInLoop3({i8,[0 x i1]}* %value0,i8 %offset0) {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++

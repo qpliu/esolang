@@ -28,8 +28,7 @@ data LLVMRuntimeFunc fwd =
 instance RuntimeType (LLVMRuntimeType fwd) where
     annotateType astType
       | astTypeName astType == "stack" && astTypeIsImport astType =
-            compileError (astTypeSourcePos astType)
-                         ("Unknown import " ++ astTypeErrorName astType)
+            return (LLVMRuntimeType stackDecls stackNew stackAddRef stackUnref)
     annotateType astType
       | astTypeName astType == "test" && astTypeIsImport astType =
             return
@@ -38,9 +37,6 @@ instance RuntimeType (LLVMRuntimeType fwd) where
                     (writeNewTemp "select i1 1,i8* null,i8* null;test new\n")
                     (const (writeCode ";test addref\n"))
                     (const (writeCode ";test unref\n")))
-    annotateType astType
-      | astTypeName astType == "stack" && astTypeIsImport astType =
-            return (LLVMRuntimeType stackDecls stackNew stackAddRef stackUnref)
     annotateType astType =
         compileError (astTypeSourcePos astType)
                      ("Unknown import " ++ astTypeErrorName astType)
@@ -58,7 +54,9 @@ instance RuntimeFunc (LLVMRuntimeFunc fwd) where
       | astTypeName stack == "stack" && astTypeIsImport stack
                                      && astTypeImportSize stack == 1
                                      && astTypeImportSize bit == 0 =
-        return (LLVMRuntimeFunc [] (pushStack stack bit))
+        return (LLVMRuntimeFunc
+                    [writeCode "declare void @llvm.memcpy.p0i8.p0i8.i32(i8*,i8*,i32,i32,i1)"]
+                    (pushStack stack bit))
     annotateFunc (AstFuncSig pos name@"popStack" [(_,stack)] (Just bit))
       | astTypeName stack == "stack" && astTypeIsImport stack
                                      && astTypeImportSize stack == 1
@@ -176,7 +174,7 @@ stackDecls = [
 writeStackType :: String -> LLVMGen fwd ()
 writeStackType code =
     -- ref count, size, capacity, bits
-    writeCode ("{i32,i32,i32,[0 x i8]*}" ++ code)
+    writeCode ("{i32,i32,i32,i8*}" ++ code)
 
 stackNew :: LLVMGen fwd Temp
 stackNew = do
@@ -240,14 +238,274 @@ unrefStack = do
     writeCode " call void @free(i8* %s)"
     writeCode " ret void }"
 
+writeValueType :: String -> LLVMGen fwd ()
+writeValueType code = do
+    writeCode "{"
+    writeRefCountType (",[0 x i1]}" ++ code)
+
 pushStack :: AstType -> AstType -> LLVMGen fwd ()
 pushStack stackType bitType = do
-    undefined
+    writeCode "define void @"
+    writeName "pushStack"
+    writeCode "("
+    writeValueType " %stackvalue,"
+    writeOffsetType " %stackoffset,i8** %stackimp,"
+    writeRTTOffsetType " %stackimpoffset,"
+    writeValueType " %bitvalue,"
+    writeOffsetType " %bitoffset) {"
+    writeNewLabel
+    when (astTypeSize bitType > 0) writeFuncBody
+    writeCode " ret void }"
+  where
+    writeFuncBody = do
+        bitPtr <- writeNewTemp "getelementptr "
+        writeValueType ","
+        writeValueType "* %bitvalue,i32 0,i32 1,"
+        writeOffsetType " 0"
+        bit <- writeNewTemp "load i1,i1* "
+        writeTemp bitPtr ""
+        rawPtrPtr <- writeNewTemp "getelementptr i8*,i8** %stackimp,"
+        writeRTTOffsetType " %stackimpoffset"
+        rawPtr <- writeNewTemp "load i8*,i8** "
+        writeTemp rawPtrPtr ""
+        stack <- writeNewTemp "bitcast i8* "
+        writeTemp rawPtr " to "
+        writeStackType "*"
+        sizePtr <- writeNewTemp "getelementptr "
+        writeStackType ","
+        writeStackType "* "
+        writeTemp stack ",i32 0,i32 1"
+        oldSize <- writeNewTemp "load i32,i32* "
+        writeTemp sizePtr ""
+        newSize <- writeNewTemp "add i32 1,"
+        writeTemp oldSize ""
+        writeCode " store i32 "
+        writeTemp newSize ",i32* "
+        writeTemp sizePtr ""
+        capacityPtr <- writeNewTemp "getelementptr "
+        writeStackType ","
+        writeStackType "* "
+        writeTemp stack ",i32 0,i32 2"
+        capacity <- writeNewTemp "load i32,i32* "
+        writeTemp capacityPtr ""
+        cmp <- writeNewTemp "icmp ugt i32 "
+        writeTemp newSize ","
+        writeTemp capacity ""
+        (reallocLabelRef,storeLabelRef) <- writeBranch cmp
+
+        reallocLabel <- writeNewLabel
+        reallocLabelRef reallocLabel
+        oldByteCapacity <- writeNewTemp "udiv i32 "
+        writeTemp capacity ",8"
+        newByteCapacity <- writeNewTemp "add i32 "
+        writeTemp oldByteCapacity ",128"
+        newCapacity <- writeNewTemp "shl i32 "
+        writeTemp newByteCapacity ",3"
+        allocationPtr <- writeNewTemp "getelementptr "
+        writeStackType ","
+        writeStackType "* "
+        writeTemp stack ",i32 0,i32 3"
+        oldAllocation <- writeNewTemp "load i8*,i8** "
+        writeTemp allocationPtr ""
+        newAllocation <- writeNewTemp "call i8* @malloc(i32 "
+        writeTemp newByteCapacity ")"
+        writeCode " store i8* "
+        writeTemp newAllocation ",i8** "
+        writeTemp allocationPtr ""
+        cmp <- writeNewTemp "icmp ne i32 "
+        writeTemp oldByteCapacity ",0"
+        (copyFreeLabelRef,storeLabelRef2) <- writeBranch cmp
+
+        copyFreeLabel <- writeNewLabel
+        copyFreeLabelRef copyFreeLabel
+        writeCode " call void @llvm.memcpy.p0i8.p0i8.i32(i8* "
+        writeTemp newAllocation ",i8* "
+        writeTemp oldAllocation ",i32 "
+        writeTemp oldByteCapacity ",i32 0,i1 0)"
+        writeCode " call void @free(i8* "
+        writeTemp oldAllocation ")"
+        writeCode " br label "
+        storeLabelRef3 <- forwardRefLabel writeLabelRef
+
+        storeLabel <- writeNewLabel
+        storeLabelRef storeLabel
+        storeLabelRef2 storeLabel
+        storeLabelRef3 storeLabel
+        byteIndex <- writeNewTemp "udiv i32 "
+        writeTemp oldSize ",8"
+        bitIndex32 <- writeNewTemp "urem i32 "
+        writeTemp oldSize ",8"
+        bitIndex <- writeNewTemp "trunc i32 "
+        writeTemp bitIndex32 " to i8"
+        extBit <- writeNewTemp "zext i1 "
+        writeTemp bit " to i8"
+        shiftedBit <- writeNewTemp "shl i8 "
+        writeTemp extBit ","
+        writeTemp bitIndex ""
+        bitMask <- writeNewTemp "xor i8 "
+        writeTemp shiftedBit ",255"
+        stackArrayPtr <- writeNewTemp "getelementptr "
+        writeStackType ","
+        writeStackType "* "
+        writeTemp stack ",i32 0,i32 3"
+        stackArray <- writeNewTemp "load i8*,i8** "
+        writeTemp stackArrayPtr ""
+        stackBytePtr <- writeNewTemp "getelementptr i8,i8* "
+        writeTemp stackArray ",i32 "
+        writeTemp byteIndex ""
+        oldStackByte <- writeNewTemp "load i8,i8* "
+        writeTemp stackBytePtr ""
+        maskedStackByte <- writeNewTemp "and i8 "
+        writeTemp bitMask ","
+        writeTemp oldStackByte ""
+        newStackByte <- writeNewTemp "or i8 "
+        writeTemp maskedStackByte ","
+        writeTemp shiftedBit ""
+        writeCode " store i8 "
+        writeTemp newStackByte ",i8* "
+        writeTemp stackBytePtr ""
 
 popStack :: AstType -> AstType -> LLVMGen fwd ()
 popStack stackType bitType = do
-    undefined
+    writeCode "define {"
+    writeValueType "*,"
+    writeOffsetType ",i8**,"
+    writeRTTOffsetType "} @"
+    writeName "pushStack"
+    writeCode "("
+    writeValueType "* %stackvalue,"
+    writeOffsetType " %stackoffset,i8** %stackimp,"
+    writeRTTOffsetType " %stackimpoffset,{i8*,i8**} %retval) {"
+    writeNewLabel
+    retValRawPtr <- writeNewTemp "extractvalue {i8*,i8**} %retval,0"
+    retValValue <- writeNewTemp "bitcast i8* "
+    writeTemp retValRawPtr " to "
+    writeValueType "*"
+    rawPtrPtr <- writeNewTemp "getelementptr i8*,i8** %stackimp,"
+    writeRTTOffsetType " %stackimpoffset"
+    rawPtr <- writeNewTemp "load i8*,i8** "
+    writeTemp rawPtrPtr ""
+    stack <- writeNewTemp "bitcast i8* "
+    writeTemp rawPtr " to "
+    writeStackType "*"
+    sizePtr <- writeNewTemp "getelementptr "
+    writeStackType ","
+    writeStackType "* "
+    writeTemp stack ",i32 0,i32 1"
+    oldSize <- writeNewTemp "load i32,i32* "
+    writeTemp sizePtr ""
+    cmp <- writeNewTemp "icmp ugt i32 "
+    writeTemp oldSize ",0"
+    (popLabelRef,retLabelRef) <- writeBranch cmp
+    popLabel <- writeNewLabel
+    popLabelRef popLabel
+    newSize <- writeNewTemp "sub i32 "
+    writeTemp oldSize ",1"
+    writeCode " store i32 "
+    writeTemp newSize ",i32* "
+    writeTemp sizePtr ""
+    when (astTypeSize bitType > 0) (do
+        byteIndex <- writeNewTemp "udiv i32 "
+        writeTemp newSize ",8"
+        bitIndex <- writeNewTemp "urem i32 "
+        writeTemp newSize ",8"
+        stackArrayPtr <- writeNewTemp "getelementptr "
+        writeStackType ","
+        writeStackType "* "
+        writeTemp stack ",i32 0,i32 3"
+        stackArray <- writeNewTemp "load i8*,i8** "
+        writeTemp stackArrayPtr ""
+        stackBytePtr <- writeNewTemp "getelementptr i8,i8* "
+        writeTemp stackArray ",i32 "
+        writeTemp byteIndex ""
+        stackByte <- writeNewTemp "load i8,i8* "
+        writeTemp stackBytePtr ""
+        stackByte32 <- writeNewTemp "zext i8 "
+        writeTemp stackByte " to i32"
+        shiftedByte <- writeNewTemp "lshr i32 "
+        writeTemp stackByte32 ","
+        writeTemp bitIndex ""
+        bit <- writeNewTemp "trunc i32 "
+        writeTemp shiftedByte " to i1"
+        bitPtr <- writeNewTemp "getelementptr "
+        writeValueType ","
+        writeValueType "* "
+        writeTemp retValValue ",i32 0,i32 1,"
+        writeOffsetType " 0"
+        writeCode " store i8 "
+        writeTemp bit ",i8* "
+        writeTemp bitPtr "")
+    writeCode " br label "
+    retLabelRef2 <- forwardRefLabel writeLabelRef
+    retLabel <- writeNewLabel
+    retLabelRef retLabel
+    retLabelRef2 retLabel
+    retVal1 <- writeNewTemp "insertvalue {"
+    writeValueType "*,"
+    writeOffsetType "} undef,"
+    writeValueType "* "
+    writeTemp retValValue ",0"
+    retVal <- writeNewTemp "insertvalue {"
+    writeValueType "*,"
+    writeOffsetType "} "
+    writeTemp retVal1 ","
+    writeOffsetType " 0,1"
+    writeCode " ret {"
+    writeValueType "*,"
+    writeOffsetType "} "
+    writeTemp retVal " }"
 
 isEmptyStack :: AstType -> AstType -> LLVMGen fwd ()
 isEmptyStack stackType bitType = do
-    undefined
+    writeCode "define {"
+    writeValueType "*,"
+    writeOffsetType ",i8**,"
+    writeRTTOffsetType "} @"
+    writeName "isEmptyStack"
+    writeCode "("
+    writeValueType "* %stackvalue,"
+    writeOffsetType " %stackoffset,i8** %stackimp,"
+    writeRTTOffsetType " %stackimpoffset,{i8*,i8**} %retval) {"
+    writeNewLabel
+    retValRawPtr <- writeNewTemp "extractvalue {i8*,i8**} %retval,0"
+    retValValue <- writeNewTemp "bitcast i8* "
+    writeTemp retValRawPtr " to "
+    writeValueType "*"
+    rawPtrPtr <- writeNewTemp "getelementptr i8*,i8** %stackimp,"
+    writeRTTOffsetType " %stackimpoffset"
+    rawPtr <- writeNewTemp "load i8*,i8** "
+    writeTemp rawPtrPtr ""
+    stack <- writeNewTemp "bitcast i8* "
+    writeTemp rawPtr " to "
+    writeStackType "*"
+    sizePtr <- writeNewTemp "getelementptr "
+    writeStackType ","
+    writeStackType "* "
+    writeTemp stack ",i32 0,i32 1"
+    size <- writeNewTemp "load i32,i32* "
+    writeTemp sizePtr ""
+    bit <- writeNewTemp "icmp eq i32 "
+    writeTemp size ",0"
+    when (astTypeSize bitType > 0) (do
+        bitPtr <- writeNewTemp "getelementptr "
+        writeValueType ","
+        writeValueType "* "
+        writeTemp retValValue ",i32 0,i32 1,"
+        writeOffsetType " 0"
+        writeCode " store i8 "
+        writeTemp bit ",i8* "
+        writeTemp bitPtr "")
+    retVal1 <- writeNewTemp "insertvalue {"
+    writeValueType "*,"
+    writeOffsetType "} undef,"
+    writeValueType "* "
+    writeTemp retValValue ",0"
+    retVal <- writeNewTemp "insertvalue {"
+    writeValueType "*,"
+    writeOffsetType "} "
+    writeTemp retVal1 ","
+    writeOffsetType " 0,1"
+    writeCode " ret {"
+    writeValueType "*,"
+    writeOffsetType "} "
+    writeTemp retVal " }"

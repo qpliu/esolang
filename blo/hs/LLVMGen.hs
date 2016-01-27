@@ -221,8 +221,8 @@ writeBranch :: Temp
             -> LLVMGen fwd (Label -> LLVMGen fwd (),Label -> LLVMGen fwd ())
 writeBranch temp = do
     writeCode " br i1 "
-    writeTemp temp ", label "
+    writeTemp temp ",label "
     trueLabelRef <- forwardRefLabel writeLabelRef
-    writeCode ", label "
+    writeCode ",label "
     falseLabelRef <- forwardRefLabel writeLabelRef
     return (trueLabelRef,falseLabelRef)

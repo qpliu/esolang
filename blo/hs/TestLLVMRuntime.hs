@@ -4,7 +4,8 @@ where
 
 import Test.HUnit(Assertion,Test(..))
 
-import TestLLVM(testCodeGen,prologue)
+import TestLLVM
+    (testCodeGen,prologue,memsetDecl,copyDefn,copyrttDefn,alloc2Defn)
 
 tests :: Test
 tests = TestList [
@@ -13,7 +14,8 @@ tests = TestList [
     TestCase testReturn,
     TestCase testFuncall,
     TestCase testVarInLoop,
-    TestCase testFuncallInLoop
+    TestCase testFuncallInLoop,
+    TestCase testStack
     ]
 
 testVar :: Assertion
@@ -239,4 +241,85 @@ testFuncallInLoop =
             " %2 = alloca i8,i8 %1" ++
             " %3 = alloca i8*,i8 1" ++
             " %4 = insertvalue {i8*,i8**} undef,i8* %2,0" ++
-            " %5 = insertvalue {i8*,i8**} %4,i8** %3,1 call void @llvm.memset.p0i8.i8(i8* %2,i8 0,i8 %1,i32 0,i1 0) br label %l1 l1: %6 = extractvalue {i8*,i8**} %5,0 call void @llvm.memset.p0i8.i8(i8* %6,i8 0,i8 %1,i32 0,i1 0) %7 = call {{i8,[0 x i1]}*,i8,i8**,i8} @_testFuncallInLoop({i8*,i8**} %5) %8 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,0 %9 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,1 %10 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,2 %11 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,3 %12 = add i8 0,%11 %13 = getelementptr i8*,i8** %10,i8 %12 %14 = load i8*,i8** %13;test unref\n br label %l1 }")
+            " %5 = insertvalue {i8*,i8**} %4,i8** %3,1" ++
+            " call void @llvm.memset.p0i8.i8(i8* %2,i8 0,i8 %1,i32 0,i1 0)" ++
+            " br label %l1" ++
+            " l1:" ++
+            " %6 = extractvalue {i8*,i8**} %5,0" ++
+            " call void @llvm.memset.p0i8.i8(i8* %6,i8 0,i8 %1,i32 0,i1 0)" ++
+            " %7 = call {{i8,[0 x i1]}*,i8,i8**,i8} @_testFuncallInLoop({i8*,i8**} %5)" ++
+            " %8 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,0" ++
+            " %9 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,1" ++
+            " %10 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,2" ++
+            " %11 = extractvalue {{i8,[0 x i1]}*,i8,i8**,i8} %7,3" ++
+            " %12 = add i8 0,%11" ++
+            " %13 = getelementptr i8*,i8** %10,i8 %12" ++
+            " %14 = load i8*,i8** %13;test unref\n" ++
+            " br label %l1" ++
+            " }")
+
+testStack =
+    testCodeGen "testStack" "import type stack{}func testStack(){var s stack}"
+        ("declare i8* @malloc(i32)" ++
+            "declare void @free(i8*)" ++
+            "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)" ++
+            memsetDecl ++
+            "define void @unrefStack(i8* %s) {" ++
+            " l0:" ++
+            " %0 = bitcast i8* %s to {i32,i32,i32,i8*}*" ++
+            " %1 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}*,i32 0,i32 0" ++
+            " %2 = load i32,i32* %1" ++
+            " %3 = sub i32 %2,1" ++
+            " store i32 %3,i32* %1" ++
+            " %4 = icmp ugt i32 %3,0" ++
+            " br i1 %4,label %l1,label %l2" ++
+            " l1:" ++
+            " ret void" ++
+            " l2:" ++
+            " call void @free(i8* %s)" ++
+            " ret void" ++
+            " }" ++
+            copyDefn ++
+            copyrttDefn ++
+            "define void @_testStack() {" ++
+            " l0:" ++
+            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
+            " %1 = ptrtoint i1* %0 to i8" ++
+            " %2 = alloca i8,i8 %1" ++
+            " %3 = alloca i8*,i8 1" ++
+            " %4 = insertvalue {i8*,i8**} undef,i8* %2,0" ++
+            " %5 = insertvalue {i8*,i8**} %4,i8** %3,1" ++
+            " call void @llvm.memset.p0i8.i8(i8* %2,i8 0,i8 %1,i32 0,i1 0)" ++
+            " %6 = extractvalue {i8*,i8**} %5,0" ++
+            " %7 = bitcast i8* %6 to {i8,[0 x i1]}*" ++
+            " %8 = select i1 1,i8 0,i8 0" ++
+            " %9 = extractvalue {i8*,i8**} %5,1" ++
+            " %10 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* null,i32 1" ++
+            " %11 = ptrtoint {i32,i32,i32,i8*}* %10 to i32" ++
+            " %12 = call i8* @malloc(i32 %11)" ++
+            " call @llvm.memset.p0i8.i32(i8* %12,i8 0,i32 0,i32 0,i1 0)" ++
+            " %13 = getelementptr i8*,i8** %9,i8 0" ++
+            " store i8* %12,i8** %13" ++
+            " %14 = select i1 1,i8 0,i8 0" ++
+            " %15 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
+            " %16 = load i8,i8* %15" ++
+            " %17 = add i8 1,%16" ++
+            " store i8 %17,i8* %15" ++
+            " %18 = add i8 0,%14" ++
+            " %19 = getelementptr i8*,i8** %9,i8 %18" ++
+            " %20 = load i8*,i8** %19" ++
+            " %21 = bitcast i8* %20 to {i32,i32,i32,i8*}*" ++
+            " %22 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}*,i32 0,i32 0" ++
+            " %23 = load i32,i32* %22" ++
+            " %24 = add i32 1,%23" ++
+            " store i32 %24,i32* %22" ++
+            " %25 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
+            " %26 = load i8,i8* %25" ++
+            " %27 = sub i8 %26,1" ++
+            " store i8 %27,i8* %25" ++
+            " %28 = add i8 0,%14" ++
+            " %29 = getelementptr i8*,i8** %9,i8 %28" ++
+            " %30 = load i8*,i8** %29" ++
+            " call void @unrefStack(i8* %30)" ++
+            " ret void" ++
+            " }")
