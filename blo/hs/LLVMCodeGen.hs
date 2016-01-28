@@ -9,7 +9,8 @@ import qualified Data.Map as Map
 
 import LLVMGen
     (LLVMGen,Label,Temp,
-     newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,forwardRefInfo,
+     newTemp,newLabel,
+     forwardRef,forwardRefTemp,forwardRefLabel,forwardRefInfoList,
      writeNewTemp,writeNewLabel,writeCode,
      writeRefCountType,writeOffsetType,writeRTTOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,writeBranch,
@@ -27,7 +28,7 @@ type LLVMExpr = Expr (LLVMRuntimeType FwdScope) (LLVMRuntimeFunc FwdScope)
 
 type Val = (Temp,Temp,Maybe (Temp,Temp),LLVMType)
 type Scope = (Map String Val)
-newtype FwdScope = FwdScope (Maybe (Label,Scope))
+newtype FwdScope = FwdScope (Label,Scope)
 type CodeGen a = LLVMGen FwdScope a
 
 codeGen :: ([(String,LLVMType)],[(String,LLVMFunc)]) -> String
@@ -134,7 +135,8 @@ writeFunc name (FuncSig params retType) stmt = do
         return (Map.insert name (value,offset,imp,varType) vars))
         Map.empty paramScope
 
-    writeStmt (length params) varAllocs (entry,False,True,scope,Map.empty) stmt
+    writeStmt (length params) varAllocs
+              (entry,False,True,scope,Map.empty,Map.empty) stmt
     writeCode " }"
 
 writeRetType :: Maybe LLVMType -> String -> CodeGen ()
@@ -282,11 +284,14 @@ writeRTTUnref (_,_,Just (imp,impOffset),Type _ rtt) =
 
 writeStmt :: Int -> Map InsnId (Temp,[Temp])
                  -> (Label,Bool,Bool,Scope,
-                     Map InsnId [(Label -> CodeGen(),(Label,Scope))])
+                     Map InsnId [(Label -> CodeGen(),(Label,Scope))],
+                     Map InsnId (FwdScope -> CodeGen()))
                  -> LLVMStmt
                  -> CodeGen (Label,Bool,Bool,Scope,
-                             Map InsnId [(Label -> CodeGen(),(Label,Scope))])
-writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
+                             Map InsnId [(Label -> CodeGen(),(Label,Scope))],
+                             Map InsnId (FwdScope -> CodeGen()))
+writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
+                             loopRefs)
           stmt =
     w stmt
   where
@@ -295,9 +300,8 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
     checkNewBlock
       | Map.member sid branchFroms = do
             (newBlockLabel,newScope,newBranchFroms,finalScopeRef) <- newBlock
-            finalScopeRef (FwdScope Nothing)
-            return (newBlockLabel,newScope,newBranchFroms)
-      | fellThru = return (blockLabel,scope,branchFroms)
+            return (newBlockLabel,newScope,newBranchFroms,loopRefs)
+      | fellThru = return (blockLabel,scope,branchFroms,loopRefs)
       | otherwise = error "not fellThru and not br target"
     newBlock = do
         newBlockLabel <- writeNewLabel
@@ -316,9 +320,10 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
             (Map.toList scope)
         let predScopes = maybe [(blockLabel,scope)] (map snd)
                                (Map.lookup sid branchFroms)
-        lastScopeRef <- forwardRefInfo (\ (FwdScope lastScope) -> do
+        lastScopeRef <- forwardRefInfoList (\ lastScopeList -> do
             mapM_ (\ (name,(value,offset,imp,_)) -> do
-                    let phiargs = maybe id (:) lastScope predScopes
+                    let phiargs = map (\ (FwdScope s) -> s) lastScopeList
+                                  ++ predScopes
                     writeCode " "
                     writeTemp value " = phi "
                     writeCode "{"
@@ -362,11 +367,14 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
     branchNext newBlockLabel newScope branchFroms = do
         (updatedScope,fellThru) <- updateScope newScope False
         if not fellThru
-            then return (newBlockLabel,inLoop,False,updatedScope,branchFroms)
+            then return (newBlockLabel,inLoop,False,updatedScope,branchFroms,
+                         loopRefs)
             else do
                 let Just nextId = nsid
                 writeCode " br label "
                 labelRef <- forwardRefLabel writeLabelRef
+                maybe (return ()) ($ FwdScope (newBlockLabel,updatedScope))
+                      (Map.lookup nextId loopRefs)
                 let newBranchFroms =
                         Map.alter
                             (\ branchFrom ->
@@ -375,18 +383,19 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                                                      updatedScope))
                                           : froms))
                         nextId branchFroms
-                return (newBlockLabel,inLoop,False,updatedScope,newBranchFroms)
+                return (newBlockLabel,inLoop,False,updatedScope,newBranchFroms,
+                        loopRefs)
 
     w (StmtBlock _ []) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         (updatedScope,fellThru) <- updateScope scope False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
     w (StmtBlock _ stmts) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         foldM (writeStmt nparams varAllocs)
-              (blockLabel,inLoop,True,scope,branchFroms) stmts
+              (blockLabel,inLoop,True,scope,branchFroms,loopRefs) stmts
     w (StmtVar _ varName varType@(Type _ rtt) maxAliases expr) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         val <- maybe (do
                 allocItem <- writeGetAlloc sid
                 rawPtr <- writeNewTemp "extractvalue "
@@ -429,9 +438,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
             expr
         (updatedScope,fellThru) <-
             updateScope (Map.insert varName val scope) False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
     w (StmtIf _ expr ifBlock elseBlock) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         (condValue,condOffset,_,_) <- wExpr scope expr
         bitPtr <- writeNewBitPtr (Left condValue) (Left condOffset)
         bit <- writeNewTemp "load i1,i1* "
@@ -439,24 +448,28 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         (trueLabelRef,falseLabelRef) <- writeBranch bit
         trueLabel <- writeNewLabel
         trueLabelRef trueLabel
-        (trueBlockLabel,_,trueFellThru,trueScope,branchFroms) <-
+        (trueBlockLabel,_,trueFellThru,trueScope,branchFroms,loopRefs) <-
             writeStmt nparams varAllocs
-                      (trueLabel,inLoop,True,scope,branchFroms) ifBlock
+                      (trueLabel,inLoop,True,scope,branchFroms,loopRefs)
+                      ifBlock
         branchFroms <- if not trueFellThru
             then return branchFroms
             else do
-                (_,_,_,_,branchFroms) <-
+                (_,_,_,_,branchFroms,loopRefs) <-
                     branchNext trueBlockLabel trueScope branchFroms
                 return branchFroms
         falseLabel <- writeNewLabel
         falseLabelRef falseLabel
         maybe (branchNext falseLabel scope branchFroms) (\ elseBlock -> do
-                (falseBlockLabel,_,falseFellThru,falseScope,branchFroms) <-
+                (falseBlockLabel,_,falseFellThru,falseScope,branchFroms,
+                 loopRefs) <-
                     writeStmt nparams varAllocs
-                              (falseLabel,inLoop,True,scope,branchFroms)
+                              (falseLabel,inLoop,True,scope,branchFroms,
+                               loopRefs)
                               elseBlock
                 if not falseFellThru
-                    then return (blockLabel,inLoop,False,scope,branchFroms)
+                    then return (blockLabel,inLoop,False,scope,branchFroms,
+                                 loopRefs)
                     else branchNext falseBlockLabel falseScope branchFroms)
             elseBlock
     w (StmtFor _ stmt) = do
@@ -466,33 +479,30 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                 forwardRefLabel writeLabelRef
             else return (const (return ()))
         (blockLabel,scope,branchFroms,finalScopeRef) <- newBlock
+        let newLoopRefs = Map.insert sid finalScopeRef loopRefs
         loopLabelRef blockLabel
-        (finalBlockLabel,_,finalFellThru,finalScope,branchFroms) <-
+        (finalBlockLabel,_,finalFellThru,finalScope,branchFroms,loopRefs) <-
             writeStmt nparams varAllocs
-                      (blockLabel,True,True,scope,branchFroms) stmt
+                      (blockLabel,True,True,scope,branchFroms,newLoopRefs) stmt
         branchFroms <- if finalFellThru
             then do
-                finalScopeRef (FwdScope (Just (finalBlockLabel,finalScope)))
+                finalScopeRef (FwdScope (finalBlockLabel,finalScope))
                 writeCode " br label "
                 writeLabelRef blockLabel
                 return branchFroms
             else
-                maybe (do
-                        finalScopeRef (FwdScope Nothing)
-                        return branchFroms)
+                maybe (return branchFroms)
                       (\ comeFroms -> do
-                        finalScopeRef
-                            (FwdScope (Just (finalBlockLabel,finalScope)))
                         mapM_ (($ blockLabel) . fst) comeFroms
                         return (Map.delete sid branchFroms))
                       (Map.lookup sid branchFroms)
-        return (finalBlockLabel,inLoop,False,finalScope,branchFroms)
+        return (finalBlockLabel,inLoop,False,finalScope,branchFroms,loopRefs)
     w (StmtBreak _) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         -- this should be the last stmt in a StmtBlock
         branchNext blockLabel scope branchFroms
     w (StmtReturn _ expr) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         exprVal <- maybe (return Nothing) (fmap Just . (wExpr scope)) expr
         (updatedScope,_) <- updateScope scope True
         maybe (writeCode " ret void")
@@ -577,18 +587,18 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
                 writeTemp retval "")
             exprVal
         -- this should be the last stmt in a StmtBlock
-        return (blockLabel,inLoop,False,updatedScope,branchFroms)
+        return (blockLabel,inLoop,False,updatedScope,branchFroms,loopRefs)
     w (StmtSetClear _ bit expr) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         val@(value,offset,_,_) <- wExpr scope expr
         bitPtr <- writeNewBitPtr (Left value) (Left offset)
         writeCode (" store i1 " ++ (if bit then "1" else "0") ++ ",i1* ")
         writeTemp bitPtr ""
         writeRTTUnref val
         (updatedScope,fellThru) <- updateScope scope False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
     w (StmtAssign _ lhs@(ExprVar varName) rhs) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         lval <- wExpr scope lhs
         rval <- wExpr scope rhs
         writeAddRef rval
@@ -597,27 +607,27 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms)
         writeUnref lval
         (updatedScope,fellThru) <-
             updateScope (Map.insert varName rval scope) False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
     w (StmtAssign _ lhs rhs) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         lval <- wExpr scope lhs
         rval <- wExpr scope rhs
         writeRTTUnref lval
         writeCopyValue lval rval False
         (updatedScope,fellThru) <- updateScope scope False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
     w (StmtExpr _ expr@(ExprFunc _ func _ _)) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         retVal <- writeCallFunc scope expr
         maybe (return ()) writeRTTUnref retVal
         (updatedScope,fellThru) <- updateScope scope False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
     w (StmtExpr _ expr) = do
-        (blockLabel,scope,branchFroms) <- checkNewBlock
+        (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         val <- wExpr scope expr
         writeRTTUnref val
         (updatedScope,fellThru) <- updateScope scope False
-        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms)
+        return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
 
     wExpr scope (ExprVar varName) = do
         let val = scope Map.! varName
@@ -920,10 +930,11 @@ varMaxAliasesAndSizes _ = []
 
 exprMaxAliasesAndSizes :: Expr rtt rtf -> [(InsnId,((Int,Int),Int))]
 exprMaxAliasesAndSizes (ExprField _ _ _ expr) = exprMaxAliasesAndSizes expr
-exprMaxAliasesAndSizes (ExprFunc _ (Func (FuncSig _ retType) _) exprs
+exprMaxAliasesAndSizes (ExprFunc _ func exprs
                                  (maxAliases,insnId)) =
     concatMap exprMaxAliasesAndSizes exprs ++ maybe [] aliasesAndSizes retType
   where
     aliasesAndSizes (Type bitSize rtt) =
         [(insnId,((maxAliases,bitSize),length rtt))]
+    retType = funcType func
 exprMaxAliasesAndSizes _ = []

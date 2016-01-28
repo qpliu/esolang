@@ -393,18 +393,8 @@ testStack =
             " ret void" ++
             " }")
 
-testStackFuncs =
-    testCodeGen "testStackFuncs" "import type stack{}type bit{bit}import func pushStack(s stack,b bit)import func popStack(s stack)bit import func isEmptyStack(s stack)bit"
-        ("declare i8* @malloc(i32)" ++
-            "declare void @free(i8*)" ++
-            "declare void @llvm.memcpy.p0i8.p0i8.i32(i8*,i8*,i32,i32,i1)" ++
-            "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)" ++
-            memsetDecl ++
-            unrefStackDefn ++
-            copyDefn ++
-            copyrttDefn ++
-
-            "define {{i8,[0 x i1]}*,i8} @_isEmptyStack({i8,[0 x i1]}* %stackvalue,i8 %stackoffset,i8** %stackimp,i8 %stackimpoffset,{i8*,i8**} %retval) {" ++
+isEmptyStackDefn :: String
+isEmptyStackDefn = "define {{i8,[0 x i1]}*,i8} @_isEmptyStack({i8,[0 x i1]}* %stackvalue,i8 %stackoffset,i8** %stackimp,i8 %stackimpoffset,{i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = extractvalue {i8*,i8**} %retval,0" ++
             " %1 = bitcast i8* %0 to {i8,[0 x i1]}*" ++
@@ -419,8 +409,19 @@ testStackFuncs =
             " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %1,0" ++
             " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 0,1" ++
             " ret {{i8,[0 x i1]}*,i8} %10" ++
-            " }" ++
+            " }"
 
+testStackFuncs =
+    testCodeGen "testStackFuncs" "import type stack{}type bit{bit}import func pushStack(s stack,b bit)import func popStack(s stack)bit import func isEmptyStack(s stack)bit"
+        ("declare i8* @malloc(i32)" ++
+            "declare void @free(i8*)" ++
+            "declare void @llvm.memcpy.p0i8.p0i8.i32(i8*,i8*,i32,i32,i1)" ++
+            "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)" ++
+            memsetDecl ++
+            unrefStackDefn ++
+            copyDefn ++
+            copyrttDefn ++
+            isEmptyStackDefn ++
             "define {{i8,[0 x i1]}*,i8} @_popStack({i8,[0 x i1]}* %stackvalue,i8 %stackoffset,i8** %stackimp,i8 %stackimpoffset,{i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = extractvalue {i8*,i8**} %retval,0" ++
@@ -452,10 +453,9 @@ testStackFuncs =
             " %20 = insertvalue {{i8,[0 x i1]}*,i8} %19,i8 0,1" ++
             " ret {{i8,[0 x i1]}*,i8} %20" ++
             " }" ++
-
             "define void @_pushStack({i8,[0 x i1]}* %stackvalue,i8 %stackoffset,i8** %stackimp,i8 %stackimpoffset,{i8,[0 x i1]}* %bitvalue,i8 %bitoffset) {" ++
             " l0:" ++
-            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %bitvalue,i32 0,i32 1,i8 0" ++
+            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %bitvalue,i32 0,i32 1,i8 %bitoffset" ++
             " %1 = load i1,i1* %0" ++
             " %2 = getelementptr i8*,i8** %stackimp,i8 %stackimpoffset" ++
             " %3 = load i8*,i8** %2" ++
@@ -500,7 +500,75 @@ testStackFuncs =
             " }")
 
 testStackFuncs2 =
-{-
     testCodeGen "testStackFuncs2" "import type stack{}type bit{bit}import func isEmptyStack(s stack)bit func testStackFuncs2(){var s stack;isEmptyStack(s)}"
-        ("")
--}    return ()
+        ("declare i8* @malloc(i32)" ++
+            "declare void @free(i8*)" ++
+            "declare void @llvm.memset.p0i8.i32(i8*,i8,i32,i32,i1)" ++
+            memsetDecl ++
+            unrefStackDefn ++
+            copyDefn ++
+            copyrttDefn ++
+            isEmptyStackDefn ++
+            "define void @_testStackFuncs2() {" ++
+            " l0:" ++
+            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
+            " %1 = ptrtoint i1* %0 to i8" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
+            " %3 = ptrtoint i1* %2 to i8" ++
+            " %4 = alloca i8,i8 %1" ++
+            " %5 = alloca i8*,i8 1" ++
+            " %6 = insertvalue {i8*,i8**} undef,i8* %4,0" ++
+            " %7 = insertvalue {i8*,i8**} %6,i8** %5,1" ++
+            " %8 = alloca i8,i8 %3" ++
+            " %9 = insertvalue {i8*,i8**} undef,i8* %8,0" ++
+            " %10 = insertvalue {i8*,i8**} %9,i8** null,1" ++
+            " call void @llvm.memset.p0i8.i8(i8* %4,i8 0,i8 %1,i32 0,i1 0)" ++
+            " call void @llvm.memset.p0i8.i8(i8* %8,i8 0,i8 %3,i32 0,i1 0)" ++
+            " %11 = extractvalue {i8*,i8**} %7,0" ++
+            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
+            " %13 = select i1 1,i8 0,i8 0" ++
+            " %14 = extractvalue {i8*,i8**} %7,1" ++
+            " %15 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* null,i32 1" ++
+            " %16 = ptrtoint {i32,i32,i32,i8*}* %15 to i32" ++
+            " %17 = call i8* @malloc(i32 %16)" ++
+            " call void @llvm.memset.p0i8.i32(i8* %17,i8 0,i32 0,i32 0,i1 0)" ++
+            " %18 = getelementptr i8*,i8** %14,i8 0" ++
+            " store i8* %17,i8** %18" ++
+            " %19 = select i1 1,i8 0,i8 0" ++
+            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
+            " %21 = load i8,i8* %20" ++
+            " %22 = add i8 1,%21" ++
+            " store i8 %22,i8* %20" ++
+            " %23 = add i8 0,%19" ++
+            " %24 = getelementptr i8*,i8** %14,i8 %23" ++
+            " %25 = load i8*,i8** %24" ++
+            " %26 = bitcast i8* %25 to {i32,i32,i32,i8*}*" ++
+            " %27 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %26,i32 0,i32 0" ++
+            " %28 = load i32,i32* %27" ++
+            " %29 = add i32 1,%28" ++
+            " store i32 %29,i32* %27" ++
+            " %30 = add i8 0,%19" ++
+            " %31 = getelementptr i8*,i8** %14,i8 %30" ++
+            " %32 = load i8*,i8** %31" ++
+            " %33 = bitcast i8* %32 to {i32,i32,i32,i8*}*" ++
+            " %34 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %33,i32 0,i32 0" ++
+            " %35 = load i32,i32* %34" ++
+            " %36 = add i32 1,%35" ++
+            " store i32 %36,i32* %34" ++
+            " %37 = call {{i8,[0 x i1]}*,i8} @_isEmptyStack({i8,[0 x i1]}* %12,i8 %13,i8** %14,i8 %19,{i8*,i8**} %10)" ++
+            " %38 = add i8 0,%19" ++
+            " %39 = getelementptr i8*,i8** %14,i8 %38" ++
+            " %40 = load i8*,i8** %39" ++
+            " call void @unrefStack(i8* %40)" ++
+            " %41 = extractvalue {{i8,[0 x i1]}*,i8} %37,0" ++
+            " %42 = extractvalue {{i8,[0 x i1]}*,i8} %37,1" ++
+            " %43 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
+            " %44 = load i8,i8* %43" ++
+            " %45 = sub i8 %44,1" ++
+            " store i8 %45,i8* %43" ++
+            " %46 = add i8 0,%19" ++
+            " %47 = getelementptr i8*,i8** %14,i8 %46" ++
+            " %48 = load i8*,i8** %47" ++
+            " call void @unrefStack(i8* %48)" ++
+            " ret void" ++
+            " }")

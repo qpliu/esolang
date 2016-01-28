@@ -1,6 +1,8 @@
 module LLVMGen
     (LLVMGen,Label,Temp,
-     newTemp,newLabel,forwardRef,forwardRefTemp,forwardRefLabel,forwardRefInfo,
+     newTemp,newLabel,
+     forwardRef,forwardRefTemp,forwardRefLabel,
+     forwardRefInfo,forwardRefInfoList,
      writeNewTemp,writeNewLabel,writeCode,
      writeRefCountType,writeOffsetType,writeRTTOffsetType,
      writeTemp,writeLabel,writeLabelRef,writeName,writeBranch,
@@ -176,6 +178,14 @@ forwardRefInfo fwGen = do
     saveRefData <- forwardRef (\ [(_,_,Just info)] -> fwGen info)
     return (\ info ->
         saveRefData (error "forwardRefInfo",error "forwardRefInfo",Just info))
+
+forwardRefInfoList :: ([fwd] -> ForwardRefGen ())
+                   -> LLVMGen fwd (fwd -> LLVMGen fwd ())
+forwardRefInfoList fwGen = do
+    saveRefData <- forwardRef (fwGen . map (\ (_,_,Just info) -> info))
+    return (\ info ->
+        saveRefData (error "forwardRefInfoList",error "forwardRefInfoList",
+                     Just info))
 
 getCodeGen :: LLVMGen fwd (LLVMGenState fwd)
 getCodeGen = LLVMGen get

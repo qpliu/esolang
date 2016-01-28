@@ -263,7 +263,7 @@ pushStack stackType bitType = do
         bitPtr <- writeNewTemp "getelementptr "
         writeValueType ","
         writeValueType "* %bitvalue,i32 0,i32 1,"
-        writeOffsetType " 0"
+        writeOffsetType " %bitoffset"
         bit <- writeNewTemp "load i1,i1* "
         writeTemp bitPtr ""
         rawPtrPtr <- writeNewTemp "getelementptr i8*,i8** %stackimp,"
