@@ -4,6 +4,7 @@
 // Interpreter in Go outputs 1001
 // Compiler in Go outputs 1010
 // Interpreter in Haskell outputs 1001
+// Compiler in Haskell outputs 1001
 
 import type stack {}
 

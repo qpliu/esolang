@@ -472,6 +472,7 @@ testStackFuncs =
             " %11 = udiv i32 %9,8" ++
             " %12 = add i32 %11,128" ++
             " %13 = shl i32 %12,3" ++
+            " store i32 %13,i32* %8" ++
             " %14 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %4,i32 0,i32 3" ++
             " %15 = load i8*,i8** %14" ++
             " %16 = call i8* @malloc(i32 %12)" ++
@@ -488,14 +489,15 @@ testStackFuncs =
             " %20 = trunc i32 %19 to i8" ++
             " %21 = zext i1 %1 to i8" ++
             " %22 = shl i8 %21,%20" ++
-            " %23 = xor i8 %22,255" ++
-            " %24 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %4,i32 0,i32 3" ++
-            " %25 = load i8*,i8** %24" ++
-            " %26 = getelementptr i8,i8* %25,i32 %18" ++
-            " %27 = load i8,i8* %26" ++
-            " %28 = and i8 %23,%27" ++
-            " %29 = or i8 %28,%22" ++
-            " store i8 %29,i8* %26" ++
+            " %23 = shl i8 1,%20" ++
+            " %24 = xor i8 %23,255" ++
+            " %25 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %4,i32 0,i32 3" ++
+            " %26 = load i8*,i8** %25" ++
+            " %27 = getelementptr i8,i8* %26,i32 %18" ++
+            " %28 = load i8,i8* %27" ++
+            " %29 = and i8 %24,%28" ++
+            " %30 = or i8 %29,%22" ++
+            " store i8 %30,i8* %27" ++
             " ret void" ++
             " }")
 
