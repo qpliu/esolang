@@ -78,10 +78,8 @@ testAssign =
             " %9 = select i1 1,i8 %importoffset0,i8 0" ++
             " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
             " %11 = load i8,i8* %10" ++
-            " %12 = add i8 1,%11" ++
-            " store i8 %12,i8* %10" ++
-            " %13 = add i8 0,%9" ++
-            " %14 = getelementptr i8*,i8** %8,i8 %13" ++
+            " %12 = add i8 1,%11 store i8 %12,i8* %10" ++
+            " %13 = add i8 0,%9 %14 = getelementptr i8*,i8** %8,i8 %13" ++
             " %15 = load i8*,i8** %14;test addref\n" ++
             " %16 = add i8 0,%9" ++
             " %17 = getelementptr i8*,i8** %8,i8 %16" ++
@@ -90,9 +88,10 @@ testAssign =
             " %20 = load i8,i8* %19" ++
             " %21 = add i8 1,%20" ++
             " store i8 %21,i8* %19" ++
-            " %22 = add i8 0,%9" ++
-            " %23 = getelementptr i8*,i8** %8,i8 %22" ++
-            " %24 = load i8*,i8** %23;test addref\n" ++
+            " %22 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
+            " %23 = load i8,i8* %22" ++
+            " %24 = sub i8 %23,1" ++
+            " store i8 %24,i8* %22" ++
             " %25 = add i8 0,%9" ++
             " %26 = getelementptr i8*,i8** %8,i8 %25" ++
             " %27 = load i8*,i8** %26;test unref\n" ++
@@ -103,13 +102,6 @@ testAssign =
             " %31 = add i8 0,%9" ++
             " %32 = getelementptr i8*,i8** %8,i8 %31" ++
             " %33 = load i8*,i8** %32;test unref\n" ++
-            " %34 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %35 = load i8,i8* %34" ++
-            " %36 = sub i8 %35,1" ++
-            " store i8 %36,i8* %34" ++
-            " %37 = add i8 0,%9" ++
-            " %38 = getelementptr i8*,i8** %8,i8 %37" ++
-            " %39 = load i8*,i8** %38;test unref\n" ++
             " ret void" ++
             " }")
 

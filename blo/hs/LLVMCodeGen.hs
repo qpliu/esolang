@@ -132,6 +132,7 @@ writeFunc name (FuncSig params retType) stmt = do
                 writeRTTOffsetType " 0"
                 return (Just (imp,impOffset))
         writeAddRef (value,offset,imp,varType)
+        writeRTTAddRef (value,offset,imp,varType)
         return (Map.insert name (value,offset,imp,varType) vars))
         Map.empty paramScope
 
@@ -211,7 +212,6 @@ writeAddRef var@(value,_,_,_) = do
     writeTemp newRefCount ","
     writeRefCountType "* "
     writeTemp refCountPtr ""
-    writeRTTAddRef var
 
 writeUnref :: Val -> CodeGen ()
 writeUnref var@(value,_,_,_) = do
@@ -231,7 +231,6 @@ writeUnref var@(value,_,_,_) = do
     writeTemp newRefCount ","
     writeRefCountType "* "
     writeTemp refCountPtr ""
-    writeRTTUnref var
 
 writeNewRTT :: Temp -> LLVMType -> CodeGen (Maybe Temp)
 writeNewRTT allocItem (Type _ []) = return Nothing
@@ -358,6 +357,7 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
     updateScope newScope afterReturn = do
         updatedScope <- foldM (\ scope (varName,varType) -> do
                 writeUnref (scope Map.! varName)
+                writeRTTUnref (scope Map.! varName)
                 return (Map.delete varName scope))
             newScope (stmtLeavingScope stmt (stmtNext stmt))
         maybe (do unless afterReturn (writeCode " ret void")
@@ -429,11 +429,11 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
                         return (Just (imp,impOffset))
                 let val = (value,offset,imp,varType)
                 writeAddRef val
+                writeRTTAddRef val
                 return val)
             (\ expr -> do
                 val <- wExpr scope expr
                 writeAddRef val
-                writeRTTUnref val
                 return val)
             expr
         (updatedScope,fellThru) <-
@@ -602,9 +602,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
         lval <- wExpr scope lhs
         rval <- wExpr scope rhs
         writeAddRef rval
-        writeRTTUnref rval
         writeRTTUnref lval
         writeUnref lval
+        writeRTTUnref lval
         (updatedScope,fellThru) <-
             updateScope (Map.insert varName rval scope) False
         return (blockLabel,inLoop,fellThru,updatedScope,branchFroms,loopRefs)
