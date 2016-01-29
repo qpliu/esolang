@@ -24,7 +24,7 @@ tests = TestList [
 testVar :: Assertion
 testVar =
     testCodeGen "testVar" "import type test{}func TestVar(){var a test}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define void @_TestVar() {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
@@ -62,7 +62,7 @@ testVar =
 testAssign :: Assertion
 testAssign =
     testCodeGen "testAssign" "import type test{}func TestAssign(a test){var b test=a}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define void @_TestAssign({i8,[0 x i1]}* %value0,i8 %offset0,i8** %import0,i8 %importoffset0) {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
@@ -116,7 +116,7 @@ testAssign =
 testFuncall :: Assertion
 testFuncall =
     testCodeGen "testFuncall" "import type test{}func testFuncall(a test){testFuncall(a)}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define void @_testFuncall({i8,[0 x i1]}* %value0,i8 %offset0,i8** %import0,i8 %importoffset0) {" ++
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
@@ -150,7 +150,7 @@ testFuncall =
 testFuncall2 :: Assertion
 testFuncall2 =
     testCodeGen "testFuncall2" "import type test{}func testFuncall2()test{testFuncall2();var a test;return a}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define {{i8,[0 x i1]}*,i8,i8**,i8} @_testFuncall2({i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
@@ -213,7 +213,7 @@ testFuncall2 =
 testReturn :: Assertion
 testReturn =
     testCodeGen "testReturn" "import type test{}func testReturn()test{var a test;return a}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define {{i8,[0 x i1]}*,i8,i8**,i8} @_testReturn({i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
@@ -263,7 +263,7 @@ testReturn =
 testVarInLoop :: Assertion
 testVarInLoop =
     testCodeGen "testVarInLoop" "import type test{}func testVarInLoop(){var a test;for{}}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define void @_testVarInLoop() {" ++
             " l0: %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
             " %1 = ptrtoint i1* %0 to i8" ++
@@ -299,7 +299,7 @@ testVarInLoop =
 testFuncallInLoop :: Assertion
 testFuncallInLoop =
     testCodeGen "testFuncallInLoop" "import type test{}func testFuncallInLoop()test{for{testFuncallInLoop()}}"
-        (prologue ++
+        (prologue ++ copyrttDefn ++
             "define {{i8,[0 x i1]}*,i8,i8**,i8} @_testFuncallInLoop({i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++

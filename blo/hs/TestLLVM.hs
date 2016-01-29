@@ -25,7 +25,7 @@ testCodeGen label srccode expected = do
     unless (exitCode == ExitSuccess) (assertFailure err)
 
 prologue :: String
-prologue = memsetDecl ++ copyDefn ++ copyrttDefn
+prologue = memsetDecl ++ copyDefn
 
 memsetDecl :: String
 memsetDecl = "declare void @llvm.memset.p0i8.i8(i8*,i8,i8,i32,i1)"

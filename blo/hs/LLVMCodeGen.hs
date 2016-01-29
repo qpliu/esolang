@@ -36,7 +36,7 @@ codeGen (types,funcs) =
     uniq (concatMap (map genCode . typeDecls . snd) types
             ++ concatMap (map genCode . funcDecls . snd) funcs
             ++ map genCode builtinDecls)
-        ++ concatMap genCode (builtinDefns maxAliases)
+        ++ concatMap genCode (builtinDefns maxAliases maxRTTOffset)
         ++ concatMap (genCode . codeGenFunc) funcs
   where
     uniq = concat . Set.toList . Set.fromList
@@ -57,11 +57,11 @@ builtinDecls = [
         writeOffsetType ",i32,i1)")
     ]
 
-builtinDefns :: Int -> [CodeGen ()]
-builtinDefns maxAliases = [
-    writeBuiltinCopy,
-    writeBuiltinCopyRTT
-    ] ++ map writeBuiltinAlloc [2..maxAliases]
+builtinDefns :: Int -> Int -> [CodeGen ()]
+builtinDefns maxAliases maxRTTOffset =
+    [writeBuiltinCopy]
+        ++ (if maxRTTOffset > 0 then [writeBuiltinCopyRTT] else [])
+        ++ map writeBuiltinAlloc [2..maxAliases]
 
 codeGenFunc :: (String,LLVMFunc) -> CodeGen ()
 codeGenFunc (_,ImportFunc _ (LLVMRuntimeFunc _ importFunc)) = importFunc
