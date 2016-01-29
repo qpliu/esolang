@@ -971,30 +971,26 @@ testVarInitializer =
             " %2 = alloca i8,i8 %1" ++
             " %3 = insertvalue {i8*,i8**} undef,i8* %2,0" ++
             " %4 = insertvalue {i8*,i8**} %3,i8** null,1" ++
-            " %5 = alloca i8,i8 %1" ++
-            " %6 = insertvalue {i8*,i8**} undef,i8* %5,0" ++
-            " %7 = insertvalue {i8*,i8**} %6,i8** null,1" ++
             " call void @llvm.memset.p0i8.i8(i8* %2,i8 0,i8 %1,i32 0,i1 0)" ++
-            " call void @llvm.memset.p0i8.i8(i8* %5,i8 0,i8 %1,i32 0,i1 0)" ++
-            " %8 = extractvalue {i8*,i8**} %4,0" ++
-            " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
-            " %10 = select i1 1,i8 0,i8 0" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
+            " %5 = extractvalue {i8*,i8**} %4,0" ++
+            " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
+            " %7 = select i1 1,i8 0,i8 0" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
+            " %9 = load i8,i8* %8" ++
+            " %10 = add i8 1,%9" ++
+            " store i8 %10,i8* %8" ++
+            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
             " %12 = load i8,i8* %11" ++
             " %13 = add i8 1,%12" ++
             " store i8 %13,i8* %11" ++
-            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
+            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
             " %15 = load i8,i8* %14" ++
-            " %16 = add i8 1,%15" ++
+            " %16 = sub i8 %15,1" ++
             " store i8 %16,i8* %14" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
+            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
             " %18 = load i8,i8* %17" ++
             " %19 = sub i8 %18,1" ++
             " store i8 %19,i8* %17" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = sub i8 %21,1" ++
-            " store i8 %22,i8* %20" ++
             " ret void" ++
             " }")
 
@@ -1012,34 +1008,30 @@ testVarInitializer2 =
             " %5 = alloca i8,i8 %1" ++
             " %6 = insertvalue {i8*,i8**} undef,i8* %5,0" ++
             " %7 = insertvalue {i8*,i8**} %6,i8** null,1" ++
-            " %8 = alloca i8,i8 %1" ++
-            " %9 = insertvalue {i8*,i8**} undef,i8* %8,0" ++
-            " %10 = insertvalue {i8*,i8**} %9,i8** null,1" ++
             " call void @llvm.memset.p0i8.i8(i8* %2,i8 0,i8 %1,i32 0,i1 0)" ++
             " call void @llvm.memset.p0i8.i8(i8* %5,i8 0,i8 %1,i32 0,i1 0)" ++
-            " call void @llvm.memset.p0i8.i8(i8* %8,i8 0,i8 %1,i32 0,i1 0)" ++
-            " %11 = extractvalue {i8*,i8**} %4,0" ++
-            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
-            " %13 = select i1 1,i8 0,i8 0" ++
-            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
-            " %15 = load i8,i8* %14" ++
-            " %16 = add i8 1,%15" ++
-            " store i8 %16,i8* %14" ++
-            " %17 = call {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %12,i8 %13,{i8*,i8**} %10)" ++
-            " %18 = extractvalue {{i8,[0 x i1]}*,i8} %17,0" ++
-            " %19 = extractvalue {{i8,[0 x i1]}*,i8} %17,1" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %18,i32 0,i32 0" ++
+            " %8 = extractvalue {i8*,i8**} %4,0" ++
+            " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
+            " %10 = select i1 1,i8 0,i8 0" ++
+            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
+            " %12 = load i8,i8* %11" ++
+            " %13 = add i8 1,%12" ++
+            " store i8 %13,i8* %11" ++
+            " %14 = call {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %9,i8 %10,{i8*,i8**} %7)" ++
+            " %15 = extractvalue {{i8,[0 x i1]}*,i8} %14,0" ++
+            " %16 = extractvalue {{i8,[0 x i1]}*,i8} %14,1" ++
+            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
+            " %18 = load i8,i8* %17" ++
+            " %19 = add i8 1,%18" ++
+            " store i8 %19,i8* %17" ++
+            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
             " %21 = load i8,i8* %20" ++
-            " %22 = add i8 1,%21" ++
+            " %22 = sub i8 %21,1" ++
             " store i8 %22,i8* %20" ++
-            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %18,i32 0,i32 0" ++
+            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
             " %24 = load i8,i8* %23" ++
             " %25 = sub i8 %24,1" ++
             " store i8 %25,i8* %23" ++
-            " %26 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
-            " %27 = load i8,i8* %26" ++
-            " %28 = sub i8 %27,1" ++
-            " store i8 %28,i8* %26" ++
             " ret void" ++
             " }" ++
             "define {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %value0,i8 %offset0,{i8*,i8**} %retval) {" ++
@@ -1052,7 +1044,8 @@ testVarInitializer2 =
             " store i8 %4,i8* %2" ++
             " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
             " %6 = load i8,i8* %5" ++
-            " %7 = sub i8 %6,1 store i8 %7,i8* %5" ++
+            " %7 = sub i8 %6,1" ++
+            " store i8 %7,i8* %5" ++
             " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
             " br i1 %8,label %l1,label %l2" ++
             " l1:" ++

@@ -916,8 +916,8 @@ varMaxAliasesAndSizes :: LLVMStmt -> [(InsnId,((Int,Int),Int))]
 varMaxAliasesAndSizes (StmtBlock _ stmts) =
     concatMap varMaxAliasesAndSizes stmts
 varMaxAliasesAndSizes stmt@(StmtVar _ _ (Type bitSize rtt) maxAliases expr) =
-    (stmtId stmt,((maxAliases,bitSize),length rtt))
-        : maybe [] exprMaxAliasesAndSizes expr
+    maybe [(stmtId stmt,((maxAliases,bitSize),length rtt))]
+          exprMaxAliasesAndSizes expr
 varMaxAliasesAndSizes (StmtIf _ expr ifBlock elseBlock) =
     exprMaxAliasesAndSizes expr ++ varMaxAliasesAndSizes ifBlock
                                 ++ (maybe [] varMaxAliasesAndSizes elseBlock)
