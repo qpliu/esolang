@@ -42,20 +42,12 @@ testVar =
             " %11 = getelementptr i8*,i8** %9,i8 0" ++
             " store i8* %10,i8** %11" ++
             " %12 = select i1 1,i8 0,i8 0" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = add i8 1,%14" ++
-            " store i8 %15,i8* %13" ++
+            " %13 = add i8 0,%12" ++
+            " %14 = getelementptr i8*,i8** %9,i8 %13" ++
+            " %15 = load i8*,i8** %14;test addref\n" ++
             " %16 = add i8 0,%12" ++
             " %17 = getelementptr i8*,i8** %9,i8 %16" ++
-            " %18 = load i8*,i8** %17;test addref\n" ++
-            " %19 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %20 = load i8,i8* %19" ++
-            " %21 = sub i8 %20,1" ++
-            " store i8 %21,i8* %19" ++
-            " %22 = add i8 0,%12" ++
-            " %23 = getelementptr i8*,i8** %9,i8 %22" ++
-            " %24 = load i8*,i8** %23;test unref\n" ++
+            " %18 = load i8*,i8** %17;test unref\n" ++
             " ret void" ++
             " }")
 
@@ -69,34 +61,18 @@ testAssign =
             " %1 = select i1 1,i8 %offset0,i8 0" ++
             " %2 = select i1 1,i8** %import0,i8** null" ++
             " %3 = select i1 1,i8 %importoffset0,i8 0" ++
-            " %4 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %5 = load i8,i8* %4" ++
-            " %6 = add i8 1,%5" ++
-            " store i8 %6,i8* %4" ++
+            " %4 = add i8 0,%3" ++
+            " %5 = getelementptr i8*,i8** %2,i8 %4" ++
+            " %6 = load i8*,i8** %5;test addref\n" ++
             " %7 = add i8 0,%3" ++
             " %8 = getelementptr i8*,i8** %2,i8 %7" ++
             " %9 = load i8*,i8** %8;test addref\n" ++
             " %10 = add i8 0,%3" ++
             " %11 = getelementptr i8*,i8** %2,i8 %10" ++
-            " %12 = load i8*,i8** %11;test addref\n" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = add i8 1,%14" ++
-            " store i8 %15,i8* %13" ++
-            " %16 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %17 = load i8,i8* %16" ++
-            " %18 = sub i8 %17,1" ++
-            " store i8 %18,i8* %16" ++
-            " %19 = add i8 0,%3" ++
-            " %20 = getelementptr i8*,i8** %2,i8 %19" ++
-            " %21 = load i8*,i8** %20;test unref\n" ++
-            " %22 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %23 = load i8,i8* %22" ++
-            " %24 = sub i8 %23,1" ++
-            " store i8 %24,i8* %22" ++
-            " %25 = add i8 0,%3" ++
-            " %26 = getelementptr i8*,i8** %2,i8 %25" ++
-            " %27 = load i8*,i8** %26;test unref\n" ++
+            " %12 = load i8*,i8** %11;test unref\n" ++
+            " %13 = add i8 0,%3" ++
+            " %14 = getelementptr i8*,i8** %2,i8 %13" ++
+            " %15 = load i8*,i8** %14;test unref\n" ++
             " ret void" ++
             " }")
 
@@ -110,27 +86,19 @@ testFuncall =
             " %1 = select i1 1,i8 %offset0,i8 0" ++
             " %2 = select i1 1,i8** %import0,i8** null" ++
             " %3 = select i1 1,i8 %importoffset0,i8 0" ++
-            " %4 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %5 = load i8,i8* %4" ++
-            " %6 = add i8 1,%5" ++
-            " store i8 %6,i8* %4" ++
+            " %4 = add i8 0,%3" ++
+            " %5 = getelementptr i8*,i8** %2,i8 %4" ++
+            " %6 = load i8*,i8** %5;test addref\n" ++
             " %7 = add i8 0,%3" ++
             " %8 = getelementptr i8*,i8** %2,i8 %7" ++
             " %9 = load i8*,i8** %8;test addref\n" ++
+            " call void @_testFuncall({i8,[0 x i1]}* %0,i8 %1,i8** %2,i8 %3)" ++
             " %10 = add i8 0,%3" ++
             " %11 = getelementptr i8*,i8** %2,i8 %10" ++
-            " %12 = load i8*,i8** %11;test addref\n" ++
-            " call void @_testFuncall({i8,[0 x i1]}* %0,i8 %1,i8** %2,i8 %3)" ++
+            " %12 = load i8*,i8** %11;test unref\n" ++
             " %13 = add i8 0,%3" ++
             " %14 = getelementptr i8*,i8** %2,i8 %13" ++
             " %15 = load i8*,i8** %14;test unref\n" ++
-            " %16 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %17 = load i8,i8* %16" ++
-            " %18 = sub i8 %17,1" ++
-            " store i8 %18,i8* %16" ++
-            " %19 = add i8 0,%3" ++
-            " %20 = getelementptr i8*,i8** %2,i8 %19" ++
-            " %21 = load i8*,i8** %20;test unref\n" ++
             " ret void" ++
             " }")
 
@@ -168,33 +136,25 @@ testFuncall2 =
             " %23 = getelementptr i8*,i8** %21,i8 0" ++
             " store i8* %22,i8** %23" ++
             " %24 = select i1 1,i8 0,i8 0" ++
-            " %25 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %19,i32 0,i32 0" ++
-            " %26 = load i8,i8* %25" ++
-            " %27 = add i8 1,%26" ++
-            " store i8 %27,i8* %25" ++
+            " %25 = add i8 0,%24" ++
+            " %26 = getelementptr i8*,i8** %21,i8 %25" ++
+            " %27 = load i8*,i8** %26;test addref\n" ++
             " %28 = add i8 0,%24" ++
             " %29 = getelementptr i8*,i8** %21,i8 %28" ++
             " %30 = load i8*,i8** %29;test addref\n" ++
             " %31 = add i8 0,%24" ++
             " %32 = getelementptr i8*,i8** %21,i8 %31" ++
-            " %33 = load i8*,i8** %32;test addref\n" ++
-            " %34 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %19,i32 0,i32 0" ++
-            " %35 = load i8,i8* %34" ++
-            " %36 = sub i8 %35,1" ++
-            " store i8 %36,i8* %34" ++
-            " %37 = add i8 0,%24" ++
-            " %38 = getelementptr i8*,i8** %21,i8 %37" ++
-            " %39 = load i8*,i8** %38;test unref\n" ++
-            " %40 = extractvalue {i8*,i8**} %retval,0" ++
-            " %41 = bitcast i8* %40 to {i8,[0 x i1]}*" ++
-            " %42 = extractvalue {i8*,i8**} %retval,1" ++
-            " call void @copy({i8,[0 x i1]}* %19,i8 %20,{i8,[0 x i1]}* %41,i8 0,i8 0)" ++
-            " call void @copyrtt(i8** %21,i8 %24,i8** %42,i8 0,i8 1)" ++
-            " %43 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} undef,{i8,[0 x i1]}* %41,0" ++
-            " %44 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %43,i8 0,1" ++
-            " %45 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %44,i8** %21,2" ++
-            " %46 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %45,i8 0,3" ++
-            " ret {{i8,[0 x i1]}*,i8,i8**,i8} %46" ++
+            " %33 = load i8*,i8** %32;test unref\n" ++
+            " %34 = extractvalue {i8*,i8**} %retval,0" ++
+            " %35 = bitcast i8* %34 to {i8,[0 x i1]}*" ++
+            " %36 = extractvalue {i8*,i8**} %retval,1" ++
+            " call void @copy({i8,[0 x i1]}* %19,i8 %20,{i8,[0 x i1]}* %35,i8 0,i8 0)" ++
+            " call void @copyrtt(i8** %21,i8 %24,i8** %36,i8 0,i8 1)" ++
+            " %37 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} undef,{i8,[0 x i1]}* %35,0" ++
+            " %38 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %37,i8 0,1" ++
+            " %39 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %38,i8** %21,2" ++
+            " %40 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %39,i8 0,3" ++
+            " ret {{i8,[0 x i1]}*,i8,i8**,i8} %40" ++
             " }")
 
 testReturn :: Assertion
@@ -218,33 +178,25 @@ testReturn =
             " %11 = getelementptr i8*,i8** %9,i8 0" ++
             " store i8* %10,i8** %11" ++
             " %12 = select i1 1,i8 0,i8 0" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = add i8 1,%14" ++
-            " store i8 %15,i8* %13" ++
+            " %13 = add i8 0,%12" ++
+            " %14 = getelementptr i8*,i8** %9,i8 %13" ++
+            " %15 = load i8*,i8** %14;test addref\n" ++
             " %16 = add i8 0,%12" ++
             " %17 = getelementptr i8*,i8** %9,i8 %16" ++
             " %18 = load i8*,i8** %17;test addref\n" ++
             " %19 = add i8 0,%12" ++
             " %20 = getelementptr i8*,i8** %9,i8 %19" ++
-            " %21 = load i8*,i8** %20;test addref\n" ++
-            " %22 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %23 = load i8,i8* %22" ++
-            " %24 = sub i8 %23,1" ++
-            " store i8 %24,i8* %22" ++
-            " %25 = add i8 0,%12" ++
-            " %26 = getelementptr i8*,i8** %9,i8 %25" ++
-            " %27 = load i8*,i8** %26;test unref\n" ++
-            " %28 = extractvalue {i8*,i8**} %retval,0" ++
-            " %29 = bitcast i8* %28 to {i8,[0 x i1]}*" ++
-            " %30 = extractvalue {i8*,i8**} %retval,1" ++
-            " call void @copy({i8,[0 x i1]}* %7,i8 %8,{i8,[0 x i1]}* %29,i8 0,i8 0)" ++
-            " call void @copyrtt(i8** %9,i8 %12,i8** %30,i8 0,i8 1)" ++
-            " %31 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} undef,{i8,[0 x i1]}* %29,0" ++
-            " %32 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %31,i8 0,1" ++
-            " %33 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %32,i8** %9,2" ++
-            " %34 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %33,i8 0,3" ++
-            " ret {{i8,[0 x i1]}*,i8,i8**,i8} %34" ++
+            " %21 = load i8*,i8** %20;test unref\n" ++
+            " %22 = extractvalue {i8*,i8**} %retval,0" ++
+            " %23 = bitcast i8* %22 to {i8,[0 x i1]}*" ++
+            " %24 = extractvalue {i8*,i8**} %retval,1" ++
+            " call void @copy({i8,[0 x i1]}* %7,i8 %8,{i8,[0 x i1]}* %23,i8 0,i8 0)" ++
+            " call void @copyrtt(i8** %9,i8 %12,i8** %24,i8 0,i8 1)" ++
+            " %25 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} undef,{i8,[0 x i1]}* %23,0" ++
+            " %26 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %25,i8 0,1" ++
+            " %27 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %26,i8** %9,2" ++
+            " %28 = insertvalue {{i8,[0 x i1]}*,i8,i8**,i8} %27,i8 0,3" ++
+            " ret {{i8,[0 x i1]}*,i8,i8**,i8} %28" ++
             " }")
 
 testVarInLoop :: Assertion
@@ -252,7 +204,8 @@ testVarInLoop =
     testCodeGen "testVarInLoop" "import type test{}func testVarInLoop(){var a test;for{}}"
         (prologue ++ copyrttDefn ++
             "define void @_testVarInLoop() {" ++
-            " l0: %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
+            " l0:" ++
+            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 0" ++
             " %1 = ptrtoint i1* %0 to i8" ++
             " %2 = alloca i8,i8 %1" ++
             " %3 = alloca i8*,i8 1" ++
@@ -267,19 +220,15 @@ testVarInLoop =
             " %11 = getelementptr i8*,i8** %9,i8 0" ++
             " store i8* %10,i8** %11" ++
             " %12 = select i1 1,i8 0,i8 0" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = add i8 1,%14" ++
-            " store i8 %15,i8* %13" ++
-            " %16 = add i8 0,%12" ++
-            " %17 = getelementptr i8*,i8** %9,i8 %16" ++
-            " %18 = load i8*,i8** %17;test addref\n" ++
+            " %13 = add i8 0,%12" ++
+            " %14 = getelementptr i8*,i8** %9,i8 %13" ++
+            " %15 = load i8*,i8** %14;test addref\n" ++
             " br label %l1" ++
             " l1:" ++
-            " %19 = phi {i8,[0 x i1]}* [%19,%l1],[%7,%l0]" ++
-            " %20 = phi i8 [%20,%l1],[%8,%l0]" ++
-            " %21 = phi i8** [%21,%l1],[%9,%l0]" ++
-            " %22 = phi i8 [%22,%l1],[%12,%l0]" ++
+            " %16 = phi {i8,[0 x i1]}* [%16,%l1],[%7,%l0]" ++
+            " %17 = phi i8 [%17,%l1],[%8,%l0]" ++
+            " %18 = phi i8** [%18,%l1],[%9,%l0]" ++
+            " %19 = phi i8 [%19,%l1],[%12,%l0]" ++
             " br label %l1" ++
             " }")
 
@@ -357,26 +306,18 @@ testStack =
             " %13 = getelementptr i8*,i8** %9,i8 0" ++
             " store i8* %12,i8** %13" ++
             " %14 = select i1 1,i8 0,i8 0" ++
-            " %15 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %16 = load i8,i8* %15" ++
-            " %17 = add i8 1,%16" ++
-            " store i8 %17,i8* %15" ++
-            " %18 = add i8 0,%14" ++
-            " %19 = getelementptr i8*,i8** %9,i8 %18" ++
-            " %20 = load i8*,i8** %19" ++
-            " %21 = bitcast i8* %20 to {i32,i32,i32,i8*}*" ++
-            " %22 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %21,i32 0,i32 0" ++
-            " %23 = load i32,i32* %22" ++
-            " %24 = add i32 1,%23" ++
-            " store i32 %24,i32* %22" ++
-            " %25 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %26 = load i8,i8* %25" ++
-            " %27 = sub i8 %26,1" ++
-            " store i8 %27,i8* %25" ++
-            " %28 = add i8 0,%14" ++
-            " %29 = getelementptr i8*,i8** %9,i8 %28" ++
-            " %30 = load i8*,i8** %29" ++
-            " call void @unrefStack(i8* %30)" ++
+            " %15 = add i8 0,%14" ++
+            " %16 = getelementptr i8*,i8** %9,i8 %15" ++
+            " %17 = load i8*,i8** %16" ++
+            " %18 = bitcast i8* %17 to {i32,i32,i32,i8*}*" ++
+            " %19 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %18,i32 0,i32 0" ++
+            " %20 = load i32,i32* %19" ++
+            " %21 = add i32 1,%20" ++
+            " store i32 %21,i32* %19" ++
+            " %22 = add i8 0,%14" ++
+            " %23 = getelementptr i8*,i8** %9,i8 %22" ++
+            " %24 = load i8*,i8** %23" ++
+            " call void @unrefStack(i8* %24)" ++
             " ret void" ++
             " }")
 
@@ -524,40 +465,32 @@ testStackFuncs2 =
             " %18 = getelementptr i8*,i8** %14,i8 0" ++
             " store i8* %17,i8** %18" ++
             " %19 = select i1 1,i8 0,i8 0" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = add i8 1,%21" ++
-            " store i8 %22,i8* %20" ++
-            " %23 = add i8 0,%19" ++
-            " %24 = getelementptr i8*,i8** %14,i8 %23" ++
-            " %25 = load i8*,i8** %24" ++
-            " %26 = bitcast i8* %25 to {i32,i32,i32,i8*}*" ++
-            " %27 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %26,i32 0,i32 0" ++
-            " %28 = load i32,i32* %27" ++
-            " %29 = add i32 1,%28" ++
-            " store i32 %29,i32* %27" ++
-            " %30 = add i8 0,%19" ++
-            " %31 = getelementptr i8*,i8** %14,i8 %30" ++
-            " %32 = load i8*,i8** %31" ++
-            " %33 = bitcast i8* %32 to {i32,i32,i32,i8*}*" ++
-            " %34 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %33,i32 0,i32 0" ++
-            " %35 = load i32,i32* %34" ++
-            " %36 = add i32 1,%35" ++
-            " store i32 %36,i32* %34" ++
-            " %37 = call {{i8,[0 x i1]}*,i8} @_isEmptyStack({i8,[0 x i1]}* %12,i8 %13,i8** %14,i8 %19,{i8*,i8**} %10)" ++
-            " %38 = add i8 0,%19" ++
-            " %39 = getelementptr i8*,i8** %14,i8 %38" ++
-            " %40 = load i8*,i8** %39" ++
-            " call void @unrefStack(i8* %40)" ++
-            " %41 = extractvalue {{i8,[0 x i1]}*,i8} %37,0" ++
-            " %42 = extractvalue {{i8,[0 x i1]}*,i8} %37,1" ++
-            " %43 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
-            " %44 = load i8,i8* %43" ++
-            " %45 = sub i8 %44,1" ++
-            " store i8 %45,i8* %43" ++
-            " %46 = add i8 0,%19" ++
-            " %47 = getelementptr i8*,i8** %14,i8 %46" ++
-            " %48 = load i8*,i8** %47" ++
-            " call void @unrefStack(i8* %48)" ++
+            " %20 = add i8 0,%19" ++
+            " %21 = getelementptr i8*,i8** %14,i8 %20" ++
+            " %22 = load i8*,i8** %21" ++
+            " %23 = bitcast i8* %22 to {i32,i32,i32,i8*}*" ++
+            " %24 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %23,i32 0,i32 0" ++
+            " %25 = load i32,i32* %24" ++
+            " %26 = add i32 1,%25" ++
+            " store i32 %26,i32* %24" ++
+            " %27 = add i8 0,%19" ++
+            " %28 = getelementptr i8*,i8** %14,i8 %27" ++
+            " %29 = load i8*,i8** %28" ++
+            " %30 = bitcast i8* %29 to {i32,i32,i32,i8*}*" ++
+            " %31 = getelementptr {i32,i32,i32,i8*},{i32,i32,i32,i8*}* %30,i32 0,i32 0" ++
+            " %32 = load i32,i32* %31" ++
+            " %33 = add i32 1,%32" ++
+            " store i32 %33,i32* %31" ++
+            " %34 = call {{i8,[0 x i1]}*,i8} @_isEmptyStack({i8,[0 x i1]}* %12,i8 %13,i8** %14,i8 %19,{i8*,i8**} %10)" ++
+            " %35 = add i8 0,%19" ++
+            " %36 = getelementptr i8*,i8** %14,i8 %35" ++
+            " %37 = load i8*,i8** %36" ++
+            " call void @unrefStack(i8* %37)" ++
+            " %38 = extractvalue {{i8,[0 x i1]}*,i8} %34,0" ++
+            " %39 = extractvalue {{i8,[0 x i1]}*,i8} %34,1" ++
+            " %40 = add i8 0,%19" ++
+            " %41 = getelementptr i8*,i8** %14,i8 %40" ++
+            " %42 = load i8*,i8** %41" ++
+            " call void @unrefStack(i8* %42)" ++
             " ret void" ++
             " }")

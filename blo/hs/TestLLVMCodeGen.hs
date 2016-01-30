@@ -57,20 +57,12 @@ testSimple =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = sub i8 %12,1" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = extractvalue {i8*,i8**} %retval,0" ++
-            " %15 = bitcast i8* %14 to {i8,[0 x i1]}*" ++
-            " call void @copy({i8,[0 x i1]}* %6,i8 %7,{i8,[0 x i1]}* %15,i8 0,i8 1)" ++
-            " %16 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %15,0" ++
-            " %17 = insertvalue {{i8,[0 x i1]}*,i8} %16,i8 0,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %17" ++
+            " %8 = extractvalue {i8*,i8**} %retval,0" ++
+            " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %6,i8 %7,{i8,[0 x i1]}* %9,i8 0,i8 1)" ++
+            " %10 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %9,0" ++
+            " %11 = insertvalue {{i8,[0 x i1]}*,i8} %10,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %11" ++
             " }")
 
 testSimple2 :: Assertion
@@ -81,27 +73,19 @@ testSimple2 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %6 = load i8,i8* %5" ++
-            " %7 = sub i8 %6,1" ++
-            " store i8 %7,i8* %5" ++
-            " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
-            " br i1 %8,label %l1,label %l2" ++
+            " %2 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
+            " br i1 %2,label %l1,label %l2" ++
             " l1:" ++
-            " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
-            " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 %1,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %10" ++
+            " %3 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
+            " %4 = insertvalue {{i8,[0 x i1]}*,i8} %3,i8 %1,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %4" ++
             " l2:" ++
-            " %11 = extractvalue {i8*,i8**} %retval,0" ++
-            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
-            " call void @copy({i8,[0 x i1]}* %0,i8 %1,{i8,[0 x i1]}* %12,i8 0,i8 1)" ++
-            " %13 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %12,0" ++
-            " %14 = insertvalue {{i8,[0 x i1]}*,i8} %13,i8 0,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %14" ++
+            " %5 = extractvalue {i8*,i8**} %retval,0" ++
+            " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %0,i8 %1,{i8,[0 x i1]}* %6,i8 0,i8 1)" ++
+            " %7 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %6,0" ++
+            " %8 = insertvalue {{i8,[0 x i1]}*,i8} %7,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %8" ++
             " }")
 
 testInfiniteLoop :: Assertion
@@ -182,18 +166,10 @@ testSetClear =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 1,i1* %11" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 0,i1* %12" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = sub i8 %14,1" ++
-            " store i8 %15,i8* %13" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 1,i1* %8" ++
+            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 0,i1* %9" ++
             " ret void" ++
             " }")
 
@@ -205,26 +181,14 @@ testIf =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %6 = load i1,i1* %5" ++
-            " br i1 %6,label %l1,label %l2" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %3 = load i1,i1* %2" ++
+            " br i1 %3,label %l1,label %l2" ++
             " l1:" ++
-            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " store i1 1,i1* %7" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = sub i8 %9,1" ++
-            " store i8 %10,i8* %8" ++
+            " %4 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " store i1 1,i1* %4" ++
             " ret void" ++
             " l2:" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = sub i8 %12,1" ++
-            " store i8 %13,i8* %11" ++
             " ret void" ++
             " }")
 
@@ -236,28 +200,16 @@ testIf2 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %6 = load i1,i1* %5" ++
-            " br i1 %6,label %l1,label %l2" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %3 = load i1,i1* %2" ++
+            " br i1 %3,label %l1,label %l2" ++
             " l1:" ++
-            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " store i1 1,i1* %7" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = sub i8 %9,1" ++
-            " store i8 %10,i8* %8" ++
+            " %4 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " store i1 1,i1* %4" ++
             " ret void" ++
             " l2:" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " store i1 0,i1* %11" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %13 = load i8,i8* %12" ++
-            " %14 = sub i8 %13,1" ++
-            " store i8 %14,i8* %12" ++
+            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " store i1 0,i1* %5" ++
             " ret void" ++
             " }")
 
@@ -269,56 +221,24 @@ testIf3 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = select i1 1,{i8,[0 x i1]}* %value1,{i8,[0 x i1]}* null" ++
-            " %6 = select i1 1,i8 %offset1,i8 0" ++
-            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 0" ++
-            " %8 = load i8,i8* %7" ++
-            " %9 = add i8 1,%8" ++
-            " store i8 %9,i8* %7" ++
-            " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %11 = load i1,i1* %10" ++
-            " br i1 %11,label %l1,label %l2" ++
+            " %2 = select i1 1,{i8,[0 x i1]}* %value1,{i8,[0 x i1]}* null" ++
+            " %3 = select i1 1,i8 %offset1,i8 0" ++
+            " %4 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %5 = load i1,i1* %4" ++
+            " br i1 %5,label %l1,label %l2" ++
             " l1:" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " store i1 1,i1* %12" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = sub i8 %14,1" ++
-            " store i8 %15,i8* %13" ++
-            " %16 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 0" ++
-            " %17 = load i8,i8* %16" ++
-            " %18 = sub i8 %17,1" ++
-            " store i8 %18,i8* %16" ++
+            " %6 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " store i1 1,i1* %6" ++
             " ret void" ++
             " l2:" ++
-            " %19 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 1,i8 %6" ++
-            " %20 = load i1,i1* %19" ++
-            " br i1 %20,label %l3,label %l4" ++
+            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %2,i32 0,i32 1,i8 %3" ++
+            " %8 = load i1,i1* %7" ++
+            " br i1 %8,label %l3,label %l4" ++
             " l3:" ++
-            " %21 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " store i1 0,i1* %21" ++
-            " %22 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %23 = load i8,i8* %22" ++
-            " %24 = sub i8 %23,1" ++
-            " store i8 %24,i8* %22" ++
-            " %25 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 0" ++
-            " %26 = load i8,i8* %25" ++
-            " %27 = sub i8 %26,1" ++
-            " store i8 %27,i8* %25" ++
+            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " store i1 0,i1* %9" ++
             " ret void" ++
             " l4:" ++
-            " %28 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %29 = load i8,i8* %28" ++
-            " %30 = sub i8 %29,1" ++
-            " store i8 %30,i8* %28" ++
-            " %31 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 0" ++
-            " %32 = load i8,i8* %31" ++
-            " %33 = sub i8 %32,1" ++
-            " store i8 %33,i8* %31" ++
             " ret void" ++
             " }")
 
@@ -330,28 +250,20 @@ testIf4 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %6 = load i1,i1* %5" ++
-            " br i1 %6,label %l1,label %l2" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %3 = load i1,i1* %2" ++
+            " br i1 %3,label %l1,label %l2" ++
             " l1:" ++
-            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " store i1 1,i1* %7" ++
+            " %4 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " store i1 1,i1* %4" ++
             " br label %l3" ++
             " l2:" ++
             " br label %l3" ++
             " l3:" ++
-            " %8 = phi {i8,[0 x i1]}* [%0,%l2],[%0,%l1]" ++
-            " %9 = phi i8 [%1,%l2],[%1,%l1]" ++
-            " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %8,i32 0,i32 1,i8 %9" ++
-            " store i1 0,i1* %10" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %8,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = sub i8 %12,1" ++
-            " store i8 %13,i8* %11" ++
+            " %5 = phi {i8,[0 x i1]}* [%0,%l2],[%0,%l1]" ++
+            " %6 = phi i8 [%1,%l2],[%1,%l1]" ++
+            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %5,i32 0,i32 1,i8 %6" ++
+            " store i1 0,i1* %7" ++
             " ret void" ++
             " }")
 
@@ -363,25 +275,18 @@ testIf5 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %6 = load i1,i1* %5" ++
-            " br i1 %6,label %l1,label %l2" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %3 = load i1,i1* %2" ++
+            " br i1 %3,label %l1,label %l2" ++
             " l1:" ++
             " br label %l3" ++
             " l2:" ++
             " br label %l3" ++
-            " l3: %7 = phi {i8,[0 x i1]}* [%0,%l2],[%0,%l1]" ++
-            " %8 = phi i8 [%1,%l2],[%1,%l1]" ++
-            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 1,i8 %8" ++
-            " store i1 0,i1* %9" ++
-            " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %11 = load i8,i8* %10" ++
-            " %12 = sub i8 %11,1" ++
-            " store i8 %12,i8* %10" ++
+            " l3:" ++
+            " %4 = phi {i8,[0 x i1]}* [%0,%l2],[%0,%l1]" ++
+            " %5 = phi i8 [%1,%l2],[%1,%l1]" ++
+            " %6 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %4,i32 0,i32 1,i8 %5" ++
+            " store i1 0,i1* %6" ++
             " ret void" ++
             " }")
 
@@ -393,25 +298,18 @@ testIf6 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %6 = load i1,i1* %5" ++
-            " br i1 %6,label %l1,label %l2" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %3 = load i1,i1* %2" ++
+            " br i1 %3,label %l1,label %l2" ++
             " l1:" ++
             " br label %l3" ++
             " l2:" ++
             " br label %l3" ++
-            " l3: %7 = phi {i8,[0 x i1]}* [%0,%l2],[%0,%l1]" ++
-            " %8 = phi i8 [%1,%l2],[%1,%l1]" ++
-            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 1,i8 %8" ++
-            " store i1 0,i1* %9" ++
-            " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %11 = load i8,i8* %10" ++
-            " %12 = sub i8 %11,1" ++
-            " store i8 %12,i8* %10" ++
+            " l3:" ++
+            " %4 = phi {i8,[0 x i1]}* [%0,%l2],[%0,%l1]" ++
+            " %5 = phi i8 [%1,%l2],[%1,%l1]" ++
+            " %6 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %4,i32 0,i32 1,i8 %5" ++
+            " store i1 0,i1* %6" ++
             " ret void" ++
             " }")
 
@@ -423,30 +321,18 @@ testIf7 =
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
-            " %6 = load i1,i1* %5" ++
-            " br i1 %6,label %l1,label %l2" ++
+            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 1,i8 %1" ++
+            " %3 = load i1,i1* %2" ++
+            " br i1 %3,label %l1,label %l2" ++
             " l1:" ++
             " br label %l3" ++
             " l2:" ++
-            " %7 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %8 = load i8,i8* %7" ++
-            " %9 = sub i8 %8,1" ++
-            " store i8 %9,i8* %7" ++
             " ret void" ++
             " l3:" ++
-            " %10 = phi {i8,[0 x i1]}* [%0,%l1]" ++
-            " %11 = phi i8 [%1,%l1]" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %10,i32 0,i32 1,i8 %11" ++
-            " store i1 0,i1* %12" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %10,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = sub i8 %14,1" ++
-            " store i8 %15,i8* %13" ++
+            " %4 = phi {i8,[0 x i1]}* [%0,%l1]" ++
+            " %5 = phi i8 [%1,%l1]" ++
+            " %6 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %4,i32 0,i32 1,i8 %5" ++
+            " store i1 0,i1* %6" ++
             " ret void" ++
             " }")
 
@@ -469,25 +355,9 @@ testScope =
             " %8 = extractvalue {i8*,i8**} %4,0" ++
             " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
             " %10 = select i1 1,i8 0,i8 0" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = add i8 1,%12" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %15 = load i8,i8* %14" ++
-            " %16 = sub i8 %15,1" ++
-            " store i8 %16,i8* %14" ++
-            " %17 = extractvalue {i8*,i8**} %7,0" ++
-            " %18 = bitcast i8* %17 to {i8,[0 x i1]}*" ++
-            " %19 = select i1 1,i8 0,i8 0" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %18,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = add i8 1,%21" ++
-            " store i8 %22,i8* %20" ++
-            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %18,i32 0,i32 0" ++
-            " %24 = load i8,i8* %23" ++
-            " %25 = sub i8 %24,1" ++
-            " store i8 %25,i8* %23" ++
+            " %11 = extractvalue {i8*,i8**} %7,0" ++
+            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
+            " %13 = select i1 1,i8 0,i8 0" ++
             " ret void" ++
             " }")
 
@@ -510,14 +380,6 @@ testScope2 =
             " %6 = extractvalue {i8*,i8**} %4,0" ++
             " %7 = bitcast i8* %6 to {i8,[0 x i1]}*" ++
             " %8 = select i1 1,i8 0,i8 0" ++
-            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %10 = load i8,i8* %9" ++
-            " %11 = add i8 1,%10" ++
-            " store i8 %11,i8* %9" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %7,i32 0,i32 0" ++
-            " %13 = load i8,i8* %12" ++
-            " %14 = sub i8 %13,1" ++
-            " store i8 %14,i8* %12" ++
             " br label %l1" ++
             " }")
 
@@ -536,18 +398,10 @@ testScope3 =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 1,i1* %11" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 1,i1* %12" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = sub i8 %14,1" ++
-            " store i8 %15,i8* %13" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 1,i1* %8" ++
+            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 1,i1* %9" ++
             " ret void" ++
             " }")
 
@@ -566,28 +420,16 @@ testScope4 =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 1,i1* %8" ++
+            " %9 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " %10 = load i1,i1* %9" ++
+            " br i1 %10,label %l1,label %l2" ++
+            " l1:" ++
             " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
             " store i1 1,i1* %11" ++
-            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " %13 = load i1,i1* %12" ++
-            " br i1 %13,label %l1,label %l2" ++
-            " l1:" ++
-            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 1,i1* %14" ++
-            " %15 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %16 = load i8,i8* %15" ++
-            " %17 = sub i8 %16,1" ++
-            " store i8 %17,i8* %15" ++
             " ret void" ++
             " l2:" ++
-            " %18 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %19 = load i8,i8* %18" ++
-            " %20 = sub i8 %19,1" ++
-            " store i8 %20,i8* %18" ++
             " ret void" ++
             " }")
 
@@ -606,28 +448,20 @@ testScope5 =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " %12 = load i1,i1* %11" ++
-            " br i1 %12,label %l1,label %l2" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " %9 = load i1,i1* %8" ++
+            " br i1 %9,label %l1,label %l2" ++
             " l1:" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 1,i1* %13" ++
+            " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 1,i1* %10" ++
             " br label %l3" ++
             " l2:" ++
             " br label %l3" ++
             " l3:" ++
-            " %14 = phi {i8,[0 x i1]}* [%6,%l2],[%6,%l1]" ++
-            " %15 = phi i8 [%7,%l2],[%7,%l1]" ++
-            " %16 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 1,i8 %15" ++
-            " store i1 1,i1* %16" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = sub i8 %18,1" ++
-            " store i8 %19,i8* %17" ++
+            " %11 = phi {i8,[0 x i1]}* [%6,%l2],[%6,%l1]" ++
+            " %12 = phi i8 [%7,%l2],[%7,%l1]" ++
+            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %11,i32 0,i32 1,i8 %12" ++
+            " store i1 1,i1* %13" ++
             " ret void" ++
             " }")
 
@@ -646,38 +480,26 @@ testScope6 =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " %12 = load i1,i1* %11" ++
-            " br i1 %12,label %l1,label %l2" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " %9 = load i1,i1* %8" ++
+            " br i1 %9,label %l1,label %l2" ++
             " l1:" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " store i1 1,i1* %13" ++
+            " %10 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " store i1 1,i1* %10" ++
             " br label %l3" ++
             " l2:" ++
             " br label %l3" ++
             " l3:" ++
-            " %14 = phi {i8,[0 x i1]}* [%6,%l2],[%6,%l1]" ++
-            " %15 = phi i8 [%7,%l2],[%7,%l1]" ++
-            " %16 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 1,i8 %15" ++
-            " %17 = load i1,i1* %16" ++
-            " br i1 %17,label %l4,label %l5" ++
+            " %11 = phi {i8,[0 x i1]}* [%6,%l2],[%6,%l1]" ++
+            " %12 = phi i8 [%7,%l2],[%7,%l1]" ++
+            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %11,i32 0,i32 1,i8 %12" ++
+            " %14 = load i1,i1* %13" ++
+            " br i1 %14,label %l4,label %l5" ++
             " l4:" ++
-            " %18 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 1,i8 %15" ++
-            " store i1 1,i1* %18" ++
-            " %19 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 0" ++
-            " %20 = load i8,i8* %19" ++
-            " %21 = sub i8 %20,1" ++
-            " store i8 %21,i8* %19" ++
+            " %15 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %11,i32 0,i32 1,i8 %12" ++
+            " store i1 1,i1* %15" ++
             " ret void" ++
             " l5:" ++
-            " %22 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %14,i32 0,i32 0" ++
-            " %23 = load i8,i8* %22" ++
-            " %24 = sub i8 %23,1" ++
-            " store i8 %24,i8* %22" ++
             " ret void" ++
             " }")
 
@@ -696,28 +518,18 @@ testScope7 =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
-            " %12 = load i1,i1* %11" ++
-            " br i1 %12,label %l1,label %l2" ++
+            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 1,i8 %7" ++
+            " %9 = load i1,i1* %8" ++
+            " br i1 %9,label %l1,label %l2" ++
             " l1:" ++
-            " %13 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %14 = load i8,i8* %13" ++
-            " %15 = sub i8 %14,1" ++
-            " store i8 %15,i8* %13" ++
             " ret void" ++
-            " l2: br label %l3" ++
+            " l2:" ++
+            " br label %l3" ++
             " l3:" ++
-            " %16 = phi {i8,[0 x i1]}* [%6,%l2] %17 = phi i8 [%7,%l2]" ++
-            " %18 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %16,i32 0,i32 1,i8 %17" ++
-            " store i1 1,i1* %18" ++
-            " %19 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %16,i32 0,i32 0" ++
-            " %20 = load i8,i8* %19" ++
-            " %21 = sub i8 %20,1" ++
-            " store i8 %21,i8* %19" ++
+            " %10 = phi {i8,[0 x i1]}* [%6,%l2]" ++
+            " %11 = phi i8 [%7,%l2]" ++
+            " %12 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %10,i32 0,i32 1,i8 %11" ++
+            " store i1 1,i1* %12" ++
             " ret void" ++
             " }")
 
@@ -726,7 +538,8 @@ testAssign =
     testCodeGen "testAssign" "type a{a}func TestAssign(){var a a;var b a;b=a}"
         (prologue ++
             "define void @_TestAssign() {" ++
-            " l0: %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
+            " l0:" ++
+            " %0 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* null,i32 0,i32 1,i8 1" ++
             " %1 = ptrtoint i1* %0 to i8" ++
             " %2 = alloca i8,i8 %1" ++
             " %3 = insertvalue {i8*,i8**} undef,i8* %2,0" ++
@@ -739,33 +552,9 @@ testAssign =
             " %8 = extractvalue {i8*,i8**} %4,0" ++
             " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
             " %10 = select i1 1,i8 0,i8 0" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = add i8 1,%12" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = extractvalue {i8*,i8**} %7,0" ++
-            " %15 = bitcast i8* %14 to {i8,[0 x i1]}*" ++
-            " %16 = select i1 1,i8 0,i8 0" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = add i8 1,%18" ++
-            " store i8 %19,i8* %17" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = add i8 1,%21" ++
-            " store i8 %22,i8* %20" ++
-            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %24 = load i8,i8* %23" ++
-            " %25 = sub i8 %24,1" ++
-            " store i8 %25,i8* %23" ++
-            " %26 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %27 = load i8,i8* %26" ++
-            " %28 = sub i8 %27,1" ++
-            " store i8 %28,i8* %26" ++
-            " %29 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %30 = load i8,i8* %29" ++
-            " %31 = sub i8 %30,1" ++
-            " store i8 %31,i8* %29" ++
+            " %11 = extractvalue {i8*,i8**} %7,0" ++
+            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
+            " %13 = select i1 1,i8 0,i8 0" ++
             " ret void" ++
             " }")
 
@@ -788,26 +577,10 @@ testAssign2 =
             " %8 = extractvalue {i8*,i8**} %4,0" ++
             " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
             " %10 = select i1 1,i8 0,i8 0" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = add i8 1,%12" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = extractvalue {i8*,i8**} %7,0" ++
-            " %15 = bitcast i8* %14 to {i8,[0 x i1]}*" ++
-            " %16 = select i1 1,i8 0,i8 0" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = add i8 1,%18" ++
-            " store i8 %19,i8* %17" ++
-            " call void @copy({i8,[0 x i1]}* %9,i8 %10,{i8,[0 x i1]}* %15,i8 %16,i8 1)" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = sub i8 %21,1" ++
-            " store i8 %22,i8* %20" ++
-            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %24 = load i8,i8* %23" ++
-            " %25 = sub i8 %24,1" ++
-            " store i8 %25,i8* %23" ++
+            " %11 = extractvalue {i8*,i8**} %7,0" ++
+            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
+            " %13 = select i1 1,i8 0,i8 0" ++
+            " call void @copy({i8,[0 x i1]}* %9,i8 %10,{i8,[0 x i1]}* %12,i8 %13,i8 1)" ++
             " ret void" ++
             " }")
 
@@ -830,52 +603,28 @@ testFuncall =
             " %8 = extractvalue {i8*,i8**} %4,0" ++
             " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
             " %10 = select i1 1,i8 0,i8 0" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = add i8 1,%12" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = call {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %9,i8 %10,{i8*,i8**} %7)" ++
-            " %15 = extractvalue {{i8,[0 x i1]}*,i8} %14,0" ++
-            " %16 = extractvalue {{i8,[0 x i1]}*,i8} %14,1" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = add i8 1,%18" ++
-            " store i8 %19,i8* %17" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = sub i8 %21,1" ++
-            " store i8 %22,i8* %20" ++
-            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %24 = load i8,i8* %23" ++
-            " %25 = sub i8 %24,1" ++
-            " store i8 %25,i8* %23" ++
+            " %11 = call {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %9,i8 %10,{i8*,i8**} %7)" ++
+            " %12 = extractvalue {{i8,[0 x i1]}*,i8} %11,0" ++
+            " %13 = extractvalue {{i8,[0 x i1]}*,i8} %11,1" ++
             " ret void" ++
             " }" ++
             "define {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %value0,i8 %offset0,{i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %6 = load i8,i8* %5" ++
-            " %7 = sub i8 %6,1" ++
-            " store i8 %7,i8* %5" ++
-            " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
-            " br i1 %8,label %l1,label %l2" ++
+            " %2 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
+            " br i1 %2,label %l1,label %l2" ++
             " l1:" ++
-            " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
-            " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 %1,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %10" ++
+            " %3 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
+            " %4 = insertvalue {{i8,[0 x i1]}*,i8} %3,i8 %1,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %4" ++
             " l2:" ++
-            " %11 = extractvalue {i8*,i8**} %retval,0" ++
-            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
-            " call void @copy({i8,[0 x i1]}* %0,i8 %1,{i8,[0 x i1]}* %12,i8 0,i8 1)" ++
-            " %13 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %12,0" ++
-            " %14 = insertvalue {{i8,[0 x i1]}*,i8} %13,i8 0,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %14" ++
+            " %5 = extractvalue {i8*,i8**} %retval,0" ++
+            " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %0,i8 %1,{i8,[0 x i1]}* %6,i8 0,i8 1)" ++
+            " %7 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %6,0" ++
+            " %8 = insertvalue {{i8,[0 x i1]}*,i8} %7,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %8" ++
             " }")
 
 testFuncall2 :: Assertion
@@ -900,20 +649,12 @@ testFuncall2 =
             " %11 = extractvalue {i8*,i8**} %7,0" ++
             " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
             " %13 = select i1 1,i8 0,i8 0" ++
-            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
-            " %15 = load i8,i8* %14" ++
-            " %16 = add i8 1,%15" ++
-            " store i8 %16,i8* %14" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %12,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = sub i8 %18,1" ++
-            " store i8 %19,i8* %17" ++
-            " %20 = extractvalue {i8*,i8**} %retval,0" ++
-            " %21 = bitcast i8* %20 to {i8,[0 x i1]}*" ++
-            " call void @copy({i8,[0 x i1]}* %12,i8 %13,{i8,[0 x i1]}* %21,i8 0,i8 1)" ++
-            " %22 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %21,0" ++
-            " %23 = insertvalue {{i8,[0 x i1]}*,i8} %22,i8 0,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %23" ++
+            " %14 = extractvalue {i8*,i8**} %retval,0" ++
+            " %15 = bitcast i8* %14 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %12,i8 %13,{i8,[0 x i1]}* %15,i8 0,i8 1)" ++
+            " %16 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %15,0" ++
+            " %17 = insertvalue {{i8,[0 x i1]}*,i8} %16,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %17" ++
             " }")
 
 testFuncall3 :: Assertion
@@ -944,20 +685,12 @@ testFuncall3 =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = sub i8 %12,1" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = extractvalue {i8*,i8**} %retval,0" ++
-            " %15 = bitcast i8* %14 to {i8,[0 x i1]}*" ++
-            " call void @copy({i8,[0 x i1]}* %6,i8 %7,{i8,[0 x i1]}* %15,i8 0,i8 1)" ++
-            " %16 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %15,0" ++
-            " %17 = insertvalue {{i8,[0 x i1]}*,i8} %16,i8 0,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %17" ++
+            " %8 = extractvalue {i8*,i8**} %retval,0" ++
+            " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %6,i8 %7,{i8,[0 x i1]}* %9,i8 0,i8 1)" ++
+            " %10 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %9,0" ++
+            " %11 = insertvalue {{i8,[0 x i1]}*,i8} %10,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %11" ++
             " }")
 
 testVarInitializer :: Assertion
@@ -975,22 +708,6 @@ testVarInitializer =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = add i8 1,%12" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %15 = load i8,i8* %14" ++
-            " %16 = sub i8 %15,1" ++
-            " store i8 %16,i8* %14" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = sub i8 %18,1" ++
-            " store i8 %19,i8* %17" ++
             " ret void" ++
             " }")
 
@@ -1013,52 +730,28 @@ testVarInitializer2 =
             " %8 = extractvalue {i8*,i8**} %4,0" ++
             " %9 = bitcast i8* %8 to {i8,[0 x i1]}*" ++
             " %10 = select i1 1,i8 0,i8 0" ++
-            " %11 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %12 = load i8,i8* %11" ++
-            " %13 = add i8 1,%12" ++
-            " store i8 %13,i8* %11" ++
-            " %14 = call {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %9,i8 %10,{i8*,i8**} %7)" ++
-            " %15 = extractvalue {{i8,[0 x i1]}*,i8} %14,0" ++
-            " %16 = extractvalue {{i8,[0 x i1]}*,i8} %14,1" ++
-            " %17 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %18 = load i8,i8* %17" ++
-            " %19 = add i8 1,%18" ++
-            " store i8 %19,i8* %17" ++
-            " %20 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %15,i32 0,i32 0" ++
-            " %21 = load i8,i8* %20" ++
-            " %22 = sub i8 %21,1" ++
-            " store i8 %22,i8* %20" ++
-            " %23 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %9,i32 0,i32 0" ++
-            " %24 = load i8,i8* %23" ++
-            " %25 = sub i8 %24,1" ++
-            " store i8 %25,i8* %23" ++
+            " %11 = call {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %9,i8 %10,{i8*,i8**} %7)" ++
+            " %12 = extractvalue {{i8,[0 x i1]}*,i8} %11,0" ++
+            " %13 = extractvalue {{i8,[0 x i1]}*,i8} %11,1" ++
             " ret void" ++
             " }" ++
             "define {{i8,[0 x i1]}*,i8} @_id({i8,[0 x i1]}* %value0,i8 %offset0,{i8*,i8**} %retval) {" ++
             " l0:" ++
             " %0 = select i1 1,{i8,[0 x i1]}* %value0,{i8,[0 x i1]}* null" ++
             " %1 = select i1 1,i8 %offset0,i8 0" ++
-            " %2 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %3 = load i8,i8* %2" ++
-            " %4 = add i8 1,%3" ++
-            " store i8 %4,i8* %2" ++
-            " %5 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %0,i32 0,i32 0" ++
-            " %6 = load i8,i8* %5" ++
-            " %7 = sub i8 %6,1" ++
-            " store i8 %7,i8* %5" ++
-            " %8 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
-            " br i1 %8,label %l1,label %l2" ++
+            " %2 = icmp eq {i8,[0 x i1]}* %value0,%0" ++
+            " br i1 %2,label %l1,label %l2" ++
             " l1:" ++
-            " %9 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
-            " %10 = insertvalue {{i8,[0 x i1]}*,i8} %9,i8 %1,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %10" ++
+            " %3 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %0,0" ++
+            " %4 = insertvalue {{i8,[0 x i1]}*,i8} %3,i8 %1,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %4" ++
             " l2:" ++
-            " %11 = extractvalue {i8*,i8**} %retval,0" ++
-            " %12 = bitcast i8* %11 to {i8,[0 x i1]}*" ++
-            " call void @copy({i8,[0 x i1]}* %0,i8 %1,{i8,[0 x i1]}* %12,i8 0,i8 1)" ++
-            " %13 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %12,0" ++
-            " %14 = insertvalue {{i8,[0 x i1]}*,i8} %13,i8 0,1" ++
-            " ret {{i8,[0 x i1]}*,i8} %14" ++
+            " %5 = extractvalue {i8*,i8**} %retval,0" ++
+            " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
+            " call void @copy({i8,[0 x i1]}* %0,i8 %1,{i8,[0 x i1]}* %6,i8 0,i8 1)" ++
+            " %7 = insertvalue {{i8,[0 x i1]}*,i8} undef,{i8,[0 x i1]}* %6,0" ++
+            " %8 = insertvalue {{i8,[0 x i1]}*,i8} %7,i8 0,1" ++
+            " ret {{i8,[0 x i1]}*,i8} %8" ++
             " }")
 
 testVarInLoop :: Assertion
@@ -1076,14 +769,10 @@ testVarInLoop =
             " %5 = extractvalue {i8*,i8**} %4,0" ++
             " %6 = bitcast i8* %5 to {i8,[0 x i1]}*" ++
             " %7 = select i1 1,i8 0,i8 0" ++
-            " %8 = getelementptr {i8,[0 x i1]},{i8,[0 x i1]}* %6,i32 0,i32 0" ++
-            " %9 = load i8,i8* %8" ++
-            " %10 = add i8 1,%9" ++
-            " store i8 %10,i8* %8" ++
             " br label %l1" ++
             " l1:" ++
-            " %11 = phi {i8,[0 x i1]}* [%11,%l1],[%6,%l0]" ++
-            " %12 = phi i8 [%12,%l1],[%7,%l0]" ++
+            " %8 = phi {i8,[0 x i1]}* [%8,%l1],[%6,%l0]" ++
+            " %9 = phi i8 [%9,%l1],[%7,%l0]" ++
             " br label %l1" ++
             " }")
 

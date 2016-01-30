@@ -131,7 +131,8 @@ writeFunc name (FuncSig params retType) stmt = do
                 writeRTTOffsetType (" %importoffset" ++ show index ++ ",")
                 writeRTTOffsetType " 0"
                 return (Just (imp,impOffset))
-        writeAddRef (value,offset,imp,varType)
+        when (needRefCounting varAllocs)
+             (writeAddRef (value,offset,imp,varType))
         writeRTTAddRef (value,offset,imp,varType)
         return (Map.insert name (value,offset,imp,varType) vars))
         Map.empty paramScope
@@ -281,6 +282,10 @@ writeRTTUnref (_,_,Just (imp,impOffset),Type _ rtt) =
             unref rttval)
         rtt [0..]
 
+needRefCounting :: Map InsnId (Temp,[Temp]) -> Bool
+needRefCounting varAllocs =
+    maximum (0 : (map (length . snd) (Map.elems varAllocs))) > 1
+
 writeStmt :: Int -> Map InsnId (Temp,[Temp])
                  -> (Label,Bool,Bool,Scope,
                      Map InsnId [(Label -> CodeGen(),(Label,Scope))],
@@ -356,7 +361,8 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
             "" phiargs
     updateScope newScope afterReturn = do
         updatedScope <- foldM (\ scope (varName,varType) -> do
-                writeUnref (scope Map.! varName)
+                when (needRefCounting varAllocs)
+                     (writeUnref (scope Map.! varName))
                 writeRTTUnref (scope Map.! varName)
                 return (Map.delete varName scope))
             newScope (stmtLeavingScope stmt (stmtNext stmt))
@@ -428,12 +434,12 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
                         writeRTTOffsetType " 0"
                         return (Just (imp,impOffset))
                 let val = (value,offset,imp,varType)
-                writeAddRef val
+                when (needRefCounting varAllocs) (writeAddRef val)
                 writeRTTAddRef val
                 return val)
             (\ expr -> do
                 val <- wExpr scope expr
-                writeAddRef val
+                when (needRefCounting varAllocs) (writeAddRef val)
                 return val)
             expr
         (updatedScope,fellThru) <-
@@ -601,9 +607,9 @@ writeStmt nparams varAllocs (blockLabel,inLoop,fellThru,scope,branchFroms,
         (blockLabel,scope,branchFroms,loopRefs) <- checkNewBlock
         lval <- wExpr scope lhs
         rval <- wExpr scope rhs
-        writeAddRef rval
+        when (needRefCounting varAllocs) (writeAddRef rval)
         writeRTTUnref lval
-        writeUnref lval
+        when (needRefCounting varAllocs) (writeUnref lval)
         writeRTTUnref lval
         (updatedScope,fellThru) <-
             updateScope (Map.insert varName rval scope) False
