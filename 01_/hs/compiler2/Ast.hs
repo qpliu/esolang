@@ -24,6 +24,6 @@ data Def = Def [Param] Expr
 
 data Expr =
     ExprLiteral SourcePos [Bool]
-  | ExprBound Identifier
+  | ExprBound Int
   | ExprFuncall Identifier [Expr]
   | ExprConcat Expr Expr
