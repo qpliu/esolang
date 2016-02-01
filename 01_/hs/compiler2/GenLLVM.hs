@@ -3,7 +3,7 @@ module GenLLVM
     (GenLLVM,Local,Label,genLLVM,
      writeCode,writeLocal,writeLabel,writeLabelRef,
      newLocal,newLabel,writeNewLocal,writeNewLabel,writeNewLabelBack,
-     forwardRefLabel,writeForwardRefLabel,writeBranch)
+     forwardRefLabel,writeForwardRefLabel,writeBranch,forwardRefPhi,writePhi)
 where
 
 import Generate(Gen(..),Generate,ForwardGen,forwardRef,generate,putState)
@@ -13,7 +13,9 @@ type GenLLVM a = Generate FwdLLVM StLLVM String a
 newtype Local = Local Int
 newtype Label = Label Int
 
-data FwdLLVM = FwdLabel Label
+data FwdLLVM =
+    FwdLabel Label
+  | FwdPhi Local Label
 
 data StLLVM = StLLVM Local Label
 
@@ -80,3 +82,28 @@ writeBranch local = do
     writeCode ",label "
     falseLabelRef <- writeForwardRefLabel
     return (trueLabelRef,falseLabelRef)
+
+forwardRefPhi :: ([(Local,Label)] -> ForwardGen StLLVM String ())
+              -> GenLLVM (Local -> Label -> GenLLVM())
+forwardRefPhi usePhi = do
+    fwdRef <- forwardRef (\ fwds -> usePhi (map (\ (FwdPhi local label) ->
+                                                          (local,label))
+                                                fwds))
+    return (\ local label -> fwdRef (FwdPhi local label))
+
+writePhi :: GenLLVM () -> Either String Local -> Label
+         -> GenLLVM (Local,Local -> Label -> GenLLVM())
+writePhi writeType value label = do
+    local <- writeNewLocal "phi "
+    writeType
+    writeCode " ["
+    either writeCode (flip writeLocal "") value
+    writeCode ","
+    writeLabelRef label "]"
+    phiRef <- forwardRefPhi (mapM_ writePhiArg)
+    return (local,phiRef)
+  where
+    writePhiArg (local,label) = do
+        writeCode ",["
+        writeLocal local ","
+        writeLabelRef label "]"
