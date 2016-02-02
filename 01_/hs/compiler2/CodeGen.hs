@@ -10,9 +10,9 @@ import qualified Data.Set as Set
 import Ast(Identifier(..),Param(..),Def(..),Expr(..),Func)
 import GenLLVM
     (GenLLVM,Local,Label,genLLVM,
-     writeCode,writeLocal,writeLabel,writeLabelRef,
-     newLocal,newLabel,writeNewLocal,writeNewLabel,writeNewLabelBack,
-     forwardRefLabel,writeForwardRefLabel,writeBranch,writePhi)
+     writeCode,writeLocal,writeLabelRef,
+     writeNewLocal,writeNewLabel,writeNewLabelBack,
+     writeForwardRefLabel,writeBranch,writePhi)
 
 codeGen :: [Func] -> String
 codeGen funcs =
@@ -26,9 +26,11 @@ codeGen funcs =
             writeEvalConcatValueDefn,
             writeFreeEvalParamConcatValueDefn,
             writeEvalFileValueDefn,
-            writeFreeEvalParamFileValueDefn
+            writeFreeEvalParamFileValueDefn,
+            writeFreeEvalParamFuncValueDefn
             ]
         ++ (concatMap genLLVM . map writeFunc) funcs
+        ++ (concatMap genLLVM . map writeEvalFuncValue) funcs
 
 collectLiterals :: Set [Bool] -> Func -> Set [Bool]
 collectLiterals literals (_,defs) = foldl collectDefLiterals literals defs
@@ -57,7 +59,13 @@ literalType :: [Bool] -> String
 literalType bits = "[" ++ show (length bits) ++ " x i1]"
 
 writeName :: String -> GenLLVM ()
-writeName name = writeCode ("@_" ++ concatMap quote name)
+writeName name = writeCode ("@_" ++ quoteName name)
+
+writeEvalFuncName :: String -> GenLLVM ()
+writeEvalFuncName name = writeCode ("@evalFunc_" ++ quoteName name)
+
+quoteName :: String -> String
+quoteName name = concatMap quote name
   where
     quote c | isAscii c && isAlphaNum c = [c]
             | otherwise = "_" ++ show (ord c) ++ "_"
@@ -72,65 +80,201 @@ writeValueType code =
     writeCode ("{i32,i2,i8*,{i2,i8*}(i8*)*,void(i8*)*}" ++ code)
 
 writeFunc :: Func -> GenLLVM ()
-writeFunc (name,defs) = do
+writeFunc (name,Def params _:_) = do
     writeCode "define fastcc "
     writeValueType "* "
     writeName name
     writeCode "("
-    let Def params _:_ = defs
     zipWithM_ (\ comma i -> do
             writeCode comma
             writeValueType ("* %a" ++ show i))
         ("":repeat ",") [0 .. length params - 1]
     writeCode ") {"
     writeNewLabel
+    value <- writeAllocateNewValue 3
+    sizePtr <- writeNewLocal "getelementptr "
+    writeFuncValueEvalParamType ","
+    writeFuncValueEvalParamType
+        ("* nil,i32 0,i32 1,i32 " ++ show (length params))
+    size <- writeNewLocal "ptrtoint "
+    writeValueType "** "
+    writeLocal sizePtr " to i32"
+    rawPtr <- writeNewLocal "call i8* @malloc(i32 "
+    writeLocal size ")"
+    evalParam <- writeNewLocal "bitcast i8* "
+    writeLocal rawPtr " to "
+    writeFuncValueEvalParamType "*"
+    argCountPtr <- writeNewLocal "getelementptr "
+    writeFuncValueEvalParamType ","
+    writeFuncValueEvalParamType "* "
+    writeLocal evalParam ",i32 0,i32 0"
+    writeCode (" store i32 " ++ show (length params) ++ ",i32* ")
+    writeLocal argCountPtr ""
+    mapM_ (\ i -> do
+            argPtr <- writeNewLocal "getelementptr "
+            writeFuncValueEvalParamType ","
+            writeFuncValueEvalParamType
+                ("* %a" ++ show i ++ ",i32 0,i32 1,i32 " ++ show i)
+            writeCode " store "
+            writeValueType ("* %a" ++ show i ++ ",")
+            writeValueType "** "
+            writeLocal argPtr "")
+        [0 .. length params - 1]
+
+    evalParamPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
+    writeCode " store i8* "
+    writeLocal rawPtr ",i8** "
+    writeLocal evalParamPtr ""
+
+    evalFuncPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 3"
+    writeCode " store {i2,i8*}(i8*)* "
+    writeEvalFuncName name
+    writeCode ",{i2,i8*}(i8*)** "
+    writeLocal evalFuncPtr ""
+
+    freeEvalParamFuncPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 4"
+    writeCode " store void(i8*)* @freeEvalParamFunc,void(i8*)** "
+    writeLocal freeEvalParamFuncPtr ""
+
+    writeCode " ret "
+    writeValueType "* "
+    writeLocal value ""
+    writeCode " }"
+
+writeFuncValueEvalParamType :: String -> GenLLVM ()
+writeFuncValueEvalParamType code = do
+    -- 0:i32 number of arguments
+    -- 1:[0 x {i32,i2,i8*,{i2,i8*}(i8*)*,void(i8*)*}] arguments
+    writeCode "{i32,[0 x "
+    writeValueType ("*]}" ++ code)
+
+writeFreeEvalParamFuncValueDefn :: GenLLVM ()
+writeFreeEvalParamFuncValueDefn = do
+    writeCode "define private fastcc void "
+    writeCode "@freeEvalParamFunc(i8* %evalParam) {"
+    entryLabel <- writeNewLabel
+    evalParam <- writeNewLocal "bitcast i8* %evalParam to "
+    writeFuncValueEvalParamType "*"
+    argCountPtr <- writeNewLocal "getelementptr "
+    writeFuncValueEvalParamType ","
+    writeFuncValueEvalParamType "* "
+    writeLocal evalParam ",i32 0,i32 0"
+    argCount <- writeNewLocal "load i32,i32* "
+    writeLocal argCountPtr ""
+
+    loopLabel <- writeNewLabel
+    (argIndex,argIndexPhiRef) <-
+        writePhi (writeCode "i32") (Left "0") entryLabel
+    cmp <- writeNewLocal "cmp ult i32 "
+    writeLocal argIndex ","
+    writeLocal argCount ""
+    (continueLoopLabelRef,doneLabelRef) <- writeBranch cmp
+
+    continueLoopLabel <- writeNewLabelBack [continueLoopLabelRef]
+    argPtr <- writeNewLocal "getelementptr "
+    writeFuncValueEvalParamType ","
+    writeFuncValueEvalParamType "* "
+    writeLocal evalParam ",i32 0,i32 1,i32 "
+    writeLocal argIndex ""
+    arg <- writeNewLocal "load "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal argPtr ""
+    writeUnref (Left arg)
+    newArgIndex <- writeNewLocal "add i32 1,"
+    writeLocal argIndex ""
+    argIndexPhiRef newArgIndex continueLoopLabel
+    writeCode " br label "
+    writeLabelRef loopLabel ""
+
+    writeNewLabelBack [doneLabelRef]
+    writeCode " call void @free(i8* %evalParam)"
+    writeCode " ret void"
+    writeCode " }"
+
+writeEvalFuncValue :: Func -> GenLLVM ()
+writeEvalFuncValue (name,defs) = do
+    writeCode "define private fastcc {i2,i8*} "
+    writeEvalFuncName name
+    writeCode "(i8* %evalParam) {"
+    writeNewLabel
+    evalParam <- writeNewLocal "bitcast i8* %evalParam to "
+    writeFuncValueEvalParamType "*"
+
+    let Def params _:_ = defs
+    args <- mapM (\ i -> do
+            argPtr <- writeNewLocal "getelementptr "
+            writeFuncValueEvalParamType ","
+            writeFuncValueEvalParamType "* "
+            writeLocal evalParam (",i32 0,i32 1,i32 " ++ show i)
+            arg <- writeNewLocal "load "
+            writeValueType "*,"
+            writeValueType "** "
+            writeLocal argPtr ""
+            return arg)
+        [0 .. length params - 1]
+    writeCode " call void @free(i8* %evalParam)"
 
     writeCode " br label "
     labelRef <- writeForwardRefLabel
     labelRefs <- foldM (\ labelRefs def -> do
             writeNewLabelBack labelRefs
-            writeDef def)
+            writeDef def args)
         [labelRef] defs
     unless (null labelRefs) (do
         writeNewLabelBack labelRefs
         writeCode " call void @abort() noreturn")
     writeCode " }"
 
-writeDef :: Def -> GenLLVM [Label -> GenLLVM ()]
-writeDef (Def params expr) = do
-    (bindings,_,nextDefLabelRefs) <- foldM writeBindParam ([],0,[]) params
+writeDef :: Def -> [Local] -> GenLLVM [Label -> GenLLVM ()]
+writeDef (Def params expr) args = do
+    (bindings,_,nextDefLabelRefs) <-
+        foldM writeBindParam ([],0,[]) (zip args params)
     mapM_ writeAddRef bindings
-    mapM_ (writeUnref . Right . ("%a" ++) . show) [0 .. length params - 1]
-    value <- writeBody bindings expr
-    writeCode " ret "
+    mapM_ (writeUnref . Left) args
+    value <- writeExpr bindings expr
+    (status,nextValue) <- writeForceEval value
+    writeAddRef nextValue
+    writeUnref (Left value)
+    rawPtr <- writeNewLocal "bitcast "
     writeValueType "* "
-    writeLocal value ""
-    writeCode " }"
+    writeLocal nextValue " to i8*"
+    retValue1 <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
+    writeLocal status ",0"
+    retValue <- writeNewLocal "insertvalue {i2,i8*} "
+    writeLocal retValue1 ",i8* "
+    writeLocal rawPtr ",1"
+    writeCode " ret {i2,i8*} "
+    writeLocal retValue ""
     return nextDefLabelRefs
 
-writeBindParam :: ([Local],Int,[Label -> GenLLVM ()]) -> Param
+writeBindParam :: ([Local],Int,[Label -> GenLLVM ()]) -> (Local,Param)
                -> GenLLVM ([Local],Int,[Label -> GenLLVM ()])
-writeBindParam (bindings,index,nextDefLabelRefs) param = w param
+writeBindParam (bindings,index,nextDefLabelRefs) (arg,param) = w param
   where
     w (ParamBound _ bits _) = do
-        (value,labelRefs) <- writeCheckBits bits
+        (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
         return (bindings ++ [value],index+1,labelRefs ++ nextDefLabelRefs)
     w (ParamIgnored _ bits) = do
-        (value,labelRefs) <- writeCheckBits bits
+        (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
         return (bindings,index+1,labelRefs ++ nextDefLabelRefs)
     w (ParamLiteral _ bits) = do
-        (value,labelRefs) <- writeCheckBits bits
+        (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
         (valueState,_) <- writeForceEval value
         cmp <- writeNewLocal "icmp ne i2 2,"
         writeLocal valueState ""
         (tryNextDefRef,bindSuccessRef) <- writeBranch cmp
         writeNewLabelBack [bindSuccessRef]
         return (bindings,index+1,tryNextDefRef : labelRefs ++ nextDefLabelRefs)
-    writeCheckBits bits = do
-        value <- writeNewLocal "select i1 1,"
-        writeValueType ("* %a" ++ show index ++ ",")
-        writeValueType "* null"
-        foldM writeCheckBit (value,[]) bits
     writeCheckBit (value,labelRefs) bit = do
         (valueState,nextValue) <- writeForceEval value
         cmp <- writeNewLocal "icmp eq i2 "
@@ -138,29 +282,6 @@ writeBindParam (bindings,index,nextDefLabelRefs) param = w param
         (matchRef,notMatchRef) <- writeBranch cmp
         writeNewLabelBack [matchRef]
         return (nextValue,notMatchRef:labelRefs)
-
-writeBody :: [Local] -> Expr -> GenLLVM Local
-writeBody bindings expr = w expr
-  where
-    w (ExprFuncall (Identifier _ name) exprs) = do
-        args <- mapM (writeExpr bindings) exprs
-        mapM_ (writeUnref . Left) bindings
-        value <- writeNewLocal "musttail call fastcc "
-        writeValueType "* "
-        writeName name
-        writeCode "("
-        zipWithM_ (\ comma arg -> do
-                writeCode comma
-                writeValueType "* "
-                writeLocal arg "")
-            ("":repeat ",") args
-        writeCode ")"
-        return value
-    w expr = do
-        value <- writeExpr bindings expr
-        writeAddRef value
-        mapM_ (writeUnref . Left) bindings
-        return value
 
 writeExpr :: [Local] -> Expr -> GenLLVM Local
 writeExpr bindings expr = w expr

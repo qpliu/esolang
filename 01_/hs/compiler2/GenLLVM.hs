@@ -3,7 +3,8 @@ module GenLLVM
     (GenLLVM,Local,Label,genLLVM,
      writeCode,writeLocal,writeLabel,writeLabelRef,
      newLocal,newLabel,writeNewLocal,writeNewLabel,writeNewLabelBack,
-     forwardRefLabel,writeForwardRefLabel,writeBranch,forwardRefPhi,writePhi)
+     forwardRefLabel,writeForwardRefLabel,writeBranch,forwardRefPhi,writePhi,
+     forwardRefLocal,writeForwardRefLocal)
 where
 
 import Generate(Gen(..),Generate,ForwardGen,forwardRef,generate,putState)
@@ -15,6 +16,7 @@ newtype Label = Label Int
 
 data FwdLLVM =
     FwdLabel Label
+  | FwdLocal Local
   | FwdPhi Local Label
 
 data StLLVM = StLLVM Local Label
@@ -107,3 +109,12 @@ writePhi writeType value label = do
         writeCode ",["
         writeLocal local ","
         writeLabelRef label "]"
+
+forwardRefLocal :: (Local -> ForwardGen StLLVM String ())
+                -> GenLLVM (Local -> GenLLVM ())
+forwardRefLocal useLocal = do
+    fwdRef <- forwardRef (\ [FwdLocal local] -> useLocal local)
+    return (\ local -> fwdRef (FwdLocal local))
+
+writeForwardRefLocal :: String -> GenLLVM (Local -> GenLLVM ())
+writeForwardRefLocal code = forwardRefLocal (flip writeLocal code)
