@@ -95,7 +95,7 @@ writeFunc (name,Def params _:_) = do
     sizePtr <- writeNewLocal "getelementptr "
     writeFuncValueEvalParamType ","
     writeFuncValueEvalParamType
-        ("* nil,i32 0,i32 1,i32 " ++ show (length params))
+        ("* null,i32 0,i32 1,i32 " ++ show (length params))
     size <- writeNewLocal "ptrtoint "
     writeValueType "** "
     writeLocal sizePtr " to i32"
@@ -170,11 +170,13 @@ writeFreeEvalParamFuncValueDefn = do
     writeLocal evalParam ",i32 0,i32 0"
     argCount <- writeNewLocal "load i32,i32* "
     writeLocal argCountPtr ""
+    writeCode " br label "
+    loopLabelRef <- writeForwardRefLabel
 
-    loopLabel <- writeNewLabel
+    loopLabel <- writeNewLabelBack [loopLabelRef]
     (argIndex,argIndexPhiRef) <-
         writePhi (writeCode "i32") (Left "0") entryLabel
-    cmp <- writeNewLocal "cmp ult i32 "
+    cmp <- writeNewLocal "icmp ult i32 "
     writeLocal argIndex ","
     writeLocal argCount ""
     (continueLoopLabelRef,doneLabelRef) <- writeBranch cmp
@@ -186,8 +188,8 @@ writeFreeEvalParamFuncValueDefn = do
     writeLocal evalParam ",i32 0,i32 1,i32 "
     writeLocal argIndex ""
     arg <- writeNewLocal "load "
-    writeValueType ","
-    writeValueType "* "
+    writeValueType "*,"
+    writeValueType "** "
     writeLocal argPtr ""
     writeUnref (Left arg)
     newArgIndex <- writeNewLocal "add i32 1,"
@@ -209,6 +211,8 @@ writeEvalFuncValue (name,defs) = do
     writeNewLabel
     evalParam <- writeNewLocal "bitcast i8* %evalParam to "
     writeFuncValueEvalParamType "*"
+    value <- writeNewLocal "bitcast i8* %value to "
+    writeValueType "*"
 
     let Def params _:_ = defs
     args <- mapM (\ i -> do
@@ -228,15 +232,16 @@ writeEvalFuncValue (name,defs) = do
     labelRef <- writeForwardRefLabel
     labelRefs <- foldM (\ labelRefs def -> do
             writeNewLabelBack labelRefs
-            writeDef def args)
+            writeDef def value args)
         [labelRef] defs
     unless (null labelRefs) (do
         writeNewLabelBack labelRefs
-        writeCode " call void @abort() noreturn")
+        writeCode " call void @abort() noreturn"
+        writeCode " ret {i2,i8*} undef")
     writeCode " }"
 
-writeDef :: Def -> [Local] -> GenLLVM [Label -> GenLLVM ()]
-writeDef (Def params expr) args = do
+writeDef :: Def -> Local -> [Local] -> GenLLVM [Label -> GenLLVM ()]
+writeDef (Def params expr) value args = do
     (bindings,_,nextDefLabelRefs) <-
         foldM writeBindParam ([],0,[]) (zip args params)
     mapM_ writeAddRef bindings
@@ -250,17 +255,17 @@ writeDef (Def params expr) args = do
     writeLocal statusPtr ""
 
     -- if result.status != 3 then
-    --    %value.status = result.status
-    --    %value.next = result.next
+    --    value.status = result.status
+    --    value.next = result.next
     --    if result.status != 2 then
     --       addRef result.next
     --    ret {result.status,result.next}
     -- else if result.refCount > 1 then
     --    {status,result} = call eval(result)
-    --    %value.status = status
-    --    %value.next = next
+    --    value.status = status
+    --    value.next = next
     --    addRef next
-    --    return {%value.status,%value.next}
+    --    return {status,next}
     -- else
     --    free(result)
     --    return musttail call eval(%value)
@@ -272,14 +277,15 @@ writeDef (Def params expr) args = do
     writeNewLabelBack [alreadyForcedLabelRef]
     statusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i2 1"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 1"
     writeCode " store i2 "
     writeLocal status ",i2* "
     writeLocal statusPtr ""
     resultNextRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
-    writeLocal result ",i32 0,i2 1"
+    writeLocal result ",i32 0,i32 2"
     nextRawPtr <- writeNewLocal "load i8*,i8** "
     writeLocal resultNextRawPtrPtr ""
     cmp <- writeNewLocal "icmp eq i2 2,"
@@ -288,7 +294,8 @@ writeDef (Def params expr) args = do
     writeNewLabelBack [addRefNextLabelRef]
     valueNextRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i2 1"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal nextRawPtr ",i8** "
     writeLocal valueNextRawPtrPtr ""
@@ -315,7 +322,7 @@ writeDef (Def params expr) args = do
     resultRefCount <- writeNewLocal "load i32,i32* "
     writeLocal resultRefCountPtr ""
     cmp <- writeNewLocal "icmp ugt i32 "
-    writeLocal resultRefCount ",i32 1"
+    writeLocal resultRefCount ",1"
     (doCopyResultLabelRef,doTailCallLabelRef) <- writeBranch cmp
 
     writeNewLabelBack [doCopyResultLabelRef]
@@ -323,13 +330,15 @@ writeDef (Def params expr) args = do
         writeForceEval result
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 1"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 1"
     writeCode " store i2 "
     writeLocal evalResultState ",i2* "
     writeLocal valueStatusPtr ""
     valueNextPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 2"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal evalResultNextRawPtr ",i8** "
     writeLocal valueNextPtrPtr ""
@@ -341,13 +350,13 @@ writeDef (Def params expr) args = do
     evalParamPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
-    writeLocal result "i32 0,i32 2"
+    writeLocal result ",i32 0,i32 2"
     evalParam <- writeNewLocal "load i8*,i8** "
     writeLocal evalParamPtr ""
     evalPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
-    writeLocal result "i32 0,i32 3"
+    writeLocal result ",i32 0,i32 3"
     eval <- writeNewLocal "load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** "
     writeLocal evalPtr ""
     resultRawPtr <- writeNewLocal "bitcast "
@@ -355,11 +364,9 @@ writeDef (Def params expr) args = do
     writeLocal result " to i8*"
     writeCode " call void @free(i8* "
     writeLocal resultRawPtr ")"
-    valueRawPtr <- writeNewLocal "bitcast "
-    writeValueType "* %value to i8*"
-    evalResult <- writeNewLocal "musttail call fastcc {i2,i8*}(i8* "
-    writeLocal evalParam ",i8* "
-    writeLocal valueRawPtr ")"
+    evalResult <- writeNewLocal "musttail call fastcc {i2,i8*} "
+    writeLocal eval "(i8* "
+    writeLocal evalParam ",i8* %value)"
     writeCode " ret {i2,i8*} "
     writeLocal evalResult ""
     return nextDefLabelRefs
@@ -424,6 +431,7 @@ writeForceEval value = do
     writeValueType "* "
     writeLocal value ",i32 0,i32 2"
     evalParam <- writeNewLocal "load i8*,i8** "
+    writeLocal evalParamPtr ""
     evalPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -433,7 +441,8 @@ writeForceEval value = do
     writeLocal value " to i8*"
     eval <- writeNewLocal "load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** "
     writeLocal evalPtr ""
-    evalResult <- writeNewLocal "call fastcc {i2,i8*}(i8* "
+    evalResult <- writeNewLocal "call fastcc {i2,i8*} "
+    writeLocal eval "(i8* "
     writeLocal evalParam ",i8* "
     writeLocal valueRawPtr ")"
     status <- writeNewLocal "extractvalue {i2,i8*} "
@@ -470,13 +479,13 @@ writeDecls :: GenLLVM ()
 writeDecls = do
     writeCode "declare i8* @malloc(i32)"
     writeCode "declare void @free(i8*)"
-    writeCode "declare void @abort() noreturn"
+    writeCode "declare void @abort() noreturn "
     writeCode "declare i32 @read(i32,i8*,i32)"
     writeCode "declare i32 @write(i32,i8*,i32)"
     writeCode "declare i32 @open(i8*,i32)"
     writeCode "declare i32 @close(i32)"
     writeCode "declare void @perror(i8*)"
-    writeCode "declare void @exit(i32) noreturn"
+    writeCode "declare void @exit(i32) noreturn "
 
 writeUnrefDefn :: GenLLVM ()
 writeUnrefDefn = do
@@ -538,20 +547,22 @@ writeUnrefDefn = do
     writeNewLabelBack [nilRef]
     rawPtr <- writeNewLocal "bitcast "
     writeValueType "* %value to i8*"
-    writeCode " call void @free("
+    writeCode " call void @free(i8* "
     writeLocal rawPtr ")"
     writeCode " ret void"
 
     writeNewLabelBack [nonnilRef]
-    nextValueRawPtr <- writeNewLocal "getelementptr "
+    nextValueRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* %value,i32 0,i32 2"
+    nextValueRawPtr <- writeNewLocal "load i8*,i8** "
+    writeLocal nextValueRawPtrPtr ""
     nextValue <- writeNewLocal "bitcast i8* "
     writeLocal nextValueRawPtr " to "
     writeValueType "*"
     rawPtr <- writeNewLocal "bitcast "
     writeValueType "* %value to i8*"
-    writeCode " call void @free("
+    writeCode " call void @free(i8* "
     writeLocal rawPtr ")"
     writeCode " musttail call fastcc void @unref("
     writeValueType "* "
@@ -576,7 +587,7 @@ writeAllocateNewValue initialStatus = do
     writeValueType ","
     writeValueType "* "
     writeLocal value ",i32 0,i32 0"
-    writeCode " store i32 1,i32 *"
+    writeCode " store i32 1,i32* "
     writeLocal refCountPtr ""
     statusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
@@ -596,7 +607,7 @@ writeLiteralValueEvalParamType code = do
 writeNewConstantLiteralValue :: [Bool] -> GenLLVM Local
 writeNewConstantLiteralValue bits = do
     bitArray <-
-        writeNewLocal ("bitcast " ++ literalType bits ++ " "
+        writeNewLocal ("bitcast " ++ literalType bits ++ "* "
                                   ++ literalName bits ++ " to [0 x i1]*")
     value <- writeNewLiteralValue (Right 0) (Right (length bits)) bitArray
     return value
@@ -613,15 +624,15 @@ writeNewLiteralValue currentIndex arraySize bitArray = do
     writeLocal sizePtr " to i32"
     rawPtr <- writeNewLocal "call i8* @malloc(i32 "
     writeLocal size ")"
-    evalParamRawPtr <- writeNewLocal "getelementptr "
+    evalParamRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
     writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal rawPtr ",i8** "
-    writeLocal evalParamRawPtr ""
+    writeLocal evalParamRawPtrPtr ""
     evalParam <- writeNewLocal "bitcast i8* "
-    writeLocal evalParamRawPtr " to "
+    writeLocal rawPtr " to "
     writeLiteralValueEvalParamType "*"
     bitArrayPtr <- writeNewLocal "getelementptr "
     writeLiteralValueEvalParamType ","
@@ -700,7 +711,10 @@ writeEvalLiteralValueDefn = do
     writeLiteralValueEvalParamType ","
     writeLiteralValueEvalParamType "* "
     writeLocal evalParam ",i32 0,i32 0"
-    bitPtr <- writeNewLocal "getelementptr [0 x i1],[0 x i1]*,i32 0,i32 "
+    bitArray <- writeNewLocal "load [0 x i1]*,[0 x i1]** "
+    writeLocal bitArrayPtr ""
+    bitPtr <- writeNewLocal "getelementptr [0 x i1],[0 x i1]*"
+    writeLocal bitArray ",i32 0,i32 "
     writeLocal currentIndex ""
     bit <- writeNewLocal "load i1,i1* "
     writeLocal bitPtr ""
@@ -711,21 +725,21 @@ writeEvalLiteralValueDefn = do
     writeLocal statusPtr ""
     (nextValue,nextValueRawPtr) <- writeAllocateNewValue 3
     valueNextPtr <- writeNewLocal "getelementptr "
-    writeLiteralValueEvalParamType ","
-    writeLiteralValueEvalParamType "* "
-    writeLocal evalParam ",i32 0,i32 2"
+    writeValueType ","
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal nextValueRawPtr ",i8** "
     writeLocal valueNextPtr ""
     nextValueEvalParamPtr <- writeNewLocal "getelementptr "
-    writeLiteralValueEvalParamType ","
-    writeLiteralValueEvalParamType "* "
+    writeValueType ","
+    writeValueType "* "
     writeLocal nextValue ",i32 0,i32 2"
     writeCode " store i8* %evalParam,i8** "
     writeLocal nextValueEvalParamPtr ""
     nextValueEvalFuncPtr <- writeNewLocal "getelementptr "
-    writeLiteralValueEvalParamType ","
-    writeLiteralValueEvalParamType "* "
+    writeValueType ","
+    writeValueType "* "
     writeLocal nextValue ",i32 0,i32 3"
     writeCode " store {i2,i8*}(i8*,i8*)* @evalLiteral,{i2,i8*}(i8*,i8*)** "
     writeLocal nextValueEvalFuncPtr ""
@@ -779,15 +793,15 @@ writeNewConcatValue value1 value2 = do
     writeLocal sizePtr " to i32"
     rawPtr <- writeNewLocal "call i8* @malloc(i32 "
     writeLocal size ")"
-    evalParamRawPtr <- writeNewLocal "getelementptr "
+    evalParamRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
     writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal rawPtr ",i8** "
-    writeLocal evalParamRawPtr ""
+    writeLocal evalParamRawPtrPtr ""
     evalParam <- writeNewLocal "bitcast i8* "
-    writeLocal evalParamRawPtr " to "
+    writeLocal rawPtr " to "
     writeConcatValueEvalParamType "*"
     ptr1 <- writeNewLocal "getelementptr "
     writeConcatValueEvalParamType ","
@@ -828,6 +842,8 @@ writeEvalConcatValueDefn = do
     writeNewLabel
     evalParam <- writeNewLocal "bitcast i8* %evalParam to "
     writeConcatValueEvalParamType "*"
+    value <- writeNewLocal "bitcast i8* %value to "
+    writeValueType "*"
     ptr1 <- writeNewLocal "getelementptr "
     writeConcatValueEvalParamType ","
     writeConcatValueEvalParamType "* "
@@ -852,6 +868,7 @@ writeEvalConcatValueDefn = do
 
     abortLabel <- writeNewLabelBack [abortLabelRef1]
     writeCode " call void @abort() noreturn"
+    writeCode " ret {i2,i8*} undef"
 
     writeNewLabelBack [okLabelRef1]
     cmp <- writeNewLocal "icmp ne i2 2,"
@@ -864,13 +881,15 @@ writeEvalConcatValueDefn = do
     (newNext,newNextRawPtr) <- writeNewConcatValue nextValue1 value2
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 1"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 1"
     writeCode " store i2 "
     writeLocal status1 ",i2* "
     writeLocal valueStatusPtr ""
     valueNextPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 2"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal newNextRawPtr ",i8** "
     writeLocal valueNextPtrPtr ""
@@ -878,7 +897,7 @@ writeEvalConcatValueDefn = do
     writeLocal status1 ",0"
     retValue <- writeNewLocal "insertvalue {i2,i8*} "
     writeLocal retValue1 ",i8* "
-    writeLocal newNextRawPtr ""
+    writeLocal newNextRawPtr ",1"
     writeCode " ret {i2,i8*} "
     writeLocal retValue ""
 
@@ -903,21 +922,23 @@ writeEvalConcatValueDefn = do
     writeLocal nextValue2 " to i8*"
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 1"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 1"
     writeCode " store i2 "
     writeLocal status2 ",i2* "
     writeLocal valueStatusPtr ""
     valueNextPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 2"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
     writeCode " store i8* "
     writeLocal newNextRawPtr2 ",i8** "
     writeLocal valueNextPtrPtr ""
     retValue1 <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
     writeLocal status2 ",0"
     retValue <- writeNewLocal "insertvalue {i2,i8*} "
-    writeLocal retValue ",i8* "
-    writeLocal newNextRawPtr ""
+    writeLocal retValue1 ",i8* "
+    writeLocal newNextRawPtr2 ",1"
     writeCode " ret {i2,i8*} "
     writeLocal retValue ""
 
@@ -926,7 +947,8 @@ writeEvalConcatValueDefn = do
     writeCode " call void @free(i8* %evalParam)"
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
-    writeValueType "* %value,i32 0,i32 1"
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 1"
     writeCode " store i2 2,i2* "
     writeLocal valueStatusPtr ""
     retValue <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
@@ -1057,7 +1079,7 @@ writeEvalFileValueDefn = do
     readResult <- writeNewLocal "call i32 @read(i32 "
     writeLocal fd ",i8* "
     writeLocal bytePtr ",i32 1)"
-    cmp <- writeNewLocal "icmp eq i8 1,"
+    cmp <- writeNewLocal "icmp eq i32 1,"
     writeLocal readResult ""
     (evalNextBitLabelRef2,eofLabelRef) <- writeBranch cmp
 
@@ -1105,7 +1127,7 @@ writeEvalFileValueDefn = do
     writeLocal freeEvalParamFuncPtr ""
     retVal1 <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
     writeLocal newStatus ",0"
-    retVal <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
+    retVal <- writeNewLocal "insertvalue {i2,i8*} "
     writeLocal retVal1 ",i8* "
     writeLocal nextValueRawPtr ",1"
     writeCode " ret {i2,i8*} "
@@ -1186,6 +1208,7 @@ genMain name (Def params _:_) = genLLVM (do
 
     writeNewLabelBack [abortLabelRef]
     writeCode " call void @abort() noreturn"
+    writeCode " ret void"
 
     writeNewLabelBack [okLabelRef]
     cmp <- writeNewLocal "icmp eq i2 2,"
@@ -1194,6 +1217,7 @@ genMain name (Def params _:_) = genLLVM (do
 
     writeNewLabelBack [eofLabelRef]
     writeCode " call void @exit(i32 0) noreturn"
+    writeCode " ret void"
 
     nextBitLabel <- writeNewLabelBack [nextBitLabelRef]
     nextBit <- writeNewLocal "zext i2 "
@@ -1255,6 +1279,7 @@ genMain name (Def params _:_) = genLLVM (do
         writeCode " call void @perror(i8* "
         writeLocal filename ")"
         writeCode " call void @exit(i32 -1) noreturn"
+        writeCode " ret void"
 
         writeNewLabelBack [unspecifiedArgLabelRef]
         cmp <- writeNewLocal ("icmp eq i32 " ++ show index ++ ",%argc")

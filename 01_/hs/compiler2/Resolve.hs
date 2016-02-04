@@ -36,7 +36,7 @@ collectDef arity defs partialDef@(PartialDef (Identifier _ name) _ _) = do
 
 resolvePartial :: (String -> Maybe Int) -> PartialDef -> Compile Def
 resolvePartial arity (PartialDef (Identifier pos name) params unparsed)
-  | null params = return (Def params (ExprLiteral pos []))
+  | null unparsed = return (Def params (ExprLiteral pos []))
   | otherwise = resolveBody arity params unparsed >>= return . Def params
 
 resolveBody :: (String -> Maybe Int) -> [Param] -> [Unparsed] -> Compile Expr

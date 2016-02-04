@@ -73,10 +73,12 @@ param :: Parser Param
 param = do
     pos <- getPosition
     bits <- many bit
-    (lookAhead (char '=') >> return (ParamIgnored pos bits))
-        <|> (token '.' >> return (ParamIgnored pos bits))
+    (token '.' >> return (ParamIgnored pos bits))
         <|> (token '_' >> return (ParamLiteral pos bits))
         <|> (identifier >>= (return . ParamBound pos bits))
+        <|> (if null bits
+                then fail ""
+                else lookAhead (char '=') >> return (ParamIgnored pos bits))
 
 unparsed :: Parser Unparsed
 unparsed = do

@@ -34,7 +34,7 @@ writeLabel :: Gen gen state String => Label -> gen state String ()
 writeLabel (Label l) = gen (" l" ++ show l ++ ":")
 
 writeLabelRef :: Gen gen state String => Label -> String -> gen state String ()
-writeLabelRef (Label l) code = gen ("%" ++ show l ++ code)
+writeLabelRef (Label l) code = gen ("%l" ++ show l ++ code)
 
 newLocal :: GenLLVM Local
 newLocal = do
