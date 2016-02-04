@@ -1186,6 +1186,7 @@ genMain name (Def params _:_) = genLLVM (do
             writeValueType "* "
             writeLocal arg "")
         ("":repeat ",") args
+    writeCode ")"
     writeCode " br label "
     entryLabelRef <- writeForwardRefLabel
 
