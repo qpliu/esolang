@@ -4,9 +4,8 @@ where
 
 import Test.HUnit(Assertion,Test(..),assertFailure)
 
-import Ast
-    (Identifier(..),Param(..),Def(..),Expr(..),Func)
-import Compile(CompileError,compile)
+import Ast(Identifier(..),Param(..),Def(..),Expr(..),Func)
+import Compile(compile)
 import Parse(parse)
 import Resolve(resolve)
 

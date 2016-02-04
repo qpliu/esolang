@@ -7,7 +7,7 @@ import System.Exit(ExitCode(ExitSuccess))
 import System.Process(readProcessWithExitCode)
 import Test.HUnit(Assertion,Test(..),assertEqual,assertFailure)
 
-import Compile(CompileError,compile)
+import Compile(compile)
 import Parse(parse)
 import Resolve(resolve)
 import CodeGen(codeGen,genMain)
