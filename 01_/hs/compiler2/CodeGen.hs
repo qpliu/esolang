@@ -1172,11 +1172,15 @@ genMain :: String -> [Def] -> String
 genMain name (Def params _:_) = genLLVM (do
     writeCode "define void @main(i32 %argc,i8** %argv) {"
     writeNewLabel
-    nilValue <- writeNewNilValue
-    stdinValue <- writeNewFileValue (Right "0")
-    args <- mapM (writeArg nilValue stdinValue) [1 .. length params]
-    writeUnref (Left nilValue)
-    writeUnref (Left stdinValue)
+    args <- if null params
+        then return []
+        else do
+            nilValue <- writeNewNilValue
+            stdinValue <- writeNewFileValue (Right "0")
+            args <- mapM (writeArg nilValue stdinValue) [1 .. length params]
+            writeUnref (Left nilValue)
+            writeUnref (Left stdinValue)
+            return args
     result <- writeNewLocal "call fastcc "
     writeValueType "* "
     writeName name
@@ -1200,7 +1204,13 @@ genMain name (Def params _:_) = genLLVM (do
         writePhi (writeValueType "*") (Right result) entryLabel
     (bitIndex,bitIndexPhiRef) <-
         writePhi (writeCode "i8") (Left "0") entryLabel
+    writeCode ",[0,"
+    bitIndexPhiLabelRef <- writeForwardRefLabel
+    writeCode "]"
     (byte,bytePhiRef) <- writePhi (writeCode "i8") (Left "0") entryLabel
+    writeCode ",[0,"
+    bytePhiLabelRef <- writeForwardRefLabel
+    writeCode "]"
 
     (status,nextValue,_,_) <- writeForceEval value
     cmp <- writeNewLocal "icmp eq i2 3,"
@@ -1239,16 +1249,14 @@ genMain name (Def params _:_) = genLLVM (do
     (continueRef,nextByteRef) <- writeBranch cmp
     continueRef loopLabel
 
-    nextByteLabel <- writeNewLabelBack [nextByteRef]
+    nextByteLabel <-
+        writeNewLabelBack [nextByteRef,bitIndexPhiLabelRef,bytePhiLabelRef]
+    valuePhiRef nextValue nextByteLabel
     writeCode " store i8 "
     writeLocal nextByte ",i8* "
     writeLocal buffer ""
-    writeNewLocal " call i32 @write(i32 1,i8* "
+    writeNewLocal "call i32 @write(i32 1,i8* "
     writeLocal buffer ",i32 1)"
-    zero <- writeNewLocal "select i1 1,i8 0,i8 0"
-    valuePhiRef nextValue nextByteLabel
-    bitIndexPhiRef zero nextByteLabel
-    bytePhiRef zero nextByteLabel
     writeCode " br label "
     writeLabelRef loopLabel ""
     writeCode " }")
