@@ -2,7 +2,7 @@ module TestResolve
     (tests)
 where
 
-import Test.HUnit(Assertion,Test(..),assertFailure)
+import Test.HUnit(Assertion,Test(..),assertEqual,assertFailure)
 
 import Ast(Identifier(..),Param(..),Def(..),Expr(..),Func)
 import Compile(compile)
@@ -15,7 +15,9 @@ tests = TestList [
     TestCase testLiteral,
     TestCase testBound,
     TestCase testFuncall,
-    TestCase testConcat
+    TestCase testConcat,
+    TestCase testUndefinedSymbol,
+    TestCase testDuplicateParam
     ]
 
 testResolve :: String -> String -> ([Func] -> Bool) -> Assertion
@@ -23,6 +25,12 @@ testResolve label code checkResult =
     either (assertFailure . ((label ++ ":") ++) . show)
            (\ result ->
                 if checkResult result then return () else assertFailure label)
+           (compile (parse "(test)" code >>= resolve))
+
+testResolveError :: String -> String -> String -> Assertion
+testResolveError label code expected =
+    either (assertEqual label expected . show)
+           (const (assertFailure label))
            (compile (parse "(test)" code >>= resolve))
 
 testSimple :: Assertion
@@ -61,3 +69,11 @@ testConcat = testResolve "testLiteral" "f a=a f a." checkResult
                                 (ExprFuncall (Identifier _ "f")
                                              [ExprBound 0]))])] = True
     checkResult _ = False
+
+testUndefinedSymbol :: Assertion
+testUndefinedSymbol = testResolveError "testUndefinedSymbol" "f=g."
+                                       "(test):1:3: Undefined symbol 'g'"
+
+testDuplicateParam :: Assertion
+testDuplicateParam = testResolveError "testDuplicateParam" "f a a=."
+                                      "(test):1:5: Duplicate parameter 'a'"

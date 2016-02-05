@@ -2,7 +2,7 @@ module Resolve
     (resolve)
 where
 
-import Control.Monad(foldM)
+import Control.Monad(foldM,foldM_)
 import Data.Map(Map)
 import qualified Data.Map as Map
 
@@ -30,9 +30,19 @@ checkArity arities (PartialDef (Identifier pos name) params _)
 
 collectDef :: (String -> Maybe Int) -> Map String [Def] -> PartialDef
            -> Compile (Map String [Def])
-collectDef arity defs partialDef@(PartialDef (Identifier _ name) _ _) = do
+collectDef arity defs partialDef@(PartialDef (Identifier _ name) params _) = do
+    checkDuplicates params
     def <- resolvePartial arity partialDef
     return (Map.adjust (++ [def]) name defs)
+
+checkDuplicates :: [Param] -> Compile ()
+checkDuplicates params = foldM_ check Map.empty params
+  where
+    check names (ParamBound _ _ (Identifier pos name))
+      | Map.member name names =
+            compileError pos ("Duplicate parameter '" ++ name ++ "'")
+      | otherwise = return (Map.insert name () names)
+    check names param = return names
 
 resolvePartial :: (String -> Maybe Int) -> PartialDef -> Compile Def
 resolvePartial arity (PartialDef (Identifier pos name) params unparsed)
