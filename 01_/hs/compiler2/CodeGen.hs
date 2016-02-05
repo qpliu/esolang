@@ -113,8 +113,8 @@ writeFunc (name,Def params _:_) = do
     mapM_ (\ i -> do
             argPtr <- writeNewLocal "getelementptr "
             writeFuncValueEvalParamType ","
-            writeFuncValueEvalParamType
-                ("* %a" ++ show i ++ ",i32 0,i32 1,i32 " ++ show i)
+            writeFuncValueEvalParamType "* "
+            writeLocal evalParam (",i32 0,i32 1,i32 " ++ show i)
             writeCode " store "
             writeValueType ("* %a" ++ show i ++ ",")
             writeValueType "** "
@@ -1265,7 +1265,7 @@ genMain name (Def params _:_) = genLLVM (do
             writeNewLocal ("getelementptr i8*,i8** %argv,i32 "++ show index)
         filename <- writeNewLocal "load i8*,i8** "
         writeLocal filenamePtr ""
-        fd <- writeNewLocal "call @open(i8* "
+        fd <- writeNewLocal "call i32 @open(i8* "
         writeLocal filename ",i32 0)"
         cmp <- writeNewLocal "icmp sge i32 "
         writeLocal fd ",0"
