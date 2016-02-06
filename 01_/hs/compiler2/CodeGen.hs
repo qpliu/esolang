@@ -327,7 +327,7 @@ writeDef (Def params expr) value args = do
 
     writeNewLabelBack [doCopyResultLabelRef]
     (evalResultState,evalResultNext,evalResultNextRawPtr,evalResult) <-
-        writeForceEval result
+        writeForceEvalUnevaluated result
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -383,14 +383,14 @@ writeBindParam (bindings,index,nextDefLabelRefs) (arg,param) = w param
         return (bindings,index+1,labelRefs ++ nextDefLabelRefs)
     w (ParamLiteral _ bits) = do
         (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
-        (valueState,_,_,_) <- writeForceEval value
+        (valueState,_) <- writeForceEval value
         cmp <- writeNewLocal "icmp ne i2 2,"
         writeLocal valueState ""
         (tryNextDefRef,bindSuccessRef) <- writeBranch cmp
         writeNewLabelBack [bindSuccessRef]
         return (bindings,index+1,tryNextDefRef : labelRefs ++ nextDefLabelRefs)
     writeCheckBit (value,labelRefs) bit = do
-        (valueState,nextValue,_,_) <- writeForceEval value
+        (valueState,nextValue) <- writeForceEval value
         cmp <- writeNewLocal "icmp eq i2 "
         writeLocal valueState (if bit then ",1" else ",0")
         (matchRef,notMatchRef) <- writeBranch cmp
@@ -424,8 +424,60 @@ writeExpr bindings expr = w expr
         (value,_) <- writeNewConcatValue value1 value2
         return value
 
-writeForceEval :: Local -> GenLLVM (Local,Local,Local,Local)
+writeForceEval :: Local -> GenLLVM (Local,Local)
 writeForceEval value = do
+    statusPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 1"
+    status <- writeNewLocal "load i2,i2* "
+    writeLocal statusPtr ""
+    cmp <- writeNewLocal "icmp ne i2 3,"
+    writeLocal status ""
+    (evaluatedLabelRef,unevaluatedLabelRef) <- writeBranch cmp
+
+    evaluatedLabel <- writeNewLabelBack [evaluatedLabelRef]
+    cmp <- writeNewLocal "icmp ne i2 2,"
+    writeLocal status ""
+    (nonnilLabelRef,doneLabelRef) <- writeBranch cmp
+
+    nonnilLabel <- writeNewLabelBack [nonnilLabelRef]
+    nextPtrPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal value ",i32 0,i32 2"
+    nextRawPtr <- writeNewLocal "load i8*,i8** "
+    writeLocal nextPtrPtr ""
+    next <- writeNewLocal "bitcast i8* "
+    writeLocal nextRawPtr " to "
+    writeValueType "*"
+    writeCode " br label "
+    doneLabelRef2 <- writeForwardRefLabel
+
+    unevaluatedLabel <- writeNewLabelBack [unevaluatedLabelRef]
+    (forcedStatus,forcedNext,_,_) <- writeForceEvalUnevaluated value
+    writeCode " br label "
+    doneLabelRef3 <- writeForwardRefLabel
+
+    writeNewLabelBack [doneLabelRef,doneLabelRef2,doneLabelRef3]
+    finalStatus <- writeNewLocal "phi i2 ["
+    writeLocal status ","
+    writeLabelRef evaluatedLabel "],["
+    writeLocal status ","
+    writeLabelRef nonnilLabel "],["
+    writeLocal forcedStatus ","
+    writeLabelRef unevaluatedLabel "]"
+    finalNext <- writeNewLocal "phi "
+    writeValueType "* [null,"
+    writeLabelRef evaluatedLabel "],["
+    writeLocal next ","
+    writeLabelRef nonnilLabel "],["
+    writeLocal forcedNext ","
+    writeLabelRef unevaluatedLabel "]"
+    return (finalStatus,finalNext)
+
+writeForceEvalUnevaluated :: Local -> GenLLVM (Local,Local,Local,Local)
+writeForceEvalUnevaluated value = do
     evalParamPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -713,7 +765,7 @@ writeEvalLiteralValueDefn = do
     writeLocal evalParam ",i32 0,i32 0"
     bitArray <- writeNewLocal "load [0 x i1]*,[0 x i1]** "
     writeLocal bitArrayPtr ""
-    bitPtr <- writeNewLocal "getelementptr [0 x i1],[0 x i1]*"
+    bitPtr <- writeNewLocal "getelementptr [0 x i1],[0 x i1]* "
     writeLocal bitArray ",i32 0,i32 "
     writeLocal currentIndex ""
     bit <- writeNewLocal "load i1,i1* "
@@ -861,7 +913,7 @@ writeEvalConcatValueDefn = do
     writeValueType "** "
     writeLocal ptr2 ""
 
-    (status1,nextValue1,_,_) <- writeForceEval value1
+    (status1,nextValue1) <- writeForceEval value1
     cmp <- writeNewLocal "icmp eq i2 3,"
     writeLocal status1 ""
     (abortLabelRef1,okLabelRef1) <- writeBranch cmp
@@ -903,7 +955,7 @@ writeEvalConcatValueDefn = do
 
     writeNewLabelBack [nilLabelRef1]
     writeUnref (Left value1)
-    (status2,nextValue2,_,_) <- writeForceEval value2
+    (status2,nextValue2) <- writeForceEval value2
     cmp <- writeNewLocal "icmp eq i2 3,"
     writeLocal status2 ""
     (abortLabelRef2,okLabelRef2) <- writeBranch cmp
@@ -1134,7 +1186,7 @@ writeEvalFileValueDefn = do
     writeLocal retVal ""
 
     writeNewLabelBack [eofLabelRef]
-    writeNewLocal " call i32 @close(i32 "
+    writeNewLocal "call i32 @close(i32 "
     writeLocal fd ")"
     writeCode " call void @free(i8* %evalParam)"
     writeCode " store i2 2,i2* "
@@ -1157,7 +1209,7 @@ writeFreeEvalParamFileValueDefn = do
     writeLocal evalParam ",i32 0,i32 0"
     fd <- writeNewLocal "load i32,i32* "
     writeLocal fdPtr ""
-    writeNewLocal " call i32 @close(i32 "
+    writeNewLocal "call i32 @close(i32 "
     writeLocal fd ")"
     writeCode " call void @free(i8* %evalParam)"
     writeCode " ret void"
@@ -1212,7 +1264,7 @@ genMain name (Def params _:_) = genLLVM (do
     bytePhiLabelRef <- writeForwardRefLabel
     writeCode "]"
 
-    (status,nextValue,_,_) <- writeForceEval value
+    (status,nextValue) <- writeForceEval value
     cmp <- writeNewLocal "icmp eq i2 3,"
     writeLocal status ""
     (abortLabelRef,okLabelRef) <- writeBranch cmp
@@ -1231,6 +1283,8 @@ genMain name (Def params _:_) = genLLVM (do
     writeCode " ret void"
 
     nextBitLabel <- writeNewLabelBack [nextBitLabelRef]
+    writeAddRef nextValue
+    writeUnref (Left value)
     nextBit <- writeNewLocal "zext i2 "
     writeLocal status " to i8"
     shiftedBit <- writeNewLocal "shl i8 "
