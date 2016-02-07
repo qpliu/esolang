@@ -247,6 +247,7 @@ writeDef (Def params expr) value args = do
     mapM_ writeAddRef bindings
     mapM_ (writeUnref . Left) args
     result <- writeExpr bindings expr
+    mapM_ (writeUnref . Left) bindings
     statusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -645,7 +646,7 @@ writeAllocateNewValue initialStatus = do
     writeValueType ","
     writeValueType "* "
     writeLocal value ",i32 0,i32 1"
-    writeCode (" store i2 " ++ show initialStatus ++ ",i2 *")
+    writeCode (" store i2 " ++ show initialStatus ++ ",i2* ")
     writeLocal statusPtr ""
     return (value,rawPtr)
 
