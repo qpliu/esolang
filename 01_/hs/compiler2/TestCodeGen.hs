@@ -143,7 +143,57 @@ defns =
      " call void @free(i8* %evalParam)" ++
      " ret void" ++
      " }" ++
-     "define private fastcc {i2,i8*} @evalFile(i8* %evalParam,i8* %value) { l0: %0 = bitcast i8* %evalParam to {i32,i8,i8}* %1 = bitcast i8* %value to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 %3 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 1 %4 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 2 %5 = load i8,i8* %3 %6 = icmp uge i8 %5,8 br i1 %6,label %l1,label %l2 l1: %7 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 0 %8 = load i32,i32* %7 %9 = call i32 @read(i32 %8,i8* %4,i32 1) %10 = icmp eq i32 1,%9 br i1 %10,label %l2,label %l3 l2: %11 = phi i8 [%5,%l0],[0,%l1] %12 = add i8 1,%11 store i8 %12,i8* %3 %13 = load i8,i8* %4 %14 = lshr i8 %13,%11 %15 = trunc i8 %14 to i2 %16 = and i2 1,%15 store i2 %16,i2* %2 %17 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1 %18 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %17 to i32 %19 = call i8* @malloc(i32 %18) %20 = bitcast i8* %19 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %21 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 0 store i32 1,i32* %21 %22 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 1 store i2 3,i2* %22 %23 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %19,i8** %23 %24 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 3 store {i2,i8*}(i8*,i8*)* @evalFile,{i2,i8*}(i8*,i8*)** %24 %25 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 4 store void(i8*)* @freeEvalParamFile,void(i8*)** %25 %26 = insertvalue {i2,i8*} undef,i2 %16,0 %27 = insertvalue {i2,i8*} %26,i8* %19,1 ret {i2,i8*} %27 l3: %28 = call i32 @close(i32 %8) call void @free(i8* %evalParam) store i2 2,i2* %2 %29 = insertvalue {i2,i8*} undef,i2 2,0 ret {i2,i8*} %29 }" ++
+     "define private fastcc {i2,i8*} @evalFile(i8* %evalParam,i8* %value) {" ++
+     " l0:" ++
+     " %0 = bitcast i8* %evalParam to {i32,i8,i8}*" ++
+     " %1 = bitcast i8* %value to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*" ++
+     " %2 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1" ++
+     " %3 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 1" ++
+     " %4 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 2" ++
+     " %5 = load i8,i8* %3" ++
+     " %6 = icmp uge i8 %5,8" ++
+     " br i1 %6,label %l1,label %l2" ++
+     " l1:" ++
+     " %7 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 0" ++
+     " %8 = load i32,i32* %7" ++
+     " %9 = call i32 @read(i32 %8,i8* %4,i32 1)" ++
+     " %10 = icmp eq i32 1,%9" ++
+     " br i1 %10,label %l2,label %l3" ++
+     " l2:" ++
+     " %11 = phi i8 [%5,%l0],[0,%l1]" ++
+     " %12 = add i8 1,%11" ++
+     " store i8 %12,i8* %3" ++
+     " %13 = load i8,i8* %4" ++
+     " %14 = lshr i8 %13,%11" ++
+     " %15 = trunc i8 %14 to i2" ++
+     " %16 = and i2 1,%15" ++
+     " store i2 %16,i2* %2" ++
+     " %17 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1" ++
+     " %18 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %17 to i32" ++
+     " %19 = call i8* @malloc(i32 %18)" ++
+     " %20 = bitcast i8* %19 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*" ++
+     " %21 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 0" ++
+     " store i32 1,i32* %21" ++
+     " %22 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 1" ++
+     " store i2 3,i2* %22" ++
+     " %23 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2" ++
+     " store i8* %19,i8** %23" ++
+     " %24 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 2" ++
+     " store i8* %evalParam,i8** %24" ++
+     " %25 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 3" ++
+     " store {i2,i8*}(i8*,i8*)* @evalFile,{i2,i8*}(i8*,i8*)** %25" ++
+     " %26 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20,i32 0,i32 4" ++
+     " store void(i8*)* @freeEvalParamFile,void(i8*)** %26" ++
+     " %27 = insertvalue {i2,i8*} undef,i2 %16,0" ++
+     " %28 = insertvalue {i2,i8*} %27,i8* %19,1" ++
+     " ret {i2,i8*} %28" ++
+     " l3:" ++
+     " %29 = call i32 @close(i32 %8)" ++
+     " call void @free(i8* %evalParam)" ++
+     " store i2 2,i2* %2" ++
+     " %30 = insertvalue {i2,i8*} undef,i2 2,0" ++
+     " ret {i2,i8*} %30" ++
+     " }" ++
      "define private fastcc void @freeEvalParamFile(i8* %evalParam) {" ++
      " l0:" ++
      " %0 = bitcast i8* %evalParam to {i32,i8,i8}*" ++
