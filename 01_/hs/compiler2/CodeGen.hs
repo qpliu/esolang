@@ -289,7 +289,7 @@ writeDef (Def params expr) value args = do
     writeLocal result ",i32 0,i32 2"
     nextRawPtr <- writeNewLocal "load i8*,i8** "
     writeLocal resultNextRawPtrPtr ""
-    cmp <- writeNewLocal "icmp eq i2 2,"
+    cmp <- writeNewLocal "icmp ne i2 2,"
     writeLocal status ""
     (addRefNextLabelRef,returnLabelRef) <- writeBranch cmp
     writeNewLabelBack [addRefNextLabelRef]
@@ -698,14 +698,12 @@ writeNewLiteralValue currentIndex arraySize bitArray = do
     writeLiteralValueEvalParamType ","
     writeLiteralValueEvalParamType "* "
     writeLocal evalParam ",i32 0,i32 1"
-    writeCode " store i32 "
-    either (flip writeLocal "") (writeCode . show) arraySize
-    writeCode ",i32* "
+    writeCode " store i32 0,i32* "
     writeLocal currentIndexPtr ""
     arraySizePtr <- writeNewLocal "getelementptr "
     writeLiteralValueEvalParamType ","
     writeLiteralValueEvalParamType "* "
-    writeLocal evalParam ",i32 0,i32 1"
+    writeLocal evalParam ",i32 0,i32 2"
     writeCode " store i32 "
     either (flip writeLocal "") (writeCode . show) arraySize
     writeCode ",i32* "
