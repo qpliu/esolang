@@ -929,7 +929,30 @@ writeEvalConcatValueDefn = do
     writeNewLabelBack [nonnilLabelRef1]
     writeAddRef nextValue1
     writeUnref (Left value1)
-    (newNext,newNextRawPtr) <- writeNewConcatValue nextValue1 value2
+    writeCode " store "
+    writeValueType "* "
+    writeLocal nextValue1 ","
+    writeValueType "** "
+    writeLocal ptr1 ""
+    (newNext,newNextRawPtr) <- writeAllocateNewValue 3
+    nextEvalParamPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal newNext ",i32 0,i32 2"
+    writeCode " store i8* %evalParam,i8** "
+    writeLocal nextEvalParamPtr ""
+    evalFuncPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal newNext ",i32 0,i32 3"
+    writeCode " store {i2,i8*}(i8*,i8*)* @evalConcat,{i2,i8*}(i8*,i8*)** "
+    writeLocal evalFuncPtr ""
+    freeEvalParamFuncPtr <- writeNewLocal "getelementptr "
+    writeValueType ","
+    writeValueType "* "
+    writeLocal newNext ",i32 0,i32 4"
+    writeCode " store void(i8*)* @freeEvalParamConcat,void(i8*)** "
+    writeLocal freeEvalParamFuncPtr ""
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -968,6 +991,7 @@ writeEvalConcatValueDefn = do
     writeNewLabelBack [nonnilLabelRef2]
     writeAddRef nextValue2
     writeUnref (Left value2)
+    writeCode " call void @free(i8* %evalParam)"
     newNextRawPtr2 <- writeNewLocal "bitcast "
     writeValueType "* "
     writeLocal nextValue2 " to i8*"
