@@ -1,9 +1,10 @@
 import Control.Monad(unless)
-import System.Directory(removeFile)
+import System.Directory(removeFile,getTemporaryDirectory)
 import System.Environment(getArgs,getProgName)
 import System.Exit(ExitCode(..),exitFailure)
-import System.FilePath(dropExtensions,replaceExtension,takeBaseName)
+import System.FilePath(combine,dropExtensions,replaceExtension,takeBaseName)
 import System.IO(stderr,hPutStrLn)
+import System.Posix(getProcessID)
 import System.Process(readProcessWithExitCode)
 
 import Compile(compile)
@@ -19,10 +20,10 @@ main = do
 usage :: IO ()
 usage = do
     progName <- getProgName
-    let arguments = " [-m MAIN-FUNCTION] SOURCE-FILE [SOURCE-FILE...]\n"
-    die ("Usage:\n" ++ progName ++ " -S" ++ arguments
-                    ++ progName ++ " -s" ++ arguments
-                    ++ progName ++ " -c" ++ arguments
+    let arguments = " [-m MAIN-FUNCTION] SOURCE-FILE [SOURCE-FILE...]"
+    die ("Usage:\n" ++ progName ++ " -S" ++ arguments ++ "\n"
+                    ++ progName ++ " -s" ++ arguments ++ "\n"
+                    ++ progName ++ " -c" ++ arguments ++ "\n"
                     ++ progName ++ " -o EXECUTABLE-FILE" ++ arguments)
 
 parseArgs :: [String] -> Maybe (String -> IO (),String,[String])
@@ -33,7 +34,7 @@ parseArgs ("-s":"-m":mainFunc:srcFiles@(_:_)) =
 parseArgs ("-c":"-m":mainFunc:srcFiles@(srcFile:_)) =
     Just (outObj (objFile srcFile),mainFunc,srcFiles)
 parseArgs ("-o":exeFile:"-m":mainFunc:srcFiles@(srcFile:_)) =
-    Just (outExe (objFile srcFile) exeFile,mainFunc,srcFiles)
+    Just (outExe exeFile,mainFunc,srcFiles)
 parseArgs ("-S":srcFiles@(srcFile:_)) =
     Just (putStrLn,getMainFunc srcFile,srcFiles)
 parseArgs ("-s":srcFiles@(srcFile:_)) =
@@ -41,7 +42,7 @@ parseArgs ("-s":srcFiles@(srcFile:_)) =
 parseArgs ("-c":srcFiles@(srcFile:_)) =
     Just (outObj (objFile srcFile),getMainFunc srcFile,srcFiles)
 parseArgs ("-o":exeFile:srcFiles@(srcFile:_)) =
-    Just (outExe (objFile srcFile) exeFile,getMainFunc srcFile,srcFiles)
+    Just (outExe exeFile,getMainFunc srcFile,srcFiles)
 parseArgs _ = Nothing
 
 getMainFunc :: String -> String
@@ -69,8 +70,10 @@ outObj :: String -> String -> IO ()
 outObj objfile llvmcode = do
     llvmc objfile llvmcode
 
-outExe :: String -> String -> String -> IO ()
-outExe objfile exefile llvmcode = do
+outExe :: String -> String -> IO ()
+outExe exefile llvmcode = do
+    pid <- getProcessID
+    objfile <- fmap (flip combine (show pid)) getTemporaryDirectory
     llvmc objfile llvmcode
     gcc objfile exefile
     removeFile objfile
@@ -92,7 +95,6 @@ gcc :: String -> String -> IO ()
 gcc objfile exefile = do
     (exitCode,_,err) <-
         readProcessWithExitCode "gcc" ["-o", exefile, objfile] ""
-    removeFile objfile
     unless (exitCode == ExitSuccess) (die err)
 
 die :: String -> IO a

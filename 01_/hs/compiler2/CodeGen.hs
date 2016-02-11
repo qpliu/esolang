@@ -43,7 +43,7 @@ collectLiterals literals (_,defs) = foldl collectDefLiterals literals defs
         foldl collectExprLiterals literals exprs
     collectExprLiterals literals (ExprConcat expr1 expr2) =
         collectExprLiterals (collectExprLiterals literals expr1) expr2
-    collectLiterals literals _ = literals
+    collectExprLiterals literals _ = literals
 
 writeLiteral :: [Bool] -> String
 writeLiteral bits =
@@ -1094,7 +1094,7 @@ writeNewFileValue fd = do
     writeFileValueEvalParamType ","
     writeFileValueEvalParamType "* "
     writeLocal evalParam ",i32 0,i32 1"
-    writeCode " store i8 8,i8* "
+    writeCode " store i8 -1,i8* "
     writeLocal bitIndexPtr ""
     evalParamPtr <- writeNewLocal "getelementptr "
     writeValueType ","
@@ -1140,8 +1140,8 @@ writeEvalFileValueDefn = do
     writeLocal evalParam ",i32 0,i32 2"
     bitIndex <- writeNewLocal "load i8,i8* "
     writeLocal bitIndexPtr ""
-    cmp <- writeNewLocal "icmp uge i8 "
-    writeLocal bitIndex ",8"
+    cmp <- writeNewLocal "icmp slt i8 "
+    writeLocal bitIndex ",0"
     (readNewByteLabelRef,evalNextBitLabelRef) <- writeBranch cmp
 
     readNewByteLabel <- writeNewLabelBack [readNewByteLabelRef]
@@ -1161,10 +1161,10 @@ writeEvalFileValueDefn = do
     writeNewLabelBack [evalNextBitLabelRef,evalNextBitLabelRef2]
     currentBitIndex <- writeNewLocal "phi i8 ["
     writeLocal bitIndex ","
-    writeLabelRef entryLabel "],[0,"
+    writeLabelRef entryLabel "],[7,"
     writeLabelRef readNewByteLabel "]"
-    nextBitIndex <- writeNewLocal "add i8 1,"
-    writeLocal currentBitIndex ""
+    nextBitIndex <- writeNewLocal "sub i8 "
+    writeLocal currentBitIndex ",1"
     writeCode " store i8 "
     writeLocal nextBitIndex ",i8* "
     writeLocal bitIndexPtr ""
@@ -1284,8 +1284,8 @@ genMain name (Def params _:_) = genLLVM (do
     (value,valuePhiRef) <-
         writePhi (writeValueType "*") (Right result) entryLabel
     (bitIndex,bitIndexPhiRef) <-
-        writePhi (writeCode "i8") (Left "0") entryLabel
-    writeCode ",[0,"
+        writePhi (writeCode "i8") (Left "7") entryLabel
+    writeCode ",[7,"
     bitIndexPhiLabelRef <- writeForwardRefLabel
     writeCode "]"
     (byte,bytePhiRef) <- writePhi (writeCode "i8") (Left "0") entryLabel
@@ -1322,13 +1322,13 @@ genMain name (Def params _:_) = genLLVM (do
     nextByte <- writeNewLocal "or i8 "
     writeLocal byte ","
     writeLocal shiftedBit ""
-    nextBitIndex <- writeNewLocal "add i8 1,"
-    writeLocal bitIndex ""
+    nextBitIndex <- writeNewLocal "sub i8 "
+    writeLocal bitIndex ",1"
     valuePhiRef nextValue nextBitLabel
     bitIndexPhiRef nextBitIndex nextBitLabel
     bytePhiRef nextByte nextBitLabel
-    cmp <- writeNewLocal "icmp ult i8 "
-    writeLocal nextBitIndex ",8"
+    cmp <- writeNewLocal "icmp sge i8 "
+    writeLocal nextBitIndex ",0"
     (continueRef,nextByteRef) <- writeBranch cmp
     continueRef loopLabel
 

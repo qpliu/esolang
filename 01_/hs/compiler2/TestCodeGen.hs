@@ -15,6 +15,9 @@ import CodeGen(codeGen,genMain)
 tests :: Test
 tests = TestList [
     TestCase testSimple,
+    TestCase testFuncall,
+    TestCase testConcat,
+    TestCase testParam,
     TestCase testGenMain0,
     TestCase testGenMain1,
     TestCase testGenMain2,
@@ -281,7 +284,7 @@ defns =
      " %3 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 1" ++
      " %4 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 2" ++
      " %5 = load i8,i8* %3" ++
-     " %6 = icmp uge i8 %5,8" ++
+     " %6 = icmp slt i8 %5,0" ++
      " br i1 %6,label %l1,label %l2" ++
      " l1:" ++
      " %7 = getelementptr {i32,i8,i8},{i32,i8,i8}* %0,i32 0,i32 0" ++
@@ -290,8 +293,8 @@ defns =
      " %10 = icmp eq i32 1,%9" ++
      " br i1 %10,label %l2,label %l3" ++
      " l2:" ++
-     " %11 = phi i8 [%5,%l0],[0,%l1]" ++
-     " %12 = add i8 1,%11" ++
+     " %11 = phi i8 [%5,%l0],[7,%l1]" ++
+     " %12 = sub i8 %11,1" ++
      " store i8 %12,i8* %3" ++
      " %13 = load i8,i8* %4" ++
      " %14 = lshr i8 %13,%11" ++
@@ -473,6 +476,22 @@ testSimple = testCodeGen "testSimple" "f=."
      " ret {i2,i8*} %55" ++
      " }")
 
+testFuncall :: Assertion
+testFuncall = testCodeGen "testFuncall" "f=f."
+    (declares ++ defns ++
+     "define fastcc {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* @_f() { l0: %0 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1 %1 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %0 to i32 %2 = call i8* @malloc(i32 %1) %3 = bitcast i8* %2 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %4 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 0 store i32 1,i32* %4 %5 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 1 store i2 3,i2* %5 %6 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* null,i32 0,i32 1,i32 0 %7 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %6 to i32 %8 = call i8* @malloc(i32 %7) %9 = bitcast i8* %8 to {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %10 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %9,i32 0,i32 0 store i32 0,i32* %10 %11 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 2 store i8* %8,i8** %11 %12 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 3 store {i2,i8*}(i8*,i8*)* @evalFunc_f,{i2,i8*}(i8*,i8*)** %12 %13 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 4 store void(i8*)* @freeEvalParamFunc,void(i8*)** %13 ret {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3 }define private fastcc {i2,i8*} @evalFunc_f(i8* %evalParam,i8* %value) { l0: %0 = bitcast i8* %evalParam to {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %1 = bitcast i8* %value to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* call void @free(i8* %evalParam) br label %l1 l1: %2 = call fastcc {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* @_f() %3 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 1 %4 = load i2,i2* %3 %5 = icmp ne i2 3,%4 br i1 %5,label %l2,label %l5 l2: %6 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 store i2 %4,i2* %6 %7 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 2 %8 = load i8*,i8** %7 %9 = icmp ne i2 2,%4 br i1 %9,label %l3,label %l4 l3: %10 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %8,i8** %10 %11 = bitcast i8* %8 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %12 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %11,i32 0,i32 0 %13 = load i32,i32* %12 %14 = add i32 1,%13 store i32 %14,i32* %12 br label %l4 l4: %15 = insertvalue {i2,i8*} undef,i2 %4,0 %16 = insertvalue {i2,i8*} %15,i8* %8,1 ret {i2,i8*} %16 l5: %17 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 0 %18 = load i32,i32* %17 %19 = icmp ugt i32 %18,1 br i1 %19,label %l6,label %l7 l6: %20 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 2 %21 = load i8*,i8** %20 %22 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 3 %23 = bitcast {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2 to i8* %24 = load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** %22 %25 = call fastcc {i2,i8*} %24(i8* %21,i8* %23) %26 = extractvalue {i2,i8*} %25,0 %27 = extractvalue {i2,i8*} %25,1 %28 = bitcast i8* %27 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 store i2 %26,i2* %29 %30 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %27,i8** %30 %31 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %28,i32 0,i32 0 %32 = load i32,i32* %31 %33 = add i32 1,%32 store i32 %33,i32* %31 ret {i2,i8*} %25 l7: %34 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 2 %35 = load i8*,i8** %34 %36 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 3 %37 = load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** %36 %38 = bitcast {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2 to i8* call void @free(i8* %38) %39 = musttail call fastcc {i2,i8*} %37(i8* %35,i8* %value) ret {i2,i8*} %39 }")
+
+testConcat :: Assertion
+testConcat = testCodeGen "testConcat" "f=0f."
+    ("@L0 = private constant [1 x i1] [i1 0]" ++
+     declares ++ defns ++
+     "define fastcc {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* @_f() { l0: %0 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1 %1 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %0 to i32 %2 = call i8* @malloc(i32 %1) %3 = bitcast i8* %2 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %4 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 0 store i32 1,i32* %4 %5 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 1 store i2 3,i2* %5 %6 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* null,i32 0,i32 1,i32 0 %7 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %6 to i32 %8 = call i8* @malloc(i32 %7) %9 = bitcast i8* %8 to {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %10 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %9,i32 0,i32 0 store i32 0,i32* %10 %11 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 2 store i8* %8,i8** %11 %12 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 3 store {i2,i8*}(i8*,i8*)* @evalFunc_f,{i2,i8*}(i8*,i8*)** %12 %13 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 4 store void(i8*)* @freeEvalParamFunc,void(i8*)** %13 ret {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3 }define private fastcc {i2,i8*} @evalFunc_f(i8* %evalParam,i8* %value) { l0: %0 = bitcast i8* %evalParam to {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %1 = bitcast i8* %value to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* call void @free(i8* %evalParam) br label %l1 l1: %2 = bitcast [1 x i1]* @L0 to [0 x i1]* %3 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1 %4 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3 to i32 %5 = call i8* @malloc(i32 %4) %6 = bitcast i8* %5 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %7 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %6,i32 0,i32 0 store i32 1,i32* %7 %8 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %6,i32 0,i32 1 store i2 3,i2* %8 %9 = getelementptr {[0 x i1]*,i32,i32},{[0 x i1]*,i32,i32}* null,i32 1 %10 = ptrtoint {[0 x i1]*,i32,i32}* %9 to i32 %11 = call i8* @malloc(i32 %10) %12 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %6,i32 0,i32 2 store i8* %11,i8** %12 %13 = bitcast i8* %11 to {[0 x i1]*,i32,i32}* %14 = getelementptr {[0 x i1]*,i32,i32},{[0 x i1]*,i32,i32}* %13,i32 0,i32 0 store [0 x i1]* %2,[0 x i1]** %14 %15 = getelementptr {[0 x i1]*,i32,i32},{[0 x i1]*,i32,i32}* %13,i32 0,i32 1 store i32 0,i32* %15 %16 = getelementptr {[0 x i1]*,i32,i32},{[0 x i1]*,i32,i32}* %13,i32 0,i32 2 store i32 1,i32* %16 %17 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %6,i32 0,i32 3 store {i2,i8*}(i8*,i8*)* @evalLiteral,{i2,i8*}(i8*,i8*)** %17 %18 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %6,i32 0,i32 4 store void(i8*)* @freeEvalParamLiteral,void(i8*)** %18 %19 = call fastcc {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* @_f() %20 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1 %21 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %20 to i32 %22 = call i8* @malloc(i32 %21) %23 = bitcast i8* %22 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %24 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 0 store i32 1,i32* %24 %25 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 1 store i2 3,i2* %25 %26 = getelementptr {{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*},{{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*}* null,i32 1 %27 = ptrtoint {{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*}* %26 to i32 %28 = call i8* @malloc(i32 %27) %29 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 2 store i8* %28,i8** %29 %30 = bitcast i8* %28 to {{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*}* %31 = getelementptr {{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*},{{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*}* %30,i32 0,i32 0 store {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %6,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %31 %32 = getelementptr {{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*},{{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*}* %30,i32 0,i32 1 store {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %19,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %32 %33 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 3 store {i2,i8*}(i8*,i8*)* @evalConcat,{i2,i8*}(i8*,i8*)** %33 %34 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 4 store void(i8*)* @freeEvalParamConcat,void(i8*)** %34 %35 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 1 %36 = load i2,i2* %35 %37 = icmp ne i2 3,%36 br i1 %37,label %l2,label %l5 l2: %38 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 store i2 %36,i2* %38 %39 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 2 %40 = load i8*,i8** %39 %41 = icmp ne i2 2,%36 br i1 %41,label %l3,label %l4 l3: %42 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %40,i8** %42 %43 = bitcast i8* %40 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %44 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %43,i32 0,i32 0 %45 = load i32,i32* %44 %46 = add i32 1,%45 store i32 %46,i32* %44 br label %l4 l4: %47 = insertvalue {i2,i8*} undef,i2 %36,0 %48 = insertvalue {i2,i8*} %47,i8* %40,1 ret {i2,i8*} %48 l5: %49 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 0 %50 = load i32,i32* %49 %51 = icmp ugt i32 %50,1 br i1 %51,label %l6,label %l7 l6: %52 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 2 %53 = load i8*,i8** %52 %54 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 3 %55 = bitcast {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23 to i8* %56 = load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** %54 %57 = call fastcc {i2,i8*} %56(i8* %53,i8* %55) %58 = extractvalue {i2,i8*} %57,0 %59 = extractvalue {i2,i8*} %57,1 %60 = bitcast i8* %59 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %61 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 store i2 %58,i2* %61 %62 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %59,i8** %62 %63 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %60,i32 0,i32 0 %64 = load i32,i32* %63 %65 = add i32 1,%64 store i32 %65,i32* %63 ret {i2,i8*} %57 l7: %66 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 2 %67 = load i8*,i8** %66 %68 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23,i32 0,i32 3 %69 = load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** %68 %70 = bitcast {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %23 to i8* call void @free(i8* %70) %71 = musttail call fastcc {i2,i8*} %69(i8* %67,i8* %value) ret {i2,i8*} %71 }")
+
+testParam :: Assertion
+testParam = testCodeGen "testParam" "f a=a."
+    (declares ++ defns ++
+     "define fastcc {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* @_f({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %a0) { l0: %0 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* null,i32 1 %1 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %0 to i32 %2 = call i8* @malloc(i32 %1) %3 = bitcast i8* %2 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %4 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 0 store i32 1,i32* %4 %5 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 1 store i2 3,i2* %5 %6 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* null,i32 0,i32 1,i32 1 %7 = ptrtoint {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %6 to i32 %8 = call i8* @malloc(i32 %7) %9 = bitcast i8* %8 to {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %10 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %9,i32 0,i32 0 store i32 1,i32* %10 %11 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %9,i32 0,i32 1,i32 0 store {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %a0,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %11 %12 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 2 store i8* %8,i8** %12 %13 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 3 store {i2,i8*}(i8*,i8*)* @evalFunc_f,{i2,i8*}(i8*,i8*)** %13 %14 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 4 store void(i8*)* @freeEvalParamFunc,void(i8*)** %14 ret {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3 }define private fastcc {i2,i8*} @evalFunc_f(i8* %evalParam,i8* %value) { l0: %0 = bitcast i8* %evalParam to {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %1 = bitcast i8* %value to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2 = getelementptr {i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]},{i32,[0 x {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*]}* %0,i32 0,i32 1,i32 0 %3 = load {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}*,{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}** %2 call void @free(i8* %evalParam) br label %l1 l1: %4 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 0 %5 = load i32,i32* %4 %6 = add i32 1,%5 store i32 %6,i32* %4 call fastcc void @unref({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3) %7 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 0 %8 = load i32,i32* %7 %9 = add i32 1,%8 store i32 %9,i32* %7 call fastcc void @unref({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3) %10 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 1 %11 = load i2,i2* %10 %12 = icmp ne i2 3,%11 br i1 %12,label %l2,label %l5 l2: %13 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 store i2 %11,i2* %13 %14 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 2 %15 = load i8*,i8** %14 %16 = icmp ne i2 2,%11 br i1 %16,label %l3,label %l4 l3: %17 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %15,i8** %17 %18 = bitcast i8* %15 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %19 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %18,i32 0,i32 0 %20 = load i32,i32* %19 %21 = add i32 1,%20 store i32 %21,i32* %19 br label %l4 l4: %22 = insertvalue {i2,i8*} undef,i2 %11,0 %23 = insertvalue {i2,i8*} %22,i8* %15,1 ret {i2,i8*} %23 l5: %24 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 0 %25 = load i32,i32* %24 %26 = icmp ugt i32 %25,1 br i1 %26,label %l6,label %l7 l6: %27 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 2 %28 = load i8*,i8** %27 %29 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 3 %30 = bitcast {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3 to i8* %31 = load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** %29 %32 = call fastcc {i2,i8*} %31(i8* %28,i8* %30) %33 = extractvalue {i2,i8*} %32,0 %34 = extractvalue {i2,i8*} %32,1 %35 = bitcast i8* %34 to {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %36 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 1 store i2 %33,i2* %36 %37 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %1,i32 0,i32 2 store i8* %34,i8** %37 %38 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %35,i32 0,i32 0 %39 = load i32,i32* %38 %40 = add i32 1,%39 store i32 %40,i32* %38 ret {i2,i8*} %32 l7: %41 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 2 %42 = load i8*,i8** %41 %43 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3,i32 0,i32 3 %44 = load {i2,i8*}(i8*,i8*)*,{i2,i8*}(i8*,i8*)** %43 %45 = bitcast {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %3 to i8* call void @free(i8* %45) %46 = musttail call fastcc {i2,i8*} %44(i8* %42,i8* %value) ret {i2,i8*} %46 }")
+
 testGenMain :: String -> String -> String -> Assertion
 testGenMain label src expected = do
     funcs@((name,defs):_) <-
@@ -495,7 +514,7 @@ testGenMain0 = testGenMain "testGenMain0" "f=."
      " br label %l2" ++
      " l2:" ++
      " %2 = phi {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* [%0,%l1],[%22,%l11],[%22,%l10]" ++
-     " %3 = phi i8 [0,%l1],[%31,%l10],[0,%l11]" ++
+     " %3 = phi i8 [7,%l1],[%31,%l10],[7,%l11]" ++
      " %4 = phi i8 [0,%l1],[%30,%l10],[0,%l11]" ++
      " %5 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2,i32 0,i32 1" ++
      " %6 = load i2,i2* %5" ++
@@ -543,8 +562,8 @@ testGenMain0 = testGenMain "testGenMain0" "f=."
      " %28 = zext i2 %21 to i8" ++
      " %29 = shl i8 %28,%3" ++
      " %30 = or i8 %4,%29" ++
-     " %31 = add i8 1,%3" ++
-     " %32 = icmp ult i8 %31,8" ++
+     " %31 = sub i8 %3,1" ++
+     " %32 = icmp sge i8 %31,0" ++
      " br i1 %32,label %l2,label %l11" ++
      " l11:" ++
      " store i8 %30,i8* %1" ++
@@ -580,7 +599,7 @@ testGenMain1 = testGenMain "testGenMain1" "f a=."
      " %16 = getelementptr {i32,i8,i8},{i32,i8,i8}* %15,i32 0,i32 0" ++
      " store i32 0,i32* %16" ++
      " %17 = getelementptr {i32,i8,i8},{i32,i8,i8}* %15,i32 0,i32 1" ++
-     " store i8 8,i8* %17" ++
+     " store i8 -1,i8* %17" ++
      " %18 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %9,i32 0,i32 2" ++
      " store i8* %14,i8** %18" ++
      " %19 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %9,i32 0,i32 3" ++
@@ -612,7 +631,7 @@ testGenMain1 = testGenMain "testGenMain1" "f a=."
      " %36 = getelementptr {i32,i8,i8},{i32,i8,i8}* %35,i32 0,i32 0" ++
      " store i32 %24,i32* %36" ++
      " %37 = getelementptr {i32,i8,i8},{i32,i8,i8}* %35,i32 0,i32 1" ++
-     " store i8 8,i8* %37" ++
+     " store i8 -1,i8* %37" ++
      " %38 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29,i32 0,i32 2" ++
      " store i8* %34,i8** %38" ++
      " %39 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29,i32 0,i32 3" ++
@@ -650,7 +669,7 @@ testGenMain1 = testGenMain "testGenMain1" "f a=."
      " br label %l9" ++
      " l9:" ++
      " %51 = phi {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* [%49,%l8],[%71,%l18],[%71,%l17]" ++
-     " %52 = phi i8 [0,%l8],[%80,%l17],[0,%l18]" ++
+     " %52 = phi i8 [7,%l8],[%80,%l17],[7,%l18]" ++
      " %53 = phi i8 [0,%l8],[%79,%l17],[0,%l18]" ++
      " %54 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %51,i32 0,i32 1" ++
      " %55 = load i2,i2* %54" ++
@@ -698,8 +717,8 @@ testGenMain1 = testGenMain "testGenMain1" "f a=."
      " %77 = zext i2 %70 to i8" ++
      " %78 = shl i8 %77,%52" ++
      " %79 = or i8 %53,%78" ++
-     " %80 = add i8 1,%52" ++
-     " %81 = icmp ult i8 %80,8" ++
+     " %80 = sub i8 %52,1" ++
+     " %81 = icmp sge i8 %80,0" ++
      " br i1 %81,label %l9,label %l18" ++
      " l18:" ++
      " store i8 %79,i8* %50" ++
@@ -734,7 +753,7 @@ testGenMain2 = testGenMain "testGenMain2" "f a b=."
      " %16 = getelementptr {i32,i8,i8},{i32,i8,i8}* %15,i32 0,i32 0" ++
      " store i32 0,i32* %16" ++
      " %17 = getelementptr {i32,i8,i8},{i32,i8,i8}* %15,i32 0,i32 1" ++
-     " store i8 8,i8* %17" ++
+     " store i8 -1,i8* %17" ++
      " %18 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %9,i32 0,i32 2" ++
      " store i8* %14,i8** %18" ++
      " %19 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %9,i32 0,i32 3" ++
@@ -765,7 +784,7 @@ testGenMain2 = testGenMain "testGenMain2" "f a b=."
      " %36 = getelementptr {i32,i8,i8},{i32,i8,i8}* %35,i32 0,i32 0" ++
      " store i32 %24,i32* %36" ++
      " %37 = getelementptr {i32,i8,i8},{i32,i8,i8}* %35,i32 0,i32 1" ++
-     " store i8 8,i8* %37" ++
+     " store i8 -1,i8* %37" ++
      " %38 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29,i32 0,i32 2" ++
      " store i8* %34,i8** %38" ++
      " %39 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29,i32 0,i32 3" ++
@@ -818,7 +837,7 @@ testGenMain2 = testGenMain "testGenMain2" "f a b=."
      " %64 = getelementptr {i32,i8,i8},{i32,i8,i8}* %63,i32 0,i32 0" ++
      " store i32 %52,i32* %64" ++
      " %65 = getelementptr {i32,i8,i8},{i32,i8,i8}* %63,i32 0,i32 1" ++
-     " store i8 8,i8* %65" ++
+     " store i8 -1,i8* %65" ++
      " %66 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %57,i32 0,i32 2" ++
      " store i8* %62,i8** %66" ++
      " %67 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %57,i32 0,i32 3" ++
@@ -856,7 +875,7 @@ testGenMain2 = testGenMain "testGenMain2" "f a b=."
      " br label %l16" ++
      " l16:" ++
      " %79 = phi {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* [%77,%l15],[%99,%l25],[%99,%l24]" ++
-     " %80 = phi i8 [0,%l15],[%108,%l24],[0,%l25]" ++
+     " %80 = phi i8 [7,%l15],[%108,%l24],[7,%l25]" ++
      " %81 = phi i8 [0,%l15],[%107,%l24],[0,%l25]" ++
      " %82 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %79,i32 0,i32 1" ++
      " %83 = load i2,i2* %82" ++
@@ -904,8 +923,8 @@ testGenMain2 = testGenMain "testGenMain2" "f a b=."
      " %105 = zext i2 %98 to i8" ++
      " %106 = shl i8 %105,%80" ++
      " %107 = or i8 %81,%106" ++
-     " %108 = add i8 1,%80" ++
-     " %109 = icmp ult i8 %108,8" ++
+     " %108 = sub i8 %80,1" ++
+     " %109 = icmp sge i8 %108,0" ++
      " br i1 %109,label %l16,label %l25" ++
      " l25:" ++
      " store i8 %107,i8* %78" ++
@@ -940,7 +959,7 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " %16 = getelementptr {i32,i8,i8},{i32,i8,i8}* %15,i32 0,i32 0" ++
      " store i32 0,i32* %16" ++
      " %17 = getelementptr {i32,i8,i8},{i32,i8,i8}* %15,i32 0,i32 1" ++
-     " store i8 8,i8* %17" ++
+     " store i8 -1,i8* %17" ++
      " %18 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %9,i32 0,i32 2" ++
      " store i8* %14,i8** %18" ++
      " %19 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %9,i32 0,i32 3" ++
@@ -971,7 +990,7 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " %36 = getelementptr {i32,i8,i8},{i32,i8,i8}* %35,i32 0,i32 0" ++
      " store i32 %24,i32* %36" ++
      " %37 = getelementptr {i32,i8,i8},{i32,i8,i8}* %35,i32 0,i32 1" ++
-     " store i8 8,i8* %37" ++
+     " store i8 -1,i8* %37" ++
      " %38 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29,i32 0,i32 2" ++
      " store i8* %34,i8** %38" ++
      " %39 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %29,i32 0,i32 3" ++
@@ -1024,7 +1043,7 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " %64 = getelementptr {i32,i8,i8},{i32,i8,i8}* %63,i32 0,i32 0" ++
      " store i32 %52,i32* %64" ++
      " %65 = getelementptr {i32,i8,i8},{i32,i8,i8}* %63,i32 0,i32 1" ++
-     " store i8 8,i8* %65" ++
+     " store i8 -1,i8* %65" ++
      " %66 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %57,i32 0,i32 2" ++
      " store i8* %62,i8** %66" ++
      " %67 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %57,i32 0,i32 3" ++
@@ -1077,7 +1096,7 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " %92 = getelementptr {i32,i8,i8},{i32,i8,i8}* %91,i32 0,i32 0" ++
      " store i32 %80,i32* %92" ++
      " %93 = getelementptr {i32,i8,i8},{i32,i8,i8}* %91,i32 0,i32 1" ++
-     " store i8 8,i8* %93" ++
+     " store i8 -1,i8* %93" ++
      " %94 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %85,i32 0,i32 2" ++
      " store i8* %90,i8** %94" ++
      " %95 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %85,i32 0,i32 3" ++
@@ -1115,7 +1134,7 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " br label %l23" ++
      " l23:" ++
      " %107 = phi {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* [%105,%l22],[%127,%l32],[%127,%l31]" ++
-     " %108 = phi i8 [0,%l22],[%136,%l31],[0,%l32]" ++
+     " %108 = phi i8 [7,%l22],[%136,%l31],[7,%l32]" ++
      " %109 = phi i8 [0,%l22],[%135,%l31],[0,%l32]" ++
      " %110 = getelementptr {i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*},{i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %107,i32 0,i32 1" ++
      " %111 = load i2,i2* %110" ++
@@ -1163,8 +1182,8 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " %133 = zext i2 %126 to i8" ++
      " %134 = shl i8 %133,%108" ++
      " %135 = or i8 %109,%134" ++
-     " %136 = add i8 1,%108" ++
-     " %137 = icmp ult i8 %136,8" ++
+     " %136 = sub i8 %108,1" ++
+     " %137 = icmp sge i8 %136,0" ++
      " br i1 %137,label %l23,label %l32" ++
      " l32:" ++
      " store i8 %135,i8* %106" ++
