@@ -578,6 +578,7 @@ testGenMain0 = testGenMain "testGenMain0" "f=."
      " %24 = icmp eq i2 2,%21" ++
      " br i1 %24,label %l9,label %l10" ++
      " l9:" ++
+     " call fastcc void @unref({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %2)" ++
      " call void @exit(i32 0) noreturn" ++
      " ret void" ++
      " l10:" ++
@@ -733,6 +734,7 @@ testGenMain1 = testGenMain "testGenMain1" "f a=."
      " %73 = icmp eq i2 2,%70" ++
      " br i1 %73,label %l16,label %l17" ++
      " l16:" ++
+     " call fastcc void @unref({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %51)" ++
      " call void @exit(i32 0) noreturn" ++
      " ret void" ++
      " l17:" ++
@@ -939,6 +941,7 @@ testGenMain2 = testGenMain "testGenMain2" "f a b=."
      " %101 = icmp eq i2 2,%98" ++
      " br i1 %101,label %l23,label %l24" ++
      " l23:" ++
+     " call fastcc void @unref({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %79)" ++
      " call void @exit(i32 0) noreturn" ++
      " ret void" ++
      " l24:" ++
@@ -1198,6 +1201,7 @@ testGenMain3 = testGenMain "testGenMain3" "f a b c=."
      " %129 = icmp eq i2 2,%126" ++
      " br i1 %129,label %l30,label %l31" ++
      " l30:" ++
+     " call fastcc void @unref({i32,i2,i8*,{i2,i8*}(i8*,i8*)*,void(i8*)*}* %107)" ++
      " call void @exit(i32 0) noreturn" ++
      " ret void" ++
      " l31:" ++

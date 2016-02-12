@@ -14,6 +14,9 @@ import GenLLVM
      writeNewLocal,writeNewLabel,writeNewLabelBack,
      writeForwardRefLabel,writeBranch,writePhi)
 
+debugMemory :: Bool
+debugMemory = False
+
 codeGen :: [Func] -> String
 codeGen funcs =
     (concatMap writeLiteral . Set.toList . foldl collectLiterals Set.empty)
@@ -27,7 +30,10 @@ codeGen funcs =
             writeFreeEvalParamConcatValueDefn,
             writeEvalFileValueDefn,
             writeFreeEvalParamFileValueDefn,
-            writeFreeEvalParamFuncValueDefn
+            writeFreeEvalParamFuncValueDefn,
+            writeDebugMemoryDefns,
+            writeDebugMemoryMallocDefn,
+            writeDebugMemoryFreeDefn
             ]
         ++ (concatMap genLLVM . map writeFunc) funcs
         ++ (concatMap genLLVM . map writeEvalFuncValue) funcs
@@ -99,8 +105,7 @@ writeFunc (name,Def params _:_) = do
     size <- writeNewLocal "ptrtoint "
     writeValueType "** "
     writeLocal sizePtr " to i32"
-    rawPtr <- writeNewLocal "call i8* @malloc(i32 "
-    writeLocal size ")"
+    rawPtr <- writeMalloc size
     evalParam <- writeNewLocal "bitcast i8* "
     writeLocal rawPtr " to "
     writeFuncValueEvalParamType "*"
@@ -199,7 +204,7 @@ writeFreeEvalParamFuncValueDefn = do
     writeLabelRef loopLabel ""
 
     writeNewLabelBack [doneLabelRef]
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     writeCode " ret void"
     writeCode " }"
 
@@ -226,7 +231,7 @@ writeEvalFuncValue (name,defs) = do
             writeLocal argPtr ""
             return arg)
         [0 .. length params - 1]
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
 
     writeCode " br label "
     labelRef <- writeForwardRefLabel
@@ -363,8 +368,7 @@ writeDef (Def params expr) value args = do
     resultRawPtr <- writeNewLocal "bitcast "
     writeValueType "* "
     writeLocal result " to i8*"
-    writeCode " call void @free(i8* "
-    writeLocal resultRawPtr ")"
+    writeFree (Left resultRawPtr)
     evalResult <- writeNewLocal "musttail call fastcc {i2,i8*} "
     writeLocal eval "(i8* "
     writeLocal evalParam ",i8* %value)"
@@ -588,8 +592,7 @@ writeUnrefDefn = do
     writeLocal evalParam ")"
     rawPtr <- writeNewLocal "bitcast "
     writeValueType "* %value to i8*"
-    writeCode " call void @free(i8* "
-    writeLocal rawPtr ")"
+    writeFree (Left rawPtr)
     writeCode " ret void"
 
     writeNewLabelBack [evaluatedRef]
@@ -600,8 +603,7 @@ writeUnrefDefn = do
     writeNewLabelBack [nilRef]
     rawPtr <- writeNewLocal "bitcast "
     writeValueType "* %value to i8*"
-    writeCode " call void @free(i8* "
-    writeLocal rawPtr ")"
+    writeFree (Left rawPtr)
     writeCode " ret void"
 
     writeNewLabelBack [nonnilRef]
@@ -615,8 +617,7 @@ writeUnrefDefn = do
     writeValueType "*"
     rawPtr <- writeNewLocal "bitcast "
     writeValueType "* %value to i8*"
-    writeCode " call void @free(i8* "
-    writeLocal rawPtr ")"
+    writeFree (Left rawPtr)
     writeCode " musttail call fastcc void @unref("
     writeValueType "* "
     writeLocal nextValue ")"
@@ -631,8 +632,7 @@ writeAllocateNewValue initialStatus = do
     size <- writeNewLocal "ptrtoint "
     writeValueType "* "
     writeLocal ptrForSize " to i32"
-    rawPtr <- writeNewLocal "call i8* @malloc(i32 "
-    writeLocal size ")"
+    rawPtr <- writeMalloc size
     value <- writeNewLocal "bitcast i8* "
     writeLocal rawPtr " to "
     writeValueType "*"
@@ -675,8 +675,7 @@ writeNewLiteralValue currentIndex arraySize bitArray = do
     size <- writeNewLocal "ptrtoint "
     writeLiteralValueEvalParamType "* "
     writeLocal sizePtr " to i32"
-    rawPtr <- writeNewLocal "call i8* @malloc(i32 "
-    writeLocal size ")"
+    rawPtr <- writeMalloc size
     evalParamRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -809,7 +808,7 @@ writeEvalLiteralValueDefn = do
     writeLocal retVal ""
 
     writeNewLabelBack [nilLabelRef]
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     writeCode " store i2 2,i2* "
     writeLocal statusPtr ""
     retVal <- writeNewLocal "insertvalue {i2,i8*} undef,i2 2,0"
@@ -821,7 +820,7 @@ writeFreeEvalParamLiteralValueDefn :: GenLLVM ()
 writeFreeEvalParamLiteralValueDefn = do
     writeCode "define private fastcc void "
     writeCode "@freeEvalParamLiteral(i8* %evalParam) {"
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     writeCode " ret void"
     writeCode " }"
 
@@ -842,8 +841,7 @@ writeNewConcatValue value1 value2 = do
     size <- writeNewLocal "ptrtoint "
     writeConcatValueEvalParamType "* "
     writeLocal sizePtr " to i32"
-    rawPtr <- writeNewLocal "call i8* @malloc(i32 "
-    writeLocal size ")"
+    rawPtr <- writeMalloc size
     evalParamRawPtrPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -991,7 +989,7 @@ writeEvalConcatValueDefn = do
     writeNewLabelBack [nonnilLabelRef2]
     writeAddRef nextValue2
     writeUnref (Left value2)
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     newNextRawPtr2 <- writeNewLocal "bitcast "
     writeValueType "* "
     writeLocal nextValue2 " to i8*"
@@ -1019,7 +1017,7 @@ writeEvalConcatValueDefn = do
 
     writeNewLabelBack [nilLabelRef2]
     writeUnref (Left value2)
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     valueStatusPtr <- writeNewLocal "getelementptr "
     writeValueType ","
     writeValueType "* "
@@ -1057,7 +1055,7 @@ writeFreeEvalParamConcatValueDefn = do
     writeValueType "** "
     writeLocal ptr2 ""
     writeUnref (Left value2)
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     writeCode " ret void"
     writeCode " }"
 
@@ -1077,8 +1075,7 @@ writeNewFileValue fd = do
     size <- writeNewLocal "ptrtoint "
     writeFileValueEvalParamType "* "
     writeLocal sizePtr " to i32"
-    evalParamRawPtr <- writeNewLocal "call i8* @malloc(i32 "
-    writeLocal size ")"
+    evalParamRawPtr <- writeMalloc size
     evalParam <- writeNewLocal "bitcast i8* "
     writeLocal evalParamRawPtr " to "
     writeFileValueEvalParamType "*"
@@ -1217,7 +1214,7 @@ writeEvalFileValueDefn = do
     writeNewLabelBack [eofLabelRef]
     writeNewLocal "call i32 @close(i32 "
     writeLocal fd ")"
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     writeCode " store i2 2,i2* "
     writeLocal statusPtr ""
     retVal <- writeNewLocal "insertvalue {i2,i8*} undef,i2 2,0"
@@ -1240,7 +1237,7 @@ writeFreeEvalParamFileValueDefn = do
     writeLocal fdPtr ""
     writeNewLocal "call i32 @close(i32 "
     writeLocal fd ")"
-    writeCode " call void @free(i8* %evalParam)"
+    writeFree (Right "%evalParam")
     writeCode " ret void"
     writeCode " }"
 
@@ -1253,6 +1250,7 @@ genMain :: String -> [Def] -> String
 genMain name (Def params _:_) = genLLVM (do
     writeCode "define void @main(i32 %argc,i8** %argv) {"
     writeNewLabel
+    writeInitDebugMemory
     args <- if null params
         then return []
         else do
@@ -1308,6 +1306,8 @@ genMain name (Def params _:_) = genLLVM (do
     (eofLabelRef,nextBitLabelRef) <- writeBranch cmp
 
     writeNewLabelBack [eofLabelRef]
+    writeUnref (Left value)
+    writeFinalizeDebugMemory
     writeCode " call void @exit(i32 0) noreturn"
     writeCode " ret void"
 
@@ -1397,3 +1397,67 @@ genMain name (Def params _:_) = genLLVM (do
         writeLocal nilValue ","
         writeLabelRef nilArgLabel "]"
         return argValue
+
+writeMalloc :: Local -> GenLLVM Local
+writeMalloc size = do
+    result <- writeNewLocal "call "
+    if debugMemory
+        then writeCode "fastcc i8* @debugMalloc"
+        else writeCode "i8* @malloc"
+    writeCode "(i32 "
+    writeLocal size ")"
+    return result
+
+writeFree :: Either Local String -> GenLLVM ()
+writeFree value = do
+    if debugMemory
+        then writeCode " call fastcc void @debugFree"
+        else writeCode " call void @free"
+    writeCode "(i8* "
+    either (flip writeLocal "") writeCode value
+    writeCode ")"
+
+writeInitDebugMemory :: GenLLVM ()
+writeInitDebugMemory | not debugMemory = return () | otherwise = do
+    writeCode " store i32 0,i32* @debugMemoryCount"
+
+writeFinalizeDebugMemory :: GenLLVM ()
+writeFinalizeDebugMemory | not debugMemory = return () | otherwise = do
+    count <- writeNewLocal "load i32,i32* @debugMemoryCount"
+    fmt <- writeNewLocal "getelementptr [10 x i8],[10 x i8]* @debugMemoryOutputFmt,i32 0,i32 0"
+    writeNewLocal "call i32(i8*,...) @printf(i8* "
+    writeLocal fmt ",i32 "
+    writeLocal count ")"
+
+writeDebugMemoryDefns :: GenLLVM ()
+writeDebugMemoryDefns | not debugMemory = return () | otherwise = do
+    writeCode "@debugMemoryCount = private global i32 0 "
+    writeCode "@debugMemoryOutputFmt = private constant [10 x i8] c\"count=%d\\0a\\0d\" "
+    writeCode "declare i32 @printf(i8*,...)"
+
+writeDebugMemoryMallocDefn :: GenLLVM ()
+writeDebugMemoryMallocDefn | not debugMemory = return () | otherwise = do
+    writeCode "define fastcc i8* @debugMalloc(i32 %size) {"
+    writeNewLabel
+    oldCount <- writeNewLocal "load i32,i32* @debugMemoryCount"
+    newCount <- writeNewLocal "add i32 1,"
+    writeLocal oldCount ""
+    writeCode " store i32 "
+    writeLocal newCount ",i32* @debugMemoryCount"
+    result <- writeNewLocal "call i8* @malloc(i32 %size)"
+    writeCode " ret i8* "
+    writeLocal result ""
+    writeCode " }"
+
+writeDebugMemoryFreeDefn :: GenLLVM ()
+writeDebugMemoryFreeDefn | not debugMemory = return () | otherwise = do
+    writeCode "define fastcc void @debugFree(i8* %value) {"
+    writeNewLabel
+    oldCount <- writeNewLocal "load i32,i32* @debugMemoryCount"
+    newCount <- writeNewLocal "sub i32 "
+    writeLocal oldCount ",1"
+    writeCode " store i32 "
+    writeLocal newCount ",i32* @debugMemoryCount"
+    writeCode " call void @free(i8* %value)"
+    writeCode " ret void"
+    writeCode " }"
