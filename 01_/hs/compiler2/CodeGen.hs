@@ -31,6 +31,7 @@ codeGen funcs =
             writeEvalFileValueDefn,
             writeFreeEvalParamFileValueDefn,
             writeFreeEvalParamFuncValueDefn,
+            writeFreeEvalParamNullaryFuncValueDefn,
             writeDebugMemoryDefns,
             writeDebugMemoryMallocDefn,
             writeDebugMemoryFreeDefn
@@ -98,41 +99,44 @@ writeFunc (name,Def params _:_) = do
     writeCode ") {"
     writeNewLabel
     (value,_) <- writeAllocateNewValue 3
-    sizePtr <- writeNewLocal "getelementptr "
-    writeFuncValueEvalParamType ","
-    writeFuncValueEvalParamType
-        ("* null,i32 0,i32 1,i32 " ++ show (length params))
-    size <- writeNewLocal "ptrtoint "
-    writeValueType "** "
-    writeLocal sizePtr " to i32"
-    rawPtr <- writeMalloc size
-    evalParam <- writeNewLocal "bitcast i8* "
-    writeLocal rawPtr " to "
-    writeFuncValueEvalParamType "*"
-    argCountPtr <- writeNewLocal "getelementptr "
-    writeFuncValueEvalParamType ","
-    writeFuncValueEvalParamType "* "
-    writeLocal evalParam ",i32 0,i32 0"
-    writeCode (" store i32 " ++ show (length params) ++ ",i32* ")
-    writeLocal argCountPtr ""
-    mapM_ (\ i -> do
-            argPtr <- writeNewLocal "getelementptr "
+    if null params
+        then return ()
+        else do
+            sizePtr <- writeNewLocal "getelementptr "
+            writeFuncValueEvalParamType ","
+            writeFuncValueEvalParamType
+                ("* null,i32 0,i32 1,i32 " ++ show (length params))
+            size <- writeNewLocal "ptrtoint "
+            writeValueType "** "
+            writeLocal sizePtr " to i32"
+            rawPtr <- writeMalloc size
+            evalParam <- writeNewLocal "bitcast i8* "
+            writeLocal rawPtr " to "
+            writeFuncValueEvalParamType "*"
+            argCountPtr <- writeNewLocal "getelementptr "
             writeFuncValueEvalParamType ","
             writeFuncValueEvalParamType "* "
-            writeLocal evalParam (",i32 0,i32 1,i32 " ++ show i)
-            writeCode " store "
-            writeValueType ("* %a" ++ show i ++ ",")
-            writeValueType "** "
-            writeLocal argPtr "")
-        [0 .. length params - 1]
+            writeLocal evalParam ",i32 0,i32 0"
+            writeCode (" store i32 " ++ show (length params) ++ ",i32* ")
+            writeLocal argCountPtr ""
+            mapM_ (\ i -> do
+                    argPtr <- writeNewLocal "getelementptr "
+                    writeFuncValueEvalParamType ","
+                    writeFuncValueEvalParamType "* "
+                    writeLocal evalParam (",i32 0,i32 1,i32 " ++ show i)
+                    writeCode " store "
+                    writeValueType ("* %a" ++ show i ++ ",")
+                    writeValueType "** "
+                    writeLocal argPtr "")
+                [0 .. length params - 1]
 
-    evalParamPtr <- writeNewLocal "getelementptr "
-    writeValueType ","
-    writeValueType "* "
-    writeLocal value ",i32 0,i32 2"
-    writeCode " store i8* "
-    writeLocal rawPtr ",i8** "
-    writeLocal evalParamPtr ""
+            evalParamPtr <- writeNewLocal "getelementptr "
+            writeValueType ","
+            writeValueType "* "
+            writeLocal value ",i32 0,i32 2"
+            writeCode " store i8* "
+            writeLocal rawPtr ",i8** "
+            writeLocal evalParamPtr ""
 
     evalFuncPtr <- writeNewLocal "getelementptr "
     writeValueType ","
@@ -147,7 +151,11 @@ writeFunc (name,Def params _:_) = do
     writeValueType ","
     writeValueType "* "
     writeLocal value ",i32 0,i32 4"
-    writeCode " store void(i8*)* @freeEvalParamFunc,void(i8*)** "
+    writeCode " store void(i8*)* @"
+    if null params
+        then writeCode "freeEvalParamNullaryFunc"
+        else writeCode "freeEvalParamFunc"
+    writeCode ",void(i8*)** "
     writeLocal freeEvalParamFuncPtr ""
 
     writeCode " ret "
@@ -208,30 +216,41 @@ writeFreeEvalParamFuncValueDefn = do
     writeCode " ret void"
     writeCode " }"
 
+writeFreeEvalParamNullaryFuncValueDefn :: GenLLVM ()
+writeFreeEvalParamNullaryFuncValueDefn = do
+    writeCode "define private fastcc void "
+    writeCode "@freeEvalParamNullaryFunc(i8* %evalParam) {"
+    writeCode " ret void"
+    writeCode " }"
+
 writeEvalFuncValue :: Func -> GenLLVM ()
 writeEvalFuncValue (name,defs) = do
     writeCode "define private fastcc {i2,i8*} "
     writeEvalFuncName name
     writeCode "(i8* %evalParam,i8* %value) {"
     writeNewLabel
-    evalParam <- writeNewLocal "bitcast i8* %evalParam to "
-    writeFuncValueEvalParamType "*"
     value <- writeNewLocal "bitcast i8* %value to "
     writeValueType "*"
 
     let Def params _:_ = defs
-    args <- mapM (\ i -> do
-            argPtr <- writeNewLocal "getelementptr "
-            writeFuncValueEvalParamType ","
-            writeFuncValueEvalParamType "* "
-            writeLocal evalParam (",i32 0,i32 1,i32 " ++ show i)
-            arg <- writeNewLocal "load "
-            writeValueType "*,"
-            writeValueType "** "
-            writeLocal argPtr ""
-            return arg)
-        [0 .. length params - 1]
-    writeFree (Right "%evalParam")
+    args <- if null params
+        then return []
+        else do
+            evalParam <- writeNewLocal "bitcast i8* %evalParam to "
+            writeFuncValueEvalParamType "*"
+            args <- mapM (\ i -> do
+                    argPtr <- writeNewLocal "getelementptr "
+                    writeFuncValueEvalParamType ","
+                    writeFuncValueEvalParamType "* "
+                    writeLocal evalParam (",i32 0,i32 1,i32 " ++ show i)
+                    arg <- writeNewLocal "load "
+                    writeValueType "*,"
+                    writeValueType "** "
+                    writeLocal argPtr ""
+                    return arg)
+                [0 .. length params - 1]
+            writeFree (Right "%evalParam")
+            return args
 
     writeCode " br label "
     labelRef <- writeForwardRefLabel
