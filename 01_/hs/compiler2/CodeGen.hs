@@ -348,36 +348,81 @@ writeDefExpr value bindings expr = w expr
         let rhs = bindings !! index
         mapM_ (writeUnref . Left)
               (take (index-1) bindings ++ drop index bindings)
+        rhsStatusPtr <- writeValueFieldPtr rhs 1
+        rhsStatus <- writeLoad (writeCode "i2") rhsStatusPtr
+        cmp <- writeNewLocal "icmp ne i2 3,"
+        writeLocal rhsStatus ""
+        (evaluatedLabelRef,unevaluatedLabelRef) <- writeBranch cmp
+
+        writeNewLabelBack [evaluatedLabelRef]
+        valueStatusPtr <- writeValueFieldPtr value 1
+        writeStore (writeCode "i2") (Left rhsStatus) valueStatusPtr
+        cmp <- writeNewLocal "icmp eq i2 2,"
+        writeLocal rhsStatus ""
+        (nilLabelRef,nonnilLabelRef) <- writeBranch cmp
+
+        writeNewLabelBack [nilLabelRef]
+        writeUnref (Left rhs)
+        retValue (Right "2") Nothing
+
+        writeNewLabelBack [nonnilLabelRef]
+        rhsNextPtrPtr <- writeValueFieldPtr rhs 2
+        rhsNextRawPtr <- writeLoad (writeCode "i8*") rhsNextPtrPtr
+        valueNextPtrPtr <- writeValueFieldPtr value 2
+        writeStore (writeCode "i8*") (Left rhsNextPtrPtr) valueNextPtrPtr
+        valueNext <- writeNewLocal "bitcast i8* "
+        writeLocal rhsNextRawPtr " to "
+        writeValueType "*"
+        writeAddRef valueNext
+        writeUnref (Left rhs)
+        retValue (Left rhsStatus) (Just rhsNextRawPtr)
+
+        writeNewLabelBack [unevaluatedLabelRef]
+        rhsEvalParamPtr <- writeValueFieldPtr rhs 2
+        rhsEvalParam <- writeLoad (writeCode "i8*") rhsEvalParamPtr
+        rhsEvalFuncPtr <- writeValueFieldPtr rhs 3
+        rhsEvalFunc <-
+            writeLoad (writeCode "{i2,i8*}(i8*,i8*)*") rhsEvalFuncPtr
+        rhsRawPtr <- writeNewLocal "bitcast "
+        writeValueType "* "
+        writeLocal rhs " to i8*"
         refCountPtr <- writeValueFieldPtr rhs 0
         refCount <- writeLoad (writeCode "i32") refCountPtr
-        -- otherwise, force rhs, copy rhs into value, addref to value.next,
-        -- ret result
         cmp <- writeNewLocal "icmp ule i32 "
         writeLocal refCount ",1"
-        (discardLabelRef,addRefLabelRef) <- writeBranch cmp
+        (noOtherRefsLabelRef,hasOtherRefsLabelRef) <- writeBranch cmp
 
-        writeNewLabelBack [discardLabelRef]
-        -- rhs.refcount <= 1, copy rhs into value, free rhs, return True
-        rhsEvalParam <- undefined
-        rhsEvalFunc <- undefined
-        rhsRawPtr <- writeNewLocal "bitcast "
-        writeValueType "* to i8*"
+        writeNewLabelBack [noOtherRefsLabelRef]
         writeFree (Left rhsRawPtr)
         tailCallForceRetValue rhsEvalParam (Left rhsEvalFunc)
 
-        writeNewLabelBack [addRefLabelRef]
-        undefined
-        forcedStatus <- undefined
-        forcedNext <- undefined
-        retValue (Left forcedStatus) (Just forcedNext)
+        writeNewLabelBack [hasOtherRefsLabelRef]
+        forcedResult <- writeNewLocal "call fastcc {i2,i8*} "
+        writeLocal rhsEvalFunc "(i8* "
+        writeLocal rhsEvalParam ",i8* "
+        writeLocal rhsRawPtr ")"
+        forcedStatus <- writeNewLocal "extractvalue {i2,i8*} "
+        writeLocal forcedResult ",0"
+        forcedNext <- writeNewLocal "extractvalue {i2,i8*} "
+        writeLocal forcedResult ",1"
+        nextValue <- writeNewLocal "bitcast i8* "
+        writeLocal forcedNext " to "
+        writeValueType "*"
+        writeAddRef nextValue
+        writeUnref (Left rhs)
+        writeCode " ret {i2,i8*} "
+        writeLocal forcedResult ""
     w (ExprFuncall (Identifier _ name) exprs) = do
         rhs <- writeExpr bindings expr
         mapM_ (writeUnref . Left) bindings
-        undefined
         -- rhs.refcount must be 1, so copy rhs into value
-        -- future optimization: rewrite function def to take a value to write into instead of allocating a new one and returning it
-        rhsEvalParam <- undefined
-        rhsEvalFunc <- undefined
+        -- future optimization: rewrite function def to take a value to
+        -- write into instead of allocating and returning a new value
+        rhsEvalParamPtr <- writeValueFieldPtr rhs 2
+        rhsEvalParam <- writeLoad (writeCode "i8*") rhsEvalParamPtr
+        rhsEvalFuncPtr <- writeValueFieldPtr rhs 3
+        rhsEvalFunc <-
+            writeLoad (writeCode "{i2,i8*}(i8*,i8*)*") rhsEvalFuncPtr
         rhsRawPtr <- writeNewLocal "bitcast "
         writeValueType "* to i8*"
         writeFree (Left rhsRawPtr)
@@ -401,7 +446,12 @@ writeDefExpr value bindings expr = w expr
         writeCode " ret {i2,i8*} "
         writeLocal retval ""
     tailCallForceRetValue evalParam evalFunc = do
-        undefined
+        retval <- writeNewLocal "musttail call fastcc {i2,i8*} "
+        either (flip writeLocal "") writeCode evalFunc
+        writeCode "(i8* "
+        writeLocal evalParam ",i8* %value)"
+        writeCode " ret {i2,i8*} "
+        writeLocal retval ""
 
 writeBindParam :: ([Local],Int,[Label -> GenLLVM ()]) -> (Local,Param)
                -> GenLLVM ([Local],Int,[Label -> GenLLVM ()])
@@ -619,11 +669,7 @@ writeUnrefDefn = do
 
 writeAllocateNewValue :: Int -> GenLLVM (Local,Local)
 writeAllocateNewValue initialStatus = do
-    ptrForSize <- writeGetElementPtr (writeValueType "") (Right "null") "i32 1"
-    size <- writeNewLocal "ptrtoint "
-    writeValueType "* "
-    writeLocal ptrForSize " to i32"
-    rawPtr <- writeMalloc size
+    rawPtr <- writeAlloc (writeValueType "")
     value <- writeNewLocal "bitcast i8* "
     writeLocal rawPtr " to "
     writeValueType "*"
@@ -652,12 +698,7 @@ writeNewConstantLiteralValue bits
 
 writeNewLiteralValueEvalParam :: [Bool] -> GenLLVM Local
 writeNewLiteralValueEvalParam bits = do
-    sizePtr <- writeGetElementPtr (writeLiteralValueEvalParamType "")
-                                  (Right "null") "i32 1"
-    size <- writeNewLocal "ptrtoint "
-    writeLiteralValueEvalParamType "* "
-    writeLocal sizePtr " to i32"
-    rawPtr <- writeMalloc size
+    rawPtr <- writeAlloc (writeLiteralValueEvalParamType "")
     evalParam <- writeNewLocal "bitcast i8* "
     writeLocal rawPtr " to "
     writeLiteralValueEvalParamType "*"
@@ -678,12 +719,7 @@ writeNewLiteralValueEvalParam bits = do
 writeNewLiteralValue :: Either Local Int -> Local -> GenLLVM Local
 writeNewLiteralValue arraySize bitArray = do
     (value,valueRawPtr) <- writeAllocateNewValue 3
-    sizePtr <- writeGetElementPtr (writeLiteralValueEvalParamType "")
-                                  (Right "null") "i32 1"
-    size <- writeNewLocal "ptrtoint "
-    writeLiteralValueEvalParamType "* "
-    writeLocal sizePtr " to i32"
-    rawPtr <- writeMalloc size
+    rawPtr <- writeAlloc (writeLiteralValueEvalParamType "")
     evalParamRawPtrPtr <- writeValueFieldPtr value 2
     writeStore (writeCode "i8*") (Left rawPtr) evalParamRawPtrPtr
     evalParam <- writeNewLocal "bitcast i8* "
@@ -787,12 +823,7 @@ writeConcatValueEvalParamType code = do
 
 writeNewConcatValueEvalParam :: Local -> Local -> GenLLVM Local
 writeNewConcatValueEvalParam value1 value2 = do
-    sizePtr <- writeGetElementPtr (writeConcatValueEvalParamType "")
-                                  (Right "null") "i32 1"
-    size <- writeNewLocal "ptrtoint "
-    writeConcatValueEvalParamType "* "
-    writeLocal sizePtr " to i32"
-    rawPtr <- writeMalloc size
+    rawPtr <- writeAlloc (writeConcatValueEvalParamType "")
     evalParam <- writeNewLocal "bitcast i8* "
     writeLocal rawPtr " to "
     writeConcatValueEvalParamType "*"
@@ -807,12 +838,7 @@ writeNewConcatValueEvalParam value1 value2 = do
 writeNewConcatValue :: Local -> Local -> GenLLVM (Local,Local)
 writeNewConcatValue value1 value2 = do
     (value,valueRawPtr) <- writeAllocateNewValue 3
-    sizePtr <- writeGetElementPtr (writeConcatValueEvalParamType "")
-                                  (Right "null") "i32 1"
-    size <- writeNewLocal "ptrtoint "
-    writeConcatValueEvalParamType "* "
-    writeLocal sizePtr " to i32"
-    rawPtr <- writeMalloc size
+    rawPtr <- writeAlloc (writeConcatValueEvalParamType "")
     evalParamRawPtrPtr <- writeValueFieldPtr value 2
     writeStore (writeCode "i8*") (Left rawPtr) evalParamRawPtrPtr
     evalParam <- writeNewLocal "bitcast i8* "
@@ -959,12 +985,7 @@ writeFileValueEvalParamType code = do
 writeNewFileValue :: Either Local String -> GenLLVM Local
 writeNewFileValue fd = do
     (value,_) <- writeAllocateNewValue 3
-    sizePtr <- writeGetElementPtr (writeFileValueEvalParamType "")
-                                  (Right "null") "i32 1"
-    size <- writeNewLocal "ptrtoint "
-    writeFileValueEvalParamType "* "
-    writeLocal sizePtr " to i32"
-    evalParamRawPtr <- writeMalloc size
+    evalParamRawPtr <- writeAlloc (writeFileValueEvalParamType "")
     evalParam <- writeNewLocal "bitcast i8* "
     writeLocal evalParamRawPtr " to "
     writeFileValueEvalParamType "*"
@@ -1228,6 +1249,15 @@ genMain name (Def params _:_) = genLLVM (do
         writeLocal nilValue ","
         writeLabelRef nilArgLabel "]"
         return argValue
+
+writeAlloc :: GenLLVM () -> GenLLVM Local
+writeAlloc writeType = do
+    sizePtr <- writeGetElementPtr writeType (Right "null") "i32 1"
+    size <- writeNewLocal "ptrtoint "
+    writeType
+    writeCode "* "
+    writeLocal sizePtr " to i32"
+    writeMalloc size
 
 writeMalloc :: Local -> GenLLVM Local
 writeMalloc size = do
