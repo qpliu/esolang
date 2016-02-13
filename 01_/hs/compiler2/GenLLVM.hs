@@ -4,7 +4,8 @@ module GenLLVM
      writeCode,writeLocal,writeLabel,writeLabelRef,
      newLocal,newLabel,writeNewLocal,writeNewLabel,writeNewLabelBack,
      forwardRefLabel,writeForwardRefLabel,writeBranch,forwardRefPhi,writePhi,
-     forwardRefLocal,writeForwardRefLocal)
+     forwardRefLocal,writeForwardRefLocal,
+     writeGetElementPtr,writeLoad,writeStore)
 where
 
 import Generate(Gen(..),Generate,ForwardGen,forwardRef,generate,putState)
@@ -93,13 +94,13 @@ forwardRefPhi usePhi = do
                                                 fwds))
     return (\ local label -> fwdRef (FwdPhi local label))
 
-writePhi :: GenLLVM () -> Either String Local -> Label
+writePhi :: GenLLVM () -> Either Local String -> Label
          -> GenLLVM (Local,Local -> Label -> GenLLVM())
 writePhi writeType value label = do
     local <- writeNewLocal "phi "
     writeType
     writeCode " ["
-    either writeCode (flip writeLocal "") value
+    either (flip writeLocal "") writeCode value
     writeCode ","
     writeLabelRef label "]"
     phiRef <- forwardRefPhi (mapM_ writePhiArg)
@@ -118,3 +119,36 @@ forwardRefLocal useLocal = do
 
 writeForwardRefLocal :: String -> GenLLVM (Local -> GenLLVM ())
 writeForwardRefLocal code = forwardRefLocal (flip writeLocal code)
+
+writeGetElementPtr :: GenLLVM () -> Either Local String -> String
+                   -> GenLLVM Local
+writeGetElementPtr writeType value indices = do
+    ptr <- writeNewLocal "getelementptr "
+    writeType
+    writeCode ","
+    writeType
+    writeCode "* "
+    either (flip writeLocal "") writeCode value
+    writeCode ("," ++ indices)
+    return ptr
+
+writeLoad :: GenLLVM () -> Local -> GenLLVM Local
+writeLoad writeType ptr = do
+    value <- writeNewLocal "load "
+    writeType
+    writeCode ","
+    writeType
+    writeCode "* "
+    writeLocal ptr ""
+    return value
+
+writeStore :: GenLLVM () -> Either Local String -> Local -> GenLLVM ()
+writeStore writeType value ptr = do
+    writeCode " store "
+    writeType
+    writeCode " "
+    either (flip writeLocal "") writeCode value
+    writeCode ","
+    writeType
+    writeCode "* "
+    writeLocal ptr ""
