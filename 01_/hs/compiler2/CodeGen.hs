@@ -265,7 +265,7 @@ writeDefExpr value bindings expr = w expr
     w (ExprBound index) = do
         let rhs = bindings !! index
         mapM_ (writeUnref . Left)
-              (take (index-1) bindings ++ drop index bindings)
+              (take index bindings ++ drop (index+1) bindings)
         rhsStatusPtr <- writeValueFieldPtr rhs 1
         rhsStatus <- writeLoad (writeCode "i2") rhsStatusPtr
         cmp <- writeNewLocal "icmp ne i2 3,"
@@ -328,6 +328,10 @@ writeDefExpr value bindings expr = w expr
         writeValueType "*"
         writeAddRef nextValue
         writeUnref (Left rhs)
+        valueStatusPtr <- writeValueFieldPtr value 1
+        writeStore (writeCode "i2") (Left forcedStatus) valueStatusPtr
+        valueNextPtrPtr <- writeValueFieldPtr value 2
+        writeStore (writeCode "i8*") (Left forcedNext) valueNextPtrPtr
         writeCode " ret {i2,i8*} "
         writeLocal forcedResult ""
     w (ExprFuncall (Identifier _ name) exprs) = do
