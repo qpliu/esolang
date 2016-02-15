@@ -287,7 +287,7 @@ writeDefExpr value bindings expr = w expr
         rhsNextPtrPtr <- writeValueFieldPtr rhs 2
         rhsNextRawPtr <- writeLoad (writeCode "i8*") rhsNextPtrPtr
         valueNextPtrPtr <- writeValueFieldPtr value 2
-        writeStore (writeCode "i8*") (Left rhsNextPtrPtr) valueNextPtrPtr
+        writeStore (writeCode "i8*") (Left rhsNextRawPtr) valueNextPtrPtr
         valueNext <- writeNewLocal "bitcast i8* "
         writeLocal rhsNextRawPtr " to "
         writeValueType "*"
