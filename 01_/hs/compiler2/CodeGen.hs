@@ -839,14 +839,13 @@ writeEvalConcatValueDefn = do
     writeNewLabelBack [nilLabelRef1]
     writeUnref (Left value1)
     writeFree (Right "%evalParam")
-{-
     statusPtr2 <- writeValueFieldPtr value2 1
-    status2 <- writeLoad (write "i2") statusPtr2
+    status2 <- writeLoad (writeCode "i2") statusPtr2
     cmp <- writeNewLocal "icmp eq i2 3,"
     writeLocal status2 ""
     (unevaluatedLabelRef2,evaluatedLabelRef2) <- writeBranch cmp
 
-    writeNewLabelBack [unevaluatedRef2]
+    writeNewLabelBack [unevaluatedLabelRef2]
     value2RawPtr <- writeNewLocal "bitcast "
     writeValueType "* "
     writeLocal value2 " to i8*"
@@ -869,31 +868,33 @@ writeEvalConcatValueDefn = do
     writeLocal retValue ""
 
     hasOtherRefsLabel2 <- writeNewLabelBack [hasOtherRefsLabelRef2]
-    value2Eval <- writeNewLocal "musttail call fastcc {i2,i8*} "
-    value2Status <- writeNewLocal "extractvalue "
-    writeValueType "* "
+    value2Eval <- writeNewLocal "call fastcc {i2,i8*} "
+    writeLocal evalFunc2 "(i8* "
+    writeLocal evalParam2 ",i8* %value)"
+    value2Status <- writeNewLocal "extractvalue {i2,i8*} "
     writeLocal value2Eval ",0"
-    value2NextRawPtr <- writeNewLocal "extractvalue "
-    writeValueType "* "
+    value2NextRawPtr <- writeNewLocal "extractvalue {i2,i8*} "
     writeLocal value2Eval ",1"
     writeCode " br label "
     copyLabelRef2 <- writeForwardRefLabel
 
     evaluatedLabel2 <- writeNewLabelBack [evaluatedLabelRef2]
     value2NextPtr <- writeValueFieldPtr value2 2
-    value2NextRawPtr2 <- writeLoad (writeValueType "*") value2NextPtr
+    value2NextRawPtr2 <- writeLoad (writeCode "i8*") value2NextPtr
+    writeCode " br label "
+    copyLabelRef3 <- writeForwardRefLabel
 
     writeNewLabelBack [copyLabelRef2,copyLabelRef3]
     copyStatus2 <- writeNewLocal "phi i2 ["
     writeLocal value2Status ","
     writeLabelRef hasOtherRefsLabel2 "],["
     writeLocal status2 ","
-    writeLabelRef evaluedLabel2 "]"
+    writeLabelRef evaluatedLabel2 "]"
     copyNextRawPtr2 <- writeNewLocal "phi i8* ["
     writeLocal value2NextRawPtr ","
     writeLabelRef hasOtherRefsLabel2 "],["
     writeLocal value2NextRawPtr2 ","
-    writeLabelRef evaluedLabel2 "]"
+    writeLabelRef evaluatedLabel2 "]"
     valueStatusPtr <- writeValueFieldPtr value 1
     writeStore (writeCode "i2") (Left copyStatus2) valueStatusPtr
     cmp <- writeNewLocal "icmp eq i2 2,"
@@ -919,45 +920,7 @@ writeEvalConcatValueDefn = do
     writeLocal copyStatus2 ",0"
     retValue <- writeNewLocal "insertvalue {i2,i8*} "
     writeLocal retValue1 ",i8* "
-    writeLocal copyNextRawPtr ",1"
-    writeCode " ret {i2,i8*} "
-    writeLocal retValue ""
--}
-    (status2,nextValue2) <- writeForceEval value2
-    cmp <- writeNewLocal "icmp eq i2 3,"
-    writeLocal status2 ""
-    (abortLabelRef2,okLabelRef2) <- writeBranch cmp
-    abortLabelRef2 abortLabel
-
-    writeNewLabelBack [okLabelRef2]
-    cmp <- writeNewLocal "icmp ne i2 2,"
-    writeLocal status2 ""
-    (nonnilLabelRef2,nilLabelRef2) <- writeBranch cmp
-
-    writeNewLabelBack [nonnilLabelRef2]
-    writeAddRef nextValue2
-    writeUnref (Left value2)
-    newNextRawPtr2 <- writeNewLocal "bitcast "
-    writeValueType "* "
-    writeLocal nextValue2 " to i8*"
-    valueStatusPtr <- writeValueFieldPtr value 1
-    writeStore (writeCode "i2") (Left status2) valueStatusPtr
-    valueNextPtrPtr <- writeValueFieldPtr value 2
-    writeStore (writeCode "i8*") (Left newNextRawPtr2) valueNextPtrPtr
-    retValue1 <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
-    writeLocal status2 ",0"
-    retValue <- writeNewLocal "insertvalue {i2,i8*} "
-    writeLocal retValue1 ",i8* "
-    writeLocal newNextRawPtr2 ",1"
-    writeCode " ret {i2,i8*} "
-    writeLocal retValue ""
-
-    writeNewLabelBack [nilLabelRef2]
-    writeUnref (Left value2)
-    valueStatusPtr <- writeValueFieldPtr value 1
-    writeStore (writeCode "i2") (Right "2") valueStatusPtr
-    retValue <- writeNewLocal "insertvalue {i2,i8*} undef,i2 "
-    writeLocal status2 ",0"
+    writeLocal copyNextRawPtr2 ",1"
     writeCode " ret {i2,i8*} "
     writeLocal retValue ""
     writeCode " }"
