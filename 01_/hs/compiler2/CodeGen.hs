@@ -243,8 +243,8 @@ writeEvalFuncValue (name,defs) = do
 
 writeDef :: Def -> Local -> [Local] -> GenLLVM [Label -> GenLLVM ()]
 writeDef (Def params expr) value args = do
-    (bindings,_,nextDefLabelRefs) <-
-        foldM writeBindParam ([],0,[]) (zip args params)
+    (bindings,nextDefLabelRefs) <-
+        foldM writeBindParam ([],[]) (zip args params)
     mapM_ writeAddRef bindings
     mapM_ (writeUnref . Left) args
     writeDefExpr value bindings expr
@@ -376,31 +376,79 @@ writeDefExpr value bindings expr = w expr
         writeCode " ret {i2,i8*} "
         writeLocal retval ""
 
-writeBindParam :: ([Local],Int,[Label -> GenLLVM ()]) -> (Local,Param)
-               -> GenLLVM ([Local],Int,[Label -> GenLLVM ()])
-writeBindParam (bindings,index,nextDefLabelRefs) (arg,param) = w param
+writeBindParam :: ([Local],[Label -> GenLLVM ()]) -> (Local,Param)
+               -> GenLLVM ([Local],[Label -> GenLLVM ()])
+writeBindParam (bindings,nextDefLabelRefs) (arg,param) = w param
   where
     w (ParamBound _ bits _) = do
-        (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
-        return (bindings ++ [value],index+1,labelRefs ++ nextDefLabelRefs)
+        (value,nextDefLabelRefs2) <-
+            foldM writeCheckBit (arg,nextDefLabelRefs) bits
+        return (bindings ++ [value],nextDefLabelRefs2)
     w (ParamIgnored _ bits) = do
-        (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
-        return (bindings,index+1,labelRefs ++ nextDefLabelRefs)
+        (value,nextDefLabelRefs2) <-
+            foldM writeCheckBit (arg,nextDefLabelRefs) bits
+        return (bindings,nextDefLabelRefs2)
     w (ParamLiteral _ bits) = do
-        (value,labelRefs) <- foldM writeCheckBit (arg,[]) bits
-        (valueState,_) <- writeForceEval value
-        cmp <- writeNewLocal "icmp ne i2 2,"
-        writeLocal valueState ""
-        (tryNextDefRef,bindSuccessRef) <- writeBranch cmp
-        writeNewLabelBack [bindSuccessRef]
-        return (bindings,index+1,tryNextDefRef : labelRefs ++ nextDefLabelRefs)
-    writeCheckBit (value,labelRefs) bit = do
-        (valueState,nextValue) <- writeForceEval value
-        cmp <- writeNewLocal "icmp eq i2 "
-        writeLocal valueState (if bit then ",1" else ",0")
-        (matchRef,notMatchRef) <- writeBranch cmp
-        writeNewLabelBack [matchRef]
-        return (nextValue,notMatchRef:labelRefs)
+        (value,nextDefLabelRefs2) <-
+            foldM writeCheckBit (arg,nextDefLabelRefs) bits
+        (_,nextDefLabelRefs3) <-
+            writeCheckForceEval value nextDefLabelRefs2 "2"
+        return (bindings,nextDefLabelRefs3)
+    writeCheckBit (value,nextDefLabelRefs) bit = do
+        (nextRawPtr,nextDefLabelRefs2) <-
+            writeCheckForceEval value nextDefLabelRefs
+                                (if bit then "1" else "0")
+        nextValue <- writeNewLocal "bitcast i8* "
+        writeLocal nextRawPtr " to "
+        writeValueType "*"
+        return (nextValue,nextDefLabelRefs2)
+    writeCheckForceEval value nextDefLabelRefs matchStatus = do
+        writeCode " br label "
+        checkForceLabelRef <- writeForwardRefLabel
+
+        checkForceLabel <- writeNewLabelBack [checkForceLabelRef]
+        statusPtr <- writeValueFieldPtr value 1
+        status <- writeLoad (writeCode "i2") statusPtr
+        evalParamPtr <- writeValueFieldPtr value 2
+        evalParam <- writeLoad (writeCode "i8*") evalParamPtr
+        cmp <- writeNewLocal "icmp eq i2 3,"
+        writeLocal status ""
+        (unevaluatedLabelRef,evaluatedLabelRef) <- writeBranch cmp
+
+        unevaluatedLabel <- writeNewLabelBack [unevaluatedLabelRef]
+        evalFuncPtr <- writeValueFieldPtr value 3
+        evalFunc <- writeLoad (writeCode "{i2,i8*}(i8*,i8*)*") evalFuncPtr
+        valueRawPtr <- writeNewLocal "bitcast i8* "
+        writeLocal value " to "
+        writeValueType "*"
+        forcedResult <- writeNewLocal "call fastcc {i2,i8*} "
+        writeLocal evalFunc "(i8* "
+        writeLocal evalParam ",i8* "
+        writeLocal value ")"
+        forcedStatus <- writeNewLocal "extractvalue {i2,i8*} "
+        writeLocal forcedResult ",0"
+        forcedNextRawPtr <- writeNewLocal "extractvalue {i2,i8*} "
+        writeLocal forcedResult ",1"
+        writeCode " br label "
+        evaluatedLabelRef2 <- writeForwardRefLabel
+
+        writeNewLabelBack [evaluatedLabelRef,evaluatedLabelRef2]
+        status2 <- writeNewLocal "phi i2 ["
+        writeLocal status ","
+        writeLabelRef checkForceLabel "],["
+        writeLocal forcedStatus ","
+        writeLabelRef unevaluatedLabel "]"
+        nextRawPtr2 <- writeNewLocal "phi i2 ["
+        writeLocal evalParam ","
+        writeLabelRef checkForceLabel "],["
+        writeLocal forcedNextRawPtr ","
+        writeLabelRef unevaluatedLabel "]"
+        cmp <- writeNewLocal ("icmp eq i2 " ++ matchStatus ++ ",")
+        writeLocal status2 ""
+        (matchLabelRef,nextDefLabelRef) <- writeBranch cmp
+
+        writeNewLabelBack [matchLabelRef]
+        return (nextRawPtr2,nextDefLabelRef:nextDefLabelRefs)
 
 writeExpr :: [Local] -> Expr -> GenLLVM Local
 writeExpr bindings expr = w expr
