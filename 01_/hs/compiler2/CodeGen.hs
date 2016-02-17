@@ -418,13 +418,13 @@ writeBindParam (bindings,nextDefLabelRefs) (arg,param) = w param
         unevaluatedLabel <- writeNewLabelBack [unevaluatedLabelRef]
         evalFuncPtr <- writeValueFieldPtr value 3
         evalFunc <- writeLoad (writeCode "{i2,i8*}(i8*,i8*)*") evalFuncPtr
-        valueRawPtr <- writeNewLocal "bitcast i8* "
-        writeLocal value " to "
-        writeValueType "*"
+        valueRawPtr <- writeNewLocal "bitcast "
+        writeValueType "* "
+        writeLocal value " to i8*"
         forcedResult <- writeNewLocal "call fastcc {i2,i8*} "
         writeLocal evalFunc "(i8* "
         writeLocal evalParam ",i8* "
-        writeLocal value ")"
+        writeLocal valueRawPtr ")"
         forcedStatus <- writeNewLocal "extractvalue {i2,i8*} "
         writeLocal forcedResult ",0"
         forcedNextRawPtr <- writeNewLocal "extractvalue {i2,i8*} "
@@ -438,7 +438,7 @@ writeBindParam (bindings,nextDefLabelRefs) (arg,param) = w param
         writeLabelRef checkForceLabel "],["
         writeLocal forcedStatus ","
         writeLabelRef unevaluatedLabel "]"
-        nextRawPtr2 <- writeNewLocal "phi i2 ["
+        nextRawPtr2 <- writeNewLocal "phi i8* ["
         writeLocal evalParam ","
         writeLabelRef checkForceLabel "],["
         writeLocal forcedNextRawPtr ","
