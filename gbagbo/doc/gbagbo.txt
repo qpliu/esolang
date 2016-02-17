@@ -1,0 +1,74 @@
+Gbagbo
+
+The Gbagbo programming language expresses calcuations on bags.  It is
+named after the former Ivory Coast President Laurent Gbagbo.
+
+Syntax
+
+EBNF:
+
+  program = { function-decl } ;
+  function-decl = identifier { identifier } "=" expr "." ;
+  expr = literal-expr | expr binary-op expr | identifier { [ "*" ] expr } ;
+  literal-expr = "[" { [ count ] expr } "]"
+  binary-op = "∪" | "∩" | "△" | "|" | "&" | "^" | "⊖"
+  count = number ( "×" | "*" )
+
+Literals
+
+For example, [2×[]] is a synonym for [[][]].
+
+Binary operators
+
+∪ or | - union
+∩ or & - intersection
+△ or ⊖ or ^ - difference
+
+Map operator
+
+A * before a function argument causes the function to be evaluated with
+each element of the argument with the result being the sum all the
+results.  When multiple arguments are preceded by *, the result is the
+sum of the function evaluated over the Cartesian product of those
+arguments.
+
+Input/output encoding
+
+EOF is an empty bag.
+
+A zero bit is a bag containing one element representing the following
+bits.
+
+A one bit is a bag containing an empty bag and another element
+(possibly another empty bag) representing the following bits.
+
+Examples
+
+cat
+
+  cat x = x.
+
+Hello world
+
+  hello = 0 1 0 0 1 0 0 0 0 1 1 0 0 1 0 1 0 1 1 0 1 1 0 0 0 1 1 0 1 1
+          0 0 0 1 1 0 1 1 1 1 0 0 1 0 0 0 0 0 0 1 1 1 0 1 1 1 0 1 1 0
+          1 1 1 1 0 1 1 1 0 0 1 0 0 1 1 0 1 1 0 0 0 1 1 0 0 1 0 0 0 0
+          1 0 0 0 0 1 0 0 0 0 1 0 1 0 [].
+  0 x = [x].
+  1 x = [[]x].
+
+Additional thoughts
+
+  [b] & [[]] is empty if b is not empty, and has one element if b is
+  empty
+
+  [b ^ [[]]] & [[]] in I/O is only nonempty if b is the last bit and
+  the last bit is 0
+
+  b ^ [[]] & b in I/O (after excluding the previous case of b being
+  the last bit and the last bit is 0) contains only the element
+  representing the following bits
+
+  b | [[]] ^ b in I/O (after excluding the case of b being the last
+  bit and the last bit is 0) is empty only if b represents a 1 bit,
+  and contains 1 element otherwise
