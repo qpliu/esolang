@@ -1,28 +1,56 @@
 Gbagbo
 
-The Gbagbo programming language expresses calcuations on bags.  It is
+The Gbagbo programming language expresses calculations on bags.  It is
 named after the former Ivory Coast President Laurent Gbagbo.
 
-Syntax
+Lexical structure
 
-EBNF:
+Single character tokens are: = . [ ] ∪ ∩ △ | & ^ ⊖ × * ( )
+
+Comments are introduced by -- and extend to the end of the line.
+
+Uninterrupted sequences of non-space non-token characters, excluding
+--, are identifiers.  Identifiers consisting of only numeric
+characters (0, 1, 2, 3, 4, 5, 6, 7, 8, and 9) are also numbers when
+used as the count in bag literals.
+
+EBNF Syntax
 
   program = { function-decl } ;
   function-decl = identifier { identifier } "=" expr "." ;
-  expr = literal-expr | expr binary-op expr | identifier { [ "*" ] expr } ;
+  expr = literal-expr | expr binary-op expr | identifier { [ "*" ] expr } | "(" expr ")" ;
   literal-expr = "[" { [ count ] expr } "]"
   binary-op = "∪" | "∩" | "△" | "|" | "&" | "^" | "⊖"
   count = number ( "×" | "*" )
 
 Literals
 
-For example, [2×[]] is a synonym for [[][]].
+A literal bag starts with [ followed by zero or more bag elements and
+ends with ].  Bag elements may be repeated for multiple counts of
+elements.  Bag elements may be preceded by a count multiplier to
+indicate multiple counts.
+
+For example, [2×[]] is equivalent to [[][]] and [3×[]2×[]] is
+equivalent to [5×[]].
 
 Binary operators
 
 ∪ or | - union
 ∩ or & - intersection
 △ or ⊖ or ^ - difference
+
+If c = a ∪ b, for each unique element e in c, the count of e in c is
+the maximum of the count of e in a and the count of e in b.
+
+If c = a ∩ b, for each unique element e in c, the count of e in c is
+the minimum of the count of e in a and the count of e in b, where the
+count may be zero.
+
+If c = a △ b, for each unique element e in c, the count of e in c is
+the absolute value of the count of e in a minus the count of e in b.
+
+The binary operators are all left associative and have equal
+precedence.
 
 Map operator
 
