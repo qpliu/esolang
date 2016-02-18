@@ -50,6 +50,7 @@ If c = a △ b, for each unique element e in c, the count of e in c is
 the absolute value of the count of e in a minus the count of e in b.
 
 The binary operators are all left associative and have equal
+precedence.  Parentheses may be used to specify associativity and
 precedence.
 
 Map operator
