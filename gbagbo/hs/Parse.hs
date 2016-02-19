@@ -78,6 +78,7 @@ partialDef = do
     name <- identifier
     params <- many identifier
     equals
-    body <- many token
+    body <- many1 token
+    defEndPos <- getPosition
     period
-    return (PartialDef name params body)
+    return (PartialDef name params body defEndPos)
