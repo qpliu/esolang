@@ -33,23 +33,23 @@ testSimple :: Assertion
 testSimple = testParse "testSimple" "f a=[a]." checkResult
   where
     checkResult [PartialDef (Identifier _ "f") [Identifier _ "a"]
-                            [Token _ "[",Token _ "a",Token _ "]"]] = True
+                            [Token _ "[",Token _ "a",Token _ "]" ] _] = True
     checkResult _ = False
 
 testTwo :: Assertion
 testTwo = testParse "testTwo" "f a=g a.g a=a." checkResult
   where
     checkResult [PartialDef (Identifier _ "f") [Identifier _ "a"]
-                            [Token _ "g",Token _ "a"],
+                            [Token _ "g",Token _ "a"] _,
                  PartialDef (Identifier _ "g") [Identifier _ "a"]
-                            [Token _ "a"]] = True
+                            [Token _ "a"] _] = True
     checkResult _ = False
 
 testComment :: Assertion
 testComment = testParse "testComment" "f -- a=g a.g\n a=a." checkResult
   where
     checkResult [PartialDef (Identifier _ "f") [Identifier _ "a"]
-                            [Token _ "a"]] = True
+                            [Token _ "a"] _] = True
     checkResult _ = False
 
 testError :: Assertion

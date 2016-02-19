@@ -23,7 +23,7 @@ resolveArity arities (PartialDef (Identifier pos name) params _ _)
   | otherwise = return (Map.insert name (length params) arities)
 
 data HalfResolved =
-    HalfResolvedBag [(Int,HalfResolved)]
+    HalfResolvedBag SourcePos [(Int,HalfResolved)]
   | HalfResolvedBinop SourcePos String HalfResolved HalfResolved
   | HalfResolvedBound SourcePos String Int
   | HalfResolvedFuncall SourcePos String [(Bool,HalfResolved)]
@@ -71,28 +71,57 @@ halfResolveExpr defEndPos arity paramIndex tokens = do
                 _ -> compileError pos "unmatched ("
       | name == "[" && not (null toks) = do
             (exprs,toks) <- rbagElements pos [] toks
-            return (HalfResolvedBag exprs,toks)
+            return (HalfResolvedBag pos exprs,toks)
       | maybe False (const True) (paramIndex name) =
             let Just index = paramIndex name
             in  return (HalfResolvedBound pos name index,toks)
       | maybe False (const True) (arity name) =
             let Just nargs = arity name
             in  do
-                -- handle funcall arguments
-                undefined
+                    (args,toks) <- foldM rfuncallArg ([],toks) [1..nargs]
+                    return (HalfResolvedFuncall pos name (reverse args),toks)
       | otherwise = compileError pos "unexpected token"
     rbinop lhs toks@(Token pos tok:rhsToks)
       | elem tok ["|","∪","&","∩","^","△","⊖"] = do
             (rhs,toks) <- r1 rhsToks
             rbinop (HalfResolvedBinop pos tok lhs rhs) toks
-      | otherwise = return (lhs,toks)
-    rbagElements startPos exprs toks = undefined
+    rbinop lhs toks = return (lhs,toks)
+    rbagElements startPos exprs [] = compileError startPos "unmatched ["
+    rbagElements startPos exprs (Token _ "]":toks) =
+        return (reverse exprs,toks)
+    rbagElements startPos exprs toks = do
+        (count,toks) <- rcount toks
+        (expr,toks) <- r toks
+        rbagElements startPos ((count,expr):exprs) toks
     rcount (Token _ count:Token _ timesTok:toks)
       | all isDigit count && (timesTok == "*" || timesTok == "×") =
-            (read count,toks)
-    rcount toks = (1,toks)
-    rmap (Token _ "*":toks) = (True,toks)
-    rmap toks = (False,toks)
+            return (read count,toks)
+      | otherwise = return (1,toks)
+    rcount toks = return (1,toks)
+    rfuncallArg (args,toks) _ = do
+        (isMap,toks) <- rmap toks
+        (expr,toks) <- r1 toks
+        return ((isMap,expr):args,toks)
+    rmap (Token _ "*":toks) = return (True,toks)
+    rmap toks = return (False,toks)
 
 fullyResolve :: [(PartialDef,HalfResolved)] -> Map String Def
-fullyResolve halfResolved = undefined
+fullyResolve halfResolved = defs
+  where
+    defs = Map.fromList (map r halfResolved)
+    r (PartialDef identifier@(Identifier _ name) params _ _,halfResolvedExpr) =
+        (name,Def identifier (length params) (rexpr halfResolvedExpr))
+    rexpr (HalfResolvedBag pos elts) = ExprBag pos (map (fmap rexpr) elts)
+    rexpr (HalfResolvedBinop pos op lhs rhs) =
+        (exprBinop op) pos (rexpr lhs) (rexpr rhs)
+    rexpr (HalfResolvedBound pos name index) = ExprBound pos name index
+    rexpr (HalfResolvedFuncall pos name args) =
+        let Just func = Map.lookup name defs
+        in  ExprFuncall pos func (map (fmap rexpr) args)
+    exprBinop "|" = ExprUnion
+    exprBinop "∪" = ExprUnion
+    exprBinop "&" = ExprIntersect
+    exprBinop "∩" = ExprIntersect
+    exprBinop "^" = ExprDiff
+    exprBinop "△" = ExprDiff
+    exprBinop "⊖" = ExprDiff
