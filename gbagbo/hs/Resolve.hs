@@ -58,11 +58,6 @@ halfResolveExpr defEndPos arity paramIndex tokens = do
     r tokens = do
         (lhs,toks) <- r1 tokens
         rbinop lhs toks
-    r1 (Token pos "(":toks@(_:_)) = do
-        (expr,toks) <- r toks
-        case toks of
-            (Token _ ")":toks) -> return (expr,toks)
-            _ -> compileError pos "unmatched ("
     r1 (Token pos name:toks)
       | name == "(" && not (null toks) = do
             (expr,toks) <- r toks
@@ -80,7 +75,7 @@ halfResolveExpr defEndPos arity paramIndex tokens = do
             in  do
                     (args,toks) <- foldM rfuncallArg ([],toks) [1..nargs]
                     return (HalfResolvedFuncall pos name (reverse args),toks)
-      | otherwise = compileError pos "unexpected token"
+      | otherwise = compileError pos ("unexpected token " ++ name)
     rbinop lhs toks@(Token pos tok:rhsToks)
       | elem tok ["|","∪","&","∩","^","△","⊖"] = do
             (rhs,toks) <- r1 rhsToks
@@ -96,7 +91,6 @@ halfResolveExpr defEndPos arity paramIndex tokens = do
     rcount (Token _ count:Token _ timesTok:toks)
       | all isDigit count && (timesTok == "*" || timesTok == "×") =
             return (read count,toks)
-      | otherwise = return (1,toks)
     rcount toks = return (1,toks)
     rfuncallArg (args,toks) _ = do
         (isMap,toks) <- rmap toks
