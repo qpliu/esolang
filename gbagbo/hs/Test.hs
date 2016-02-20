@@ -8,6 +8,6 @@ import qualified TestValue
 main :: IO ()
 main = do
     runTestTT (TestList [TestLabel "TestParse" TestParse.tests,
-                         TestLabel "TestResolve" TestResolve.tests])
-    TestValue.check
+                         TestLabel "TestResolve" TestResolve.tests,
+                         TestLabel "TestValue" TestValue.tests])
     return ()
