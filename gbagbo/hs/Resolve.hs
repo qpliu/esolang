@@ -10,11 +10,11 @@ import qualified Data.Map as Map
 import Ast(Identifier(..),PartialDef(..),Token(..),Def(..),Expr(..))
 import Compile(Compile,SourcePos,compileError)
 
-resolve :: [PartialDef] -> Compile [Def]
+resolve :: [PartialDef] -> Compile [(String,Def)]
 resolve partialDefs = do
     arities <- foldM resolveArity Map.empty partialDefs
     halfResolved <- mapM (halfResolve (flip Map.lookup arities)) partialDefs
-    return (Map.elems (fullyResolve halfResolved))
+    return (Map.toList (fullyResolve halfResolved))
 
 resolveArity :: Map String Int -> PartialDef -> Compile (Map String Int)
 resolveArity arities (PartialDef (Identifier pos name) params _ _)

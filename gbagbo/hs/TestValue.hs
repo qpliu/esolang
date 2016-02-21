@@ -5,7 +5,7 @@ where
 import Test.HUnit(Assertion,Test(..),assertFailure)
 import Test.QuickCheck
     (Arbitrary(..),Args(..),Result(..),Testable,
-     elements,label,listOf,quickCheckWithResult,scale,stdArgs)
+     label,listOf,quickCheckWithResult,scale,stdArgs)
 
 import Value(Value,empty,union,intersect,diff,fromList,toList,combinations)
 
