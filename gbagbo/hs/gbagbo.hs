@@ -4,7 +4,7 @@ import System.Exit(exitFailure)
 import System.FilePath(dropExtensions,takeBaseName)
 import System.IO(stderr,hPutStrLn)
 
-import Ast(Def(..),Expr)
+import Ast(Def(..))
 import Compile(compile)
 import Encoding(fromString,toString)
 import Eval(eval)

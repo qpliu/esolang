@@ -17,14 +17,15 @@ import TestValue()
 tests :: Test
 tests = TestList [
     TestCase (testUnary "id" "f a=a." id),
-    TestCase (testBinary "union" "f a b=a|b." union),
-    TestCase (testBinary "intersect" "f a b=a&b." intersect),
-    TestCase (testBinary "diff" "f a b=a^b." diff),
+    TestCase (testBinary "union" "f a b=a∪b." union),
+    TestCase (testBinary "intersect" "f a b=a∩b." intersect),
+    TestCase (testBinary "diff" "f a b=a△b." diff),
     TestCase (testUnary "bag" "f a=[a]." (fromList . (:[]) . ((,) 1))),
-    TestCase (testUnary "bag2" "f a=[2*a]." (fromList . (:[]) . ((,) 2))),
+    TestCase (testUnary "bag2" "f a=[2×a]." (fromList . (:[]) . ((,) 2))),
     TestCase (testUnary "funcall" "f a=g a.g a=a." id),
-    TestCase (testUnary "map" "f a=g*a.g a=[]."
-                              (fromList . map (fmap (const empty)) . toList))
+    TestCase (testUnary "map" "f a=g*a.g a=a." (fromList . toList)),
+    TestCase (testUnary "map2" "f a=g*a.g a=[]."
+                               (fromList . map (fmap (const empty)) . toList))
     ]
 
 defaultArgs :: Args
@@ -33,8 +34,8 @@ defaultArgs = stdArgs{maxSize=6,chatty=False}
 getExpr :: String -> String -> IO Expr
 getExpr testLabel code = do
     ((_,Def _ _ expr):_) <-
-        either ((>> (return [])) . assertFailure
-                                 . ((testLabel ++ ":") ++) . show)
+        either ((>> undefined) . assertFailure
+                               . ((testLabel ++ ":") ++) . show)
                return
                (compile (parse "(test)" code >>= resolve))
     return expr

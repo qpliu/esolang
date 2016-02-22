@@ -2,7 +2,7 @@ module Encoding
     (fromString,toString)
 where
 
-import Data.Bits(bit,testBit)
+import Data.Bits(testBit)
 import Data.Char(chr,ord)
 
 import Value(Value,empty,fromList,toList)
@@ -16,12 +16,6 @@ fromString :: String -> Value
 fromString s = fromBits (concatMap charToBits s)
   where
     charToBits c = map (testBit (ord c)) [7,6..0]
-
-is0bit :: Value -> Bool
-is0bit v = isSingle (toList v)
-  where
-    isSingle [(1,_)] = True
-    isSingle _ = False
 
 is1bit :: Value -> Bool
 is1bit v = hasEmpty (toList v)
