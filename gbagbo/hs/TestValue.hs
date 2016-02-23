@@ -4,8 +4,8 @@ where
 
 import Test.HUnit(Assertion,Test(..),assertFailure)
 import Test.QuickCheck
-    (Arbitrary(..),Args(..),Result(..),Testable,
-     label,listOf,quickCheckWithResult,scale,stdArgs)
+    (Arbitrary(..),Args(..),Gen,Result(..),Testable,
+     label,listOf,quickCheckWithResult,resize,sized,stdArgs)
 
 import Value(Value,empty,union,intersect,diff,fromList,toList,combinations)
 
@@ -53,3 +53,6 @@ testPropWith args testLabel prop = do
     case result of
         Success{} -> return ()
         _ -> assertFailure (testLabel ++ ":" ++ show result)
+
+scale :: (Int -> Int) -> Gen a -> Gen a
+scale f gen = sized (\ size -> resize (f size) gen)

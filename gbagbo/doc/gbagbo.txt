@@ -19,9 +19,9 @@ EBNF Syntax
   program = { function-decl } ;
   function-decl = identifier { identifier } "=" expr "." ;
   expr = literal-expr | expr binary-op expr | identifier { [ "*" ] expr } | "(" expr ")" ;
-  literal-expr = "[" { [ count ] expr } "]"
-  binary-op = "∪" | "∩" | "△" | "|" | "&" | "^" | "⊖"
-  count = number ( "×" | "*" )
+  literal-expr = "[" { [ count ] expr } "]" ;
+  binary-op = "∪" | "∩" | "△" | "|" | "&" | "^" | "⊖" ;
+  count = number ( "×" | "*" ) ;
 
 Literals
 
