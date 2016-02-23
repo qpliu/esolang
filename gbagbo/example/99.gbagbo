@@ -1,0 +1,76 @@
+99 = countdown [9×[]] [9×[]].
+
+countdown 10s 1s =
+    if (10s ∪ 1s) [] coda verse 10s 1s countdown dec10s 10s 1s dec 1s.
+
+coda =
+    0 1 0 0 1 1 1 0   0 1 1 0 1 1 1 1   0 0 1 0 0 0 0 0   0 1 1 0 1 1 0 1
+    0 1 1 0 1 1 1 1   0 1 1 1 0 0 1 0   0 1 1 0 0 1 0 1
+    bottle s of-beer on-the-wall comma
+    no-more bottle s of-beer period
+    0 1 0 0 0 1 1 1   0 1 1 0 1 1 1 1   0 0 1 0 0 0 0 0   0 1 1 1 0 1 0 0
+    0 1 1 0 1 1 1 1   0 0 1 0 0 0 0 0   0 1 1 1 0 1 0 0   0 1 1 0 1 0 0 0
+    0 1 1 0 0 1 0 1   0 0 1 0 0 0 0 0   0 1 1 1 0 0 1 1   0 1 1 1 0 1 0 0
+    0 1 1 0 1 1 1 1   0 1 1 1 0 0 1 0   0 1 1 0 0 1 0 1   0 0 1 0 0 0 0 0
+    0 1 1 0 0 0 0 1   0 1 1 0 1 1 1 0   0 1 1 0 0 1 0 0   0 0 1 0 0 0 0 0
+    0 1 1 0 0 0 1 0   0 1 1 1 0 1 0 1   0 1 1 1 1 0 0 1   0 0 1 0 0 0 0 0
+    0 1 1 1 0 0 1 1   0 1 1 0 1 1 1 1   0 1 1 0 1 1 0 1   0 1 1 0 0 1 0 1
+    0 0 1 0 0 0 0 0   0 1 1 0 1 1 0 1   0 1 1 0 1 1 1 1   0 1 1 1 0 0 1 0
+    0 1 1 0 0 1 0 1
+    comma number [9×[]] [9×[]] bottle s of-beer on-the-wall period [].
+
+verse 10s 1s rest =
+    number 10s 1s bottle plural 10s 1s of-beer on-the-wall comma
+    number 10s 1s bottle plural 10s 1s of-beer period
+    0 1 0 1 0 1 0 0   0 1 1 0 0 0 0 1   0 1 1 0 1 0 1 1   0 1 1 0 0 1 0 1
+    0 0 1 0 0 0 0 0   0 1 1 0 1 1 1 1   0 1 1 0 1 1 1 0   0 1 1 0 0 1 0 1
+    0 0 1 0 0 0 0 0   0 1 1 0 0 1 0 0   0 1 1 0 1 1 1 1   0 1 1 1 0 1 1 1
+    0 1 1 0 1 1 1 0   0 0 1 0 0 0 0 0   0 1 1 0 0 0 0 1   0 1 1 0 1 1 1 0
+    0 1 1 0 0 1 0 0   0 0 1 0 0 0 0 0   0 1 1 1 0 0 0 0   0 1 1 0 0 0 0 1
+    0 1 1 1 0 0 1 1   0 1 1 1 0 0 1 1   0 0 1 0 0 0 0 0   0 1 1 0 1 0 0 1
+    0 1 1 1 0 1 0 0   0 0 1 0 0 0 0 0   0 1 1 0 0 0 0 1   0 1 1 1 0 0 1 0
+    0 1 1 0 1 1 1 1   0 1 1 1 0 1 0 1   0 1 1 0 1 1 1 0   0 1 1 0 0 1 0 0
+    comma number dec10s 10s 1s dec 1s bottle plural dec10s 10s 1s dec 1s
+    of-beer on-the-wall period nl rest.
+
+plural 10s 1s rest = if [] (1s△[[]]∪10s) rest s rest.
+
+number 10s 1s rest =
+    if 10s [] if 1s [] no-more rest digit 1s rest digit 10s digit 1s rest.
+
+dec10s 10s 1s = 10s △ if 1s [] [[]] [].
+dec x = if x [] [9×[]] (x△[[]]).
+
+if a b c d = eq a b c ∪ eq [[a]∩[b]] [[]] d.
+eq a b c = snd *([[a]△[b]]∩[[]]) *c.
+snd a b = b.
+
+0 rest = [rest].
+1 rest = [[]rest].
+
+digit n rest =
+    0 0 1 1
+    if [0×[]] n 0 0 0 0 rest if [1×[]] n 0 0 0 1 rest
+    if [2×[]] n 0 0 1 0 rest if [3×[]] n 0 0 1 1 rest
+    if [4×[]] n 0 1 0 0 rest if [5×[]] n 0 1 0 1 rest
+    if [6×[]] n 0 1 1 0 rest if [7×[]] n 0 1 1 1 rest
+    if [8×[]] n 1 0 0 0 rest if [9×[]] n 1 0 0 1 rest [].
+nl rest = 0 0 0 0 1 0 1 0 rest.
+bottle rest =
+    0 0 1 0 0 0 0 0   0 1 1 0 0 0 1 0   0 1 1 0 1 1 1 1   0 1 1 1 0 1 0 0
+    0 1 1 1 0 1 0 0   0 1 1 0 1 1 0 0   0 1 1 0 0 1 0 1 rest.
+s rest = 0 1 1 1 0 0 1 1 rest.
+of-beer rest =
+    0 0 1 0 0 0 0 0   0 1 1 0 1 1 1 1   0 1 1 0 0 1 1 0   0 0 1 0 0 0 0 0
+    0 1 1 0 0 0 1 0   0 1 1 0 0 1 0 1   0 1 1 0 0 1 0 1   0 1 1 1 0 0 1 0 rest.
+on-the-wall rest =
+    0 0 1 0 0 0 0 0   0 1 1 0 1 1 1 1   0 1 1 0 1 1 1 0   0 0 1 0 0 0 0 0
+    0 1 1 1 0 1 0 0   0 1 1 0 1 0 0 0   0 1 1 0 0 1 0 1   0 0 1 0 0 0 0 0
+    0 1 1 1 0 1 1 1   0 1 1 0 0 0 0 1   0 1 1 0 1 1 0 0   0 1 1 0 1 1 0 0 rest.
+comma rest =
+    0 0 1 0 1 1 0 0   0 0 1 0 0 0 0 0 rest.
+period rest =
+    0 0 1 0 1 1 1 0   0 0 0 0 1 0 1 0 rest.
+no-more rest =
+    0 1 1 0 1 1 1 0   0 1 1 0 1 1 1 1   0 0 1 0 0 0 0 0   0 1 1 0 1 1 0 1
+    0 1 1 0 1 1 1 1   0 1 1 1 0 0 1 0   0 1 1 0 0 1 0 1 rest.
