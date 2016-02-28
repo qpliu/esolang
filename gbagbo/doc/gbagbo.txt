@@ -23,7 +23,7 @@ EBNF Syntax
   binary-op = "∪" | "∩" | "△" | "|" | "&" | "^" | "⊖" ;
   count = number ( "×" | "*" ) ;
 
-Bag expression
+Bag expressions
 
 A bag expression starts with [ followed by zero or more bag elements
 and ends with ].  Bag elements may be repeated for multiple counts of
@@ -35,19 +35,32 @@ equivalent to [5×[]].
 
 Binary operators
 
-∪ or | - union
-∩ or & - intersection
-△ or ⊖ or ^ - difference
+∪ or |: union
 
 If c = a ∪ b, for each unique element e in c, the count of e in c is
-the maximum of the count of e in a and the count of e in b.
+the maximum of the count of e in a and the count of e in b, and for
+each unique element e in a, the count of e in c is greater than or
+equal to the count of e in a, and for each unique element e in b, the
+count of e in c is greater than or equal to the count of e in b.
+
+∩ or &: intersection
 
 If c = a ∩ b, for each unique element e in c, the count of e in c is
 the minimum of the count of e in a and the count of e in b, where the
-count may be zero.
+count may be zero, and for each unique element e in a, the count of e
+in c is less than or equal to the count of e in a, and for each unique
+element e in b, the count of e in c is less than or equal to the count
+of e in b.  This does not uniquely define c, so c can be uniquely
+defined as the union of all bags satisfying the previous conditions.
+
+△ or ⊖ or ^: difference
 
 If c = a △ b, for each unique element e in c, the count of e in c is
-the absolute value of the count of e in a minus the count of e in b.
+the absolute value of the count of e in a minus the count of e in b,
+and for each unique element e in a, the count of e in c is the
+absolute value of the count of e in a minus the count of e in b, and
+for each unique element e in b, the count of e in c is the absolute
+value of the count of e in a minus the count of e in b.
 
 The binary operators are all left associative and have equal
 precedence.  Parentheses may be used to specify associativity and
