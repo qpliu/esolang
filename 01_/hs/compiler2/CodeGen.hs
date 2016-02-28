@@ -2,7 +2,7 @@ module CodeGen
     (codeGen,genMain)
 where
 
-import Control.Monad(foldM,unless,zipWithM_)
+import Control.Monad(foldM,unless,when,zipWithM_)
 import Data.Char(isAlphaNum,isAscii,ord)
 import Data.Set(Set)
 import qualified Data.Set as Set
@@ -17,6 +17,12 @@ import GenLLVM
 
 debugMemory :: Bool
 debugMemory = False
+
+debugMemoryAllocs :: Bool
+debugMemoryAllocs = False
+
+debugAborts :: Bool
+debugAborts = False
 
 -- Generate code for LLVM 3.7
 codeGen :: [Func] -> String
@@ -78,6 +84,13 @@ quoteName name = concatMap quote name
   where
     quote c | isAscii c && isAlphaNum c = [c]
             | otherwise = "_" ++ show (ord c) ++ "_"
+
+quoteStringConstant :: String -> String
+quoteStringConstant s = concatMap quote s
+  where
+    quote '\\' = "\\\\"
+    quote '"' = "\\\""
+    quote c = [c]
 
 writeValueType :: String -> GenLLVM ()
 writeValueType code =
@@ -237,9 +250,20 @@ writeEvalFuncValue (name,defs) = do
         [labelRef] defs
     unless (null labelRefs) (do
         writeNewLabelBack labelRefs
+        when debugAborts (do
+            writeNewLocal ("call i32 @write(i32 1,i8* getelementptr (["
+                           ++ show (length name) ++ " x i8],["
+                           ++ show (length name) ++ " x i8]* @name_"
+                           ++ quoteName name ++ ",i32 0,i32 0),i32 "
+                           ++ show (length name) ++ ")")
+            return ())
         writeCode " call void @abort() noreturn"
         writeCode " ret {i2,i8*} undef")
     writeCode " }"
+    when debugAborts (do
+        writeCode ("@name_" ++ quoteName name ++ " = private constant ["
+                            ++ show (length name) ++ " x i8] c\""
+                            ++ quoteStringConstant name ++ "\""))
 
 writeDef :: Def -> Local -> [Local] -> GenLLVM [Label -> GenLLVM ()]
 writeDef (Def params expr) value args = do
@@ -1314,6 +1338,10 @@ writeDebugMemoryDefns | not debugMemory = return () | otherwise = do
     writeCode "@debugMemoryOutputFmt = private constant [10 x i8] "
     writeCode "c\"count=%d\\0a\\0d\" "
     writeCode "declare i32 @printf(i8*,...)"
+    writeCode "declare i32 @fflush(i8*)"
+    when debugMemoryAllocs (do
+        writeCode ("@debugMemoryAllocsFmt = private constant "
+                   ++ "[9 x i8] c\"%c%d:%x\\0A\\00\""))
 
 writeDebugMemoryMallocDefn :: GenLLVM ()
 writeDebugMemoryMallocDefn | not debugMemory = return () | otherwise = do
@@ -1325,6 +1353,14 @@ writeDebugMemoryMallocDefn | not debugMemory = return () | otherwise = do
     writeCode " store i32 "
     writeLocal newCount ",i32* @debugMemoryCount"
     result <- writeNewLocal "call i8* @malloc(i32 %size)"
+    when debugMemoryAllocs (do
+        writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                       ++ "([9 x i8],[9 x i8]* @debugMemoryAllocsFmt"
+                       ++ ",i32 0,i32 0),i8 65,i32 ")
+        writeLocal newCount ",i8* "
+        writeLocal result ")"
+        writeNewLocal "call i32(i8*) @fflush(i8* null)"
+        return ())
     writeCode " ret i8* "
     writeLocal result ""
     writeCode " }"
@@ -1338,6 +1374,13 @@ writeDebugMemoryFreeDefn | not debugMemory = return () | otherwise = do
     writeLocal oldCount ",1"
     writeCode " store i32 "
     writeLocal newCount ",i32* @debugMemoryCount"
+    when debugMemoryAllocs (do
+        writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                       ++ "([9 x i8],[9 x i8]* @debugMemoryAllocsFmt"
+                       ++ ",i32 0,i32 0),i8 70,i32 ")
+        writeLocal newCount ",i8* %value)"
+        writeNewLocal "call i32(i8*) @fflush(i8* null)"
+        return ())
     writeCode " call void @free(i8* %value)"
     writeCode " ret void"
     writeCode " }"
