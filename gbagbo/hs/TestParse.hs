@@ -46,7 +46,7 @@ testTwo = testParse "testTwo" "f a=g a.g a=a." checkResult
     checkResult _ = False
 
 testComment :: Assertion
-testComment = testParse "testComment" "f -- a=g a.g\n a=a." checkResult
+testComment = testParse "testComment" "f == a=g a.g\n a=a." checkResult
   where
     checkResult [PartialDef (Identifier _ "f") [Identifier _ "a"]
                             [Token _ "a"] _] = True

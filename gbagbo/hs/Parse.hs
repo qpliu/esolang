@@ -32,7 +32,7 @@ skipSpace :: Parser ()
 skipSpace = skipMany (void (oneOf " \f\r\n\t") <|> skipComment)
   where
     skipComment = do
-        try (string "--")
+        try (string "==")
         manyTill anyChar newline
         return ()
 
