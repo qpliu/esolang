@@ -24,6 +24,9 @@ debugMemoryAllocs = False
 debugAborts :: Bool
 debugAborts = False
 
+debugIndirectCalls :: Bool
+debugIndirectCalls = False
+
 -- Generate code for LLVM 3.7
 codeGen :: [Func] -> String
 codeGen funcs =
@@ -40,7 +43,7 @@ codeGen funcs =
             writeFreeEvalParamFileValueDefn,
             writeFreeEvalParamFuncValueDefn,
             writeFreeEvalParamNullaryFuncValueDefn,
-            writeDebugMemoryDefns,
+            writeDebugDefns,
             writeDebugMemoryMallocDefn,
             writeDebugMemoryFreeDefn
             ]
@@ -339,6 +342,13 @@ writeDefExpr value bindings expr = w expr
         tailCallForceRetValue rhsEvalParam (Left rhsEvalFunc)
 
         writeNewLabelBack [hasOtherRefsLabelRef]
+        when debugIndirectCalls (do
+            writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                           ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                           ++ ",i32 0,i32 0),i8 69,{i2,i8*}(i8*,i8*)* ")
+            writeLocal rhsEvalFunc ")"
+            writeNewLocal "call i32 @fflush(i8* null)"
+            return ())
         forcedResult <- writeNewLocal "call fastcc {i2,i8*} "
         writeLocal rhsEvalFunc "(i8* "
         writeLocal rhsEvalParam ",i8* "
@@ -393,6 +403,14 @@ writeDefExpr value bindings expr = w expr
         writeCode " ret {i2,i8*} "
         writeLocal retval ""
     tailCallForceRetValue evalParam evalFunc = do
+        when debugIndirectCalls (do
+            writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                           ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                           ++ ",i32 0,i32 0),i8 101,{i2,i8*}(i8*,i8*)* ")
+            either (flip writeLocal "") writeCode evalFunc
+            writeCode ")"
+            writeNewLocal "call i32 @fflush(i8* null)"
+            return ())
         retval <- writeNewLocal "musttail call fastcc {i2,i8*} "
         either (flip writeLocal "") writeCode evalFunc
         writeCode "(i8* "
@@ -445,6 +463,13 @@ writeBindParam (bindings,nextDefLabelRefs) (arg,param) = w param
         valueRawPtr <- writeNewLocal "bitcast "
         writeValueType "* "
         writeLocal value " to i8*"
+        when debugIndirectCalls (do
+            writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                           ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                           ++ ",i32 0,i32 0),i8 69,{i2,i8*}(i8*,i8*)* ")
+            writeLocal evalFunc ")"
+            writeNewLocal "call i32 @fflush(i8* null)"
+            return ())
         forcedResult <- writeNewLocal "call fastcc {i2,i8*} "
         writeLocal evalFunc "(i8* "
         writeLocal evalParam ",i8* "
@@ -554,6 +579,13 @@ writeForceEvalUnevaluated value = do
     writeValueType "* "
     writeLocal value " to i8*"
     eval <- writeLoad (writeCode "{i2,i8*}(i8*,i8*)*") evalPtr
+    when debugIndirectCalls (do
+        writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                       ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                       ++ ",i32 0,i32 0),i8 69,{i2,i8*}(i8*,i8*)* ")
+        writeLocal eval ")"
+        writeNewLocal "call i32 @fflush(i8* null)"
+        return ())
     evalResult <- writeNewLocal "call fastcc {i2,i8*} "
     writeLocal eval "(i8* "
     writeLocal evalParam ",i8* "
@@ -627,6 +659,13 @@ writeUnrefDefn = do
     freeEvalParamPtr <- writeGetElementPtr (writeValueType "")
                                            (Right "%value") "i32 0,i32 4"
     freeEvalParam <- writeLoad (writeCode "void(i8*)*") freeEvalParamPtr
+    when debugIndirectCalls (do
+        writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                       ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                       ++ ",i32 0,i32 0),i8 70,void(i8*)* ")
+        writeLocal freeEvalParam ")"
+        writeNewLocal "call i32 @fflush(i8* null)"
+        return ())
     writeCode " call fastcc void "
     writeLocal freeEvalParam "(i8* "
     writeLocal evalParam ")"
@@ -933,6 +972,13 @@ writeEvalConcatValueDefn = do
 
     writeNewLabelBack [noOtherRefsLabelRef2]
     writeFree (Left value2RawPtr)
+    when debugIndirectCalls (do
+        writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                       ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                       ++ ",i32 0,i32 0),i8 101,{i2,i8*}(i8*,i8*)* ")
+        writeLocal evalFunc2 ")"
+        writeNewLocal "call i32 @fflush(i8* null)"
+        return ())
     retValue <- writeNewLocal "musttail call fastcc {i2,i8*} "
     writeLocal evalFunc2 "(i8* "
     writeLocal evalParam2 ",i8* %value)"
@@ -940,6 +986,13 @@ writeEvalConcatValueDefn = do
     writeLocal retValue ""
 
     hasOtherRefsLabel2 <- writeNewLabelBack [hasOtherRefsLabelRef2]
+    when debugIndirectCalls (do
+        writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                       ++ "([7 x i8],[7 x i8]* @debugIndirectCallsFmt"
+                       ++ ",i32 0,i32 0),i8 69,{i2,i8*}(i8*,i8*)* ")
+        writeLocal evalFunc2 ")"
+        writeNewLocal "call i32 @fflush(i8* null)"
+        return ())
     value2Eval <- writeNewLocal "call fastcc {i2,i8*} "
     writeLocal evalFunc2 "(i8* "
     writeLocal evalParam2 ",i8* %value)"
@@ -1332,8 +1385,10 @@ writeFinalizeDebugMemory | not debugMemory = return () | otherwise = do
     writeLocal fmt ",i32 "
     writeLocal count ")"
 
-writeDebugMemoryDefns :: GenLLVM ()
-writeDebugMemoryDefns | not debugMemory = return () | otherwise = do
+writeDebugDefns :: GenLLVM ()
+writeDebugDefns
+  | not (debugMemory || debugIndirectCalls) = return ()
+  | otherwise = do
     writeCode "@debugMemoryCount = private global i32 0 "
     writeCode "@debugMemoryOutputFmt = private constant [10 x i8] "
     writeCode "c\"count=%d\\0a\\0d\" "
@@ -1342,6 +1397,9 @@ writeDebugMemoryDefns | not debugMemory = return () | otherwise = do
     when debugMemoryAllocs (do
         writeCode ("@debugMemoryAllocsFmt = private constant "
                    ++ "[9 x i8] c\"%c%d:%x\\0A\\00\""))
+    when debugIndirectCalls (do
+        writeCode ("@debugIndirectCallsFmt = private constant "
+                   ++ "[7 x i8] c\"%c:%x\\0A\\00\""))
 
 writeDebugMemoryMallocDefn :: GenLLVM ()
 writeDebugMemoryMallocDefn | not debugMemory = return () | otherwise = do
