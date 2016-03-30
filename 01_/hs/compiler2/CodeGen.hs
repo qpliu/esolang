@@ -27,6 +27,9 @@ debugAborts = False
 debugIndirectCalls :: Bool
 debugIndirectCalls = False
 
+debugDeref :: Bool
+debugDeref = False
+
 -- Generate code for LLVM 3.7
 codeGen :: [Func] -> String
 codeGen funcs =
@@ -180,6 +183,7 @@ writeFreeEvalParamFuncValueDefn = do
     writeCode "define private fastcc void "
     writeCode "@freeEvalParamFunc(i8* %evalParam) {"
     entryLabel <- writeNewLabel
+    writeDebugDeref "FPF" "%evalParam"
     evalParam <- writeNewLocal "bitcast i8* %evalParam to "
     writeFuncValueEvalParamType "*"
     argCountPtr <- writeGetElementPtr (writeFuncValueEvalParamType "")
@@ -233,6 +237,7 @@ writeEvalFuncValue (name,defs) = do
     args <- if null params
         then return []
         else do
+            writeDebugDeref "EFP" "%evalParam"
             evalParam <- writeNewLocal "bitcast i8* %evalParam to "
             writeFuncValueEvalParamType "*"
             args <- mapM (\ i -> do
@@ -437,6 +442,7 @@ writeBindParam (bindings,nextDefLabelRefs) (arg,param) = w param
             writeCheckForceEval value nextDefLabelRefs2 "2"
         return (bindings,nextDefLabelRefs3)
     writeCheckBit (value,nextDefLabelRefs) bit = do
+        writeDebugDerefValue "EFb" value
         (nextRawPtr,nextDefLabelRefs2) <-
             writeCheckForceEval value nextDefLabelRefs
                                 (if bit then "1" else "0")
@@ -449,6 +455,7 @@ writeBindParam (bindings,nextDefLabelRefs) (arg,param) = w param
         checkForceLabelRef <- writeForwardRefLabel
 
         checkForceLabel <- writeNewLabelBack [checkForceLabelRef]
+        writeDebugDerefValue "EF_" value
         statusPtr <- writeValueFieldPtr value 1
         status <- writeLoad (writeCode "i2") statusPtr
         evalParamPtr <- writeValueFieldPtr value 2
@@ -1387,11 +1394,11 @@ writeFinalizeDebugMemory | not debugMemory = return () | otherwise = do
 
 writeDebugDefns :: GenLLVM ()
 writeDebugDefns
-  | not (debugMemory || debugIndirectCalls) = return ()
+  | not (debugMemory || debugIndirectCalls || debugDeref) = return ()
   | otherwise = do
     writeCode "@debugMemoryCount = private global i32 0 "
     writeCode "@debugMemoryOutputFmt = private constant [10 x i8] "
-    writeCode "c\"count=%d\\0a\\0d\" "
+    writeCode "c\"count=%d\\0a\\00\" "
     writeCode "declare i32 @printf(i8*,...)"
     writeCode "declare i32 @fflush(i8*)"
     when debugMemoryAllocs (do
@@ -1400,6 +1407,9 @@ writeDebugDefns
     when debugIndirectCalls (do
         writeCode ("@debugIndirectCallsFmt = private constant "
                    ++ "[7 x i8] c\"%c:%x\\0A\\00\""))
+    when debugDeref (do
+        writeCode ("@debugDerefFmt = private constant "
+                   ++ "[12 x i8] c\"*%c%c%c:%x\\0A\\00\""))
 
 writeDebugMemoryMallocDefn :: GenLLVM ()
 writeDebugMemoryMallocDefn | not debugMemory = return () | otherwise = do
@@ -1442,3 +1452,26 @@ writeDebugMemoryFreeDefn | not debugMemory = return () | otherwise = do
     writeCode " call void @free(i8* %value)"
     writeCode " ret void"
     writeCode " }"
+
+writeDebugDeref :: String -> String -> GenLLVM ()
+writeDebugDeref tag value | not debugDeref = return () | otherwise = do
+    rawPtr <- writeNewLocal ("select i1 1,i8* " ++ value ++ ",i8* " ++ value)
+    writeDebugDerefRawPtr tag rawPtr
+
+writeDebugDerefValue :: String -> Local -> GenLLVM ()
+writeDebugDerefValue tag value | not debugDeref = return () | otherwise = do
+    rawPtr <- writeNewLocal "bitcast "
+    writeValueType "* "
+    writeLocal value " to i8*"
+    writeDebugDerefRawPtr tag rawPtr
+
+writeDebugDerefRawPtr :: String -> Local -> GenLLVM ()
+writeDebugDerefRawPtr tag rawPtr | not debugDeref = return () | otherwise = do
+    let (tag1:tag2:tag3:_) = tag ++ repeat ' '
+    writeNewLocal ("call i32(i8*,...) @printf(i8* getelementptr "
+                   ++ "([12 x i8],[12 x i8]* @debugDerefFmt"
+                   ++ ",i32 0,i32 0),i8 " ++ show (ord tag1) ++ ",i8 "
+                   ++ show (ord tag2) ++ ",i8 " ++ show (ord tag3) ++ ",i8* ")
+    writeLocal rawPtr ")"
+    writeNewLocal "call i32(i8*) @fflush(i8* null)"
+    return ()
