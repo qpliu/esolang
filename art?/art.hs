@@ -114,7 +114,11 @@ witnessInput (Grid grid) = filter (flip elem ['a'..'p']) (A.elems grid)
 witnessInputImpossible :: Grid -> String -> Bool
 witnessInputImpossible (Grid grid) input =
     (or . zipWith (/=) input
-        .  filter (flip elem ['a'..'p']) . takeWhile (/= ' ') . A.elems) grid
+        . filter (flip elem ['a'..'p'])
+        . takeWhile (/= ' ')
+        . take (x1-x0+1) . A.elems) grid
+  where
+    ((_,x0),(_,x1)) = bounds grid
 
 witnessOutput :: Grid -> String
 witnessOutput (Grid grid) = filter (flip elem ['A'..'P']) (A.elems grid)
@@ -140,19 +144,29 @@ run :: String -> String -> Maybe Grid
 run src input
   -- Easy tests for non-existence of witness
   | not (all (flip elem src) input) = Nothing
-  | all upperLeft tiles = Nothing
-  | all upperRight tiles = Nothing
-  | all lowerLeft tiles = Nothing
-  | all lowerRight tiles = Nothing
+  | all notUpperRight tiles = Nothing
+  | all notLowerLeft tiles = Nothing
+  | all notLowerRight tiles = Nothing
   | otherwise = search tiles input initialList
   where
-    initialGrid = Grid (array ((0,0),(-1,-1)) [])
     tiles = parse src
-    upperLeft  (Tile t) = let ((y,x),(_,_)) = bounds t in t ! (y,x) == ' '
-    upperRight (Tile t) = let ((y,_),(_,x)) = bounds t in t ! (y,x) == ' '
-    lowerLeft  (Tile t) = let ((_,x),(y,_)) = bounds t in t ! (y,x) == ' '
-    lowerRight (Tile t) = let ((_,_),(y,x)) = bounds t in t ! (y,x) == ' '
-    initialList = [(tiles,initialGrid,tile,(0,0)) | tile <- S.elems tiles]
+    upperLeft (Tile t) =
+        t ! (y0,x0) /= ' ' && and (zipWith (==) input witness)
+      where
+        witness = (filter (flip elem ['a'..'p']) . takeWhile (/= ' ')
+                    . take (x1-x0+1) . A.elems) t
+        ((y0,x0),(_,x1)) = bounds t
+    notUpperRight (Tile t) = let ((y,_),(_,x)) = bounds t in t ! (y,x) == ' '
+    notLowerLeft  (Tile t) = let ((_,x),(y,_)) = bounds t in t ! (y,x) == ' '
+    notLowerRight (Tile t) =
+        t ! (y1,x1) == ' ' || or (zipWith (/=) (reverse input) witness)
+      where
+        witness = (filter (flip elem ['a'..'p']) . takeWhile (/= ' ')
+                    . take (x1-x0+1) . reverse . A.elems) t
+        ((_,x0),(y1,x1)) = bounds t
+    initialGrid = Grid (array ((0,0),(-1,-1)) [])
+    initialList = [(tiles,initialGrid,tile,(0,0))
+                    | tile <- (filter upperLeft . S.elems) tiles]
 
 encodeInput :: String -> String
 encodeInput = concatMap encodeByte
