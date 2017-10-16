@@ -1,0 +1,195 @@
+DGOL
+
+DGOL (Directed Graph Oriented Language) is an imperative programming
+language in which all values are pointers to nodes in directed
+graphs.
+
+Lexical structure
+
+Linear whitespace is ignored.
+
+Identifiers consist of 1 or more alphanumerical characters, excluding
+"0".
+
+Comments begin with "*" and extend to the end of the line, and may
+only appear where a newline is allowed in the grammar.
+
+Syntax
+
+EBNF:
+
+  program = { use-declaration | newline }, { subroutine-declaration | newline }, program-declaration, { newline };
+
+  program-declaration = "PROGRAM", identifier, newline, statements, "END", identifier, newline;
+
+  use-declaration = "USE", identifier, newline;
+
+  subroutine-declaration = "SUBROUTINE", identifier, "(", [ identifier, { ",", identifier }, ")", newline, statements, "END", identifier, newline;
+
+  statements = { [ statement ], newline };
+
+  statement = let-statement | if-statement | do-statement | call-statement | return-statement | exit-statement;
+
+  identifier-or-0 = identifier | "0"
+
+  let-statement = "LET", identifier, ( "=", identifier-or-0 | "<", identifier | ">", identifier );
+
+  if-statement = if-head, { "ELSE", if-head }, [ "ELSE", newline, { statement, newline } ], "END", "IF";
+
+  if-head = "IF", identifier, ( "=" | ">" ), identifier, newline, statements;
+
+  do-statement = "DO", identifier, { "<", identifier }, newline, statements, "END", "DO";
+
+  call-statement = "CALL", identifier, [ "(", [ identifier-or-0, { ",", identifier-or-0 } ], ")" ];
+
+  return-statement = "RETURN";
+
+  exit-statement = "EXIT", identifier;
+
+A node has an identity and a mutable set of edges, where each edge
+points from itself to another node or back to itself.  A new node has
+no edges.
+
+Unreachable nodes and edges are garbage collected.
+
+Variables are pointers to a node.  A variable is created when it is
+first used, pointing at a new node.  Variables are scoped to the
+subroutine or program in which they are used.  Each subroutine call
+creates a new scope.
+
+Subroutine parameters are passed by reference.  If a parameter is not
+provided by the caller, it is set to a new node.  Any extraneous
+parameters passed in by the caller are ignored.
+
+Declarations
+
+Use declarations import libraries.  No libraries are defined.
+
+Example
+
+  USE IO * Use the I/O library
+
+Subroutine declarations define subroutines.
+
+The end of the subroutine is an implicit return.
+
+Example
+
+  * ASHNAZG sets NAZG to a new node if ASH has an edge to itself
+  SUBROUTINE ASH NAZG(ASH, NAZG)
+    DO ONE < ASH
+      IF ONE = ASH
+        LET NAZG = RING
+        EXIT ONE
+      END IF
+    END DO
+  END ASH NAZG
+
+The program declaration defines the main entry point.
+
+Example
+
+  PROGRAM DEAGOL
+    LET ASH > ASH
+    LET NAZG = ASH
+    IF ASH = NAZG
+      * reached
+    ENDIF
+    CALLASHNAZG(ASH,NAZG)
+    IF ASH = NAZG
+      * not reached
+    END IF
+  END DEAGOL
+
+Statements
+
+Let statements
+
+Example
+
+  LET A = B * set A to B
+
+  LET A = 0 * set A to a new node
+
+  LET A > B * add an edge from A to B
+
+  LET A < B * remove any edge from A to B
+
+If statements
+
+  IF A = B
+    * reached if A points to the same node as B points to
+  ELSE IF A > B
+    * reached if there is an edge from A to B
+  END IF
+
+Do statements
+
+A do statement either iterates forever, or iterates over the edges
+from a given node in some unspecified order.  The set of edges
+iterated over is set on entry, and will be unaffected if the body of
+the do statement changes the edges from the given node.
+
+Example
+  * Remove every edge from NODE
+  DO I < NODE
+    LET NODE < I
+  END DO
+
+  * Loop forever
+  DO J
+  END DO
+
+Call statements
+
+A call statement calls the named subroutine with the given
+parameters.
+
+Return statements
+
+Return statements are only allowed in a subroutine.  When a return
+statement is executed, control returns to the statement following the
+call statement that invoked the subroutine.
+
+Exit statements
+
+Exit statements are only allowed in a do statement.  After an exit
+statement is executed, execution continues after the containing do
+statement with the identifier in the exit statement.
+
+Example
+
+  DO J < I
+    DO K < J
+      IF K = I
+        EXIT J
+      END IF
+    END DO
+  END DO
+
+Examples
+
+  * Sets RESULT to a new node if there is a path from A to B
+  * by doing a depth-first search.  MARKERS must be a new node.
+  SUBROUTINE PATH BETWEEN(A, B, RESULT, MARKERS)
+    IF A = B
+      LET RESULT = 0
+      RETURN
+    ELSE IF A > B
+      LET RESULT = 0
+      RETURN
+    END IF
+    LET ORIGINAL RESULT = RESULT
+    DO I < A
+      IF MARKERS > I
+        * skip
+      ELSE
+        LET MARKERS > I
+        CALL PATH BETWEEN(I, B, RESULT, MARKERS)
+        IF ORIGINAL RESULT = RESULT
+        ELSE
+          RETURN
+        END IF
+      END IF
+    END DO
+  END PATH BETWEEN
