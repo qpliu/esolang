@@ -32,7 +32,7 @@ EBNF:
 
   identifier-or-0 = identifier | "0"
 
-  let-statement = "LET", identifier, ( "=", identifier-or-0 | "<", identifier | ">", identifier );
+  let-statement = "LET", identifier, ( "=", identifier-or-0 | "<", identifier | ">", identifier-or-0 );
 
   if-statement = if-head, { "ELSE", if-head }, [ "ELSE", newline, { statement, newline } ], "END", "IF";
 
@@ -40,7 +40,7 @@ EBNF:
 
   do-statement = "DO", identifier, { "<", identifier }, newline, statements, "END", "DO";
 
-  call-statement = "CALL", identifier, [ "(", [ identifier-or-0, { ",", identifier-or-0 } ], ")" ];
+  call-statement = "CALL", { identifier, "." }, identifier, [ "(", [ identifier-or-0, { ",", identifier-or-0 } ], ")" ];
 
   return-statement = "RETURN";
 
@@ -63,11 +63,15 @@ parameters passed in by the caller are ignored.
 
 Declarations
 
-Use declarations import libraries.  No libraries are defined.
+Use declarations import libraries.
+
+The subroutines defined by the used library is available to the CALL
+statement by using the name of the library, followed by "." followed
+by the name of the subroutine.
 
 Example
 
-  USE IO * Use the I/O library
+  USE IO * USE THE I/O LIBRARY
 
 Subroutine declarations define subroutines.
 
@@ -75,7 +79,7 @@ The end of the subroutine is an implicit return.
 
 Example
 
-  * ASHNAZG sets NAZG to a new node if ASH has an edge to itself
+  * ASHNAZG SETS NAZG TO A NEW NODE IF ASH HAS AN EDGE TO ITSELF
   SUBROUTINE ASH NAZG(ASH, NAZG)
     DO ONE < ASH
       IF ONE = ASH
@@ -93,11 +97,11 @@ Example
     LET ASH > ASH
     LET NAZG = ASH
     IF ASH = NAZG
-      * reached
+      * REACHED
     ENDIF
     CALLASHNAZG(ASH,NAZG)
     IF ASH = NAZG
-      * not reached
+      * NOT REACHED
     END IF
   END DEAGOL
 
@@ -107,20 +111,20 @@ Let statements
 
 Example
 
-  LET A = B * set A to B
+  LET A = B * SET A TO B
 
-  LET A = 0 * set A to a new node
+  LET A = 0 * SET A TO A NEW NODE
 
-  LET A > B * add an edge from A to B
+  LET A > B * ADD AN EDGE FROM A TO B
 
-  LET A < B * remove any edge from A to B
+  LET A < B * REMOVE ANY EDGE FROM A TO B
 
 If statements
 
   IF A = B
-    * reached if A points to the same node as B points to
+    * REACHED IF A POINTS TO THE SAME NODE AS B POINTS TO
   ELSE IF A > B
-    * reached if there is an edge from A to B
+    * REACHED IF THERE IS AN EDGE FROM A TO B
   END IF
 
 Do statements
@@ -131,12 +135,12 @@ iterated over is set on entry, and will be unaffected if the body of
 the do statement changes the edges from the given node.
 
 Example
-  * Remove every edge from NODE
+  * REMOVE EVERY EDGE FROM NODE
   DO I < NODE
     LET NODE < I
   END DO
 
-  * Loop forever
+  * LOOP FOREVER
   DO J
   END DO
 
@@ -144,6 +148,20 @@ Call statements
 
 A call statement calls the named subroutine with the given
 parameters.
+
+Subroutine that are defined in the program are referred
+to by name.
+
+Example
+
+  CALL ASHNAZG(A, B)
+
+Subroutines that are defined in a library are referred by the library
+name, followed by ".", followed by the subroutine name.
+
+Example
+
+  CALL IO.READBYTE(BYTE, EOF, 1, 2, 4, 8, 10, 20, 40, 80)
 
 Return statements
 
@@ -167,10 +185,54 @@ Example
     END DO
   END DO
 
-Examples
+Standard Libraries
 
-  * Sets RESULT to a new node if there is a path from A to B
-  * by doing a depth-first search.  MARKERS must be a new node.
+IO
+
+  * THE IO LIBRARY DEFINES 2 SUBROUTINES
+
+  * IO.READBYTE READS A BYTE
+  * IF EOF IS ENCOUNTERED, AN EDGE IS ADDED FROM BYTE TO EOF,
+  * OTHERWISE ANY EDGE FROM BYTE TO EOF IS REMOVED.
+  * IF THE 1 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 1,
+  * OTHERWISE ANY EDGE FROM BYTE TO 1 IS REMOVED.
+  * IF THE 2 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 2,
+  * OTHERWISE ANY EDGE FROM BYTE TO 2 IS REMOVED.
+  * IF THE 4 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 4,
+  * OTHERWISE ANY EDGE FROM BYTE TO 4 IS REMOVED.
+  * IF THE 8 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 8,
+  * OTHERWISE ANY EDGE FROM BYTE TO 8 IS REMOVED.
+  * IF THE 16 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 10,
+  * OTHERWISE ANY EDGE FROM BYTE TO 10 IS REMOVED.
+  * IF THE 32 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 20,
+  * OTHERWISE ANY EDGE FROM BYTE TO 20 IS REMOVED.
+  * IF THE 64 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 40,
+  * OTHERWISE ANY EDGE FROM BYTE TO 40 IS REMOVED.
+  * IF THE 128 BIT IS 1, AN EDGE IS ADDED FROM BYTE TO 80,
+  * OTHERWISE ANY EDGE FROM BYTE TO 80 IS REMOVED.
+  * IF ANY ARGUMENT REFERS TO THE SAME NODE AS ANOTHER ARGUMENT, THE
+  * RESULT IS UNDEFINED.
+  SUBROUTINE READBYTE(BYTE, EOF, 1, 2, 4, 8, 10, 20, 40, 80)
+    * UNSPECIFIED
+  END READBYTE
+
+  * IO.WRITEBYTE WRITES A BYTE
+  * IF THERE IS AN EDGE FROM BYTE TO 1, THE 1 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 2, THE 2 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 4, THE 4 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 8, THE 8 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 10, THE 16 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 20, THE 32 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 40, THE 64 BIT IS 1, OTHERWISE IT IS 0.
+  * IF THERE IS AN EDGE FROM BYTE TO 80, THE 128 BIT IS 1, OTHERWISE IT IS 0.
+  SUBROUTINE WRITEBYTE(BYTE, 1, 2, 4, 8, 10, 20, 40, 80)
+    * UNSPECIFIED
+  END WRITEBYTE
+
+Example
+
+  * SETS RESULT TO A NEW NODE IF THERE IS A PATH FROM A TO B
+  * BY DOING A DEPTH-FIRST SEARCH.  MARKERS MUST BE A NEW NODE.
   SUBROUTINE PATH BETWEEN(A, B, RESULT, MARKERS)
     IF A = B
       LET RESULT = 0
@@ -193,3 +255,25 @@ Examples
       END IF
     END DO
   END PATH BETWEEN
+
+Example
+
+  USE IO
+  PROGRAM HELLO WORLD
+    LET BYTE = 0
+    LET 1 = 0
+    LET BYTE > 1
+    CALL IO.WRITE BYTE(BYTE, 0, 0, 0, 1, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 1, 0, 1, 0, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 0, 1, 1, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 0, 1, 1, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 1, 1, 1, 1, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 0, 0, 0, 0, 1, 0, 0)
+    CALL IO.WRITE BYTE(BYTE, 1, 1, 1, 0, 1, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 1, 1, 1, 1, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 1, 0, 0, 1, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 0, 1, 1, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 0, 1, 0, 0, 0, 1, 0)
+    CALL IO.WRITE BYTE(BYTE, 1, 0, 0, 0, 0, 1, 0, 0)
+    CALL IO.WRITE BYTE(BYTE, 0, 1, 0, 1, 0, 0, 0, 0)
+  END HELLO WORLD
