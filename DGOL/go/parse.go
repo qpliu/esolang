@@ -13,40 +13,104 @@ func parse(r *bufio.Reader) (*program, error) {
 	program := &program{}
 	line, err := readLine(r)
 	if err != nil {
-		return program, err
+		return nil, err
 	}
 	for {
 		if ok, tokens := tokenizeLine(line, "USE"); ok {
 			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
-				return program, errors.New("SYNTAX ERROR: " + line)
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+			for _, use := range program.uses {
+				if tokens[0] == use {
+					return nil, errors.New("DUPLICATE USE: " + line)
+				}
 			}
 			program.uses = append(program.uses, tokens[0])
-		} else if strings.HasPrefix(line, "SUBROUTINE") || strings.HasPrefix(line, "PROGRAM") {
+		} else if strings.HasPrefix(line, "SUBROUTINE") || strings.HasPrefix(line, "PROGRAM") || strings.HasPrefix(line, "LIBRARY") {
 			break
 		} else {
-			return program, errors.New("SYNTAX ERROR: " + line)
+			return nil, errors.New("SYNTAX ERROR: " + line)
 		}
 		line, err = readLine(r)
 		if err != nil {
-			return program, err
+			return nil, err
 		}
 	}
 	for {
 		if ok, tokens := tokenizeLine(line, "SUBROUTINE"); ok {
-			_ = tokens
-			// TODO
+			if len(tokens) < 3 || !isIdentifier(tokens[0]) || tokens[1] != "(" || tokens[len(tokens)-1] != ")" {
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+			name := tokens[0]
+			for _, subroutine := range program.subroutines {
+				if name == subroutine.name {
+					return nil, errors.New("DUPLICATE SUBROUTINE: " + line)
+				}
+			}
+			const isSubroutine = true
+			const isIf = false
+			doLoopIdents := make(map[string]bool)
+			parameters, statements, _, err := readStatements(r, line, tokens, name, isSubroutine, isIf, doLoopIdents)
+			if err != nil {
+				return nil, err
+			}
+			program.subroutines = append(program.subroutines, subroutine{name, parameters, statements})
 		} else if ok, tokens := tokenizeLine(line, "PROGRAM"); ok {
-			_ = tokens
-			// TODO
+			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+			name := tokens[0]
+			const isSubroutine = false
+			const isIf = false
+			doLoopIdents := make(map[string]bool)
+			parameters, statements, _, err := readStatements(r, line, tokens, name, isSubroutine, isIf, doLoopIdents)
+			if err != nil {
+				return nil, err
+			}
+			if len(parameters) != 0 {
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+			program.name = name
+			program.statements = statements
+			break
+		} else if ok, tokens := tokenizeLine(line, "LIBRARY"); ok {
+			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+			name := tokens[0]
+			library, err := readLibrary(r, name, program)
+			if err != nil {
+				return nil, err
+			}
+			program.name = name
+			program.library = library
 			break
 		} else {
-			return program, errors.New("SYNTAX ERROR: " + line)
+			return nil, errors.New("SYNTAX ERROR: " + line)
 		}
 	}
 	line, err = readLine(r)
 	if err != io.EOF {
-		return program, errors.New("SYNTAX ERROR: " + line)
+		return nil, errors.New("SYNTAX ERROR: " + line)
 	}
+
+	uses := make(map[string]bool)
+	for _, use := range program.uses {
+		uses[use] = true
+	}
+	subroutines := make(map[string]bool)
+	for _, subroutine := range program.subroutines {
+		subroutines[subroutine.name] = true
+	}
+	for _, subroutine := range program.subroutines {
+		if err := checkCalls(uses, subroutines, subroutine.statements); err != nil {
+			return nil, err
+		}
+	}
+	if err := checkCalls(uses, subroutines, program.statements); err != nil {
+		return nil, err
+	}
+
 	return program, nil
 }
 
@@ -74,6 +138,87 @@ func readLine(r *bufio.Reader) (string, error) {
 			} else {
 				buf.WriteRune(ch)
 			}
+		}
+	}
+}
+
+func readStatements(r *bufio.Reader, line string, tokens []string, name string, isSubroutine bool, isIf bool, doLoopIdents map[string]bool) ([]string, []statement, string, error) {
+	var parameters []string
+	if len(tokens) > 1 && tokens[1] == "(" {
+		const callParameters = false
+		params, err := readParameters(line, tokens[1:], callParameters)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		parameters = params
+	}
+
+	// TODO
+	return parameters, []statement{}, "", errors.New("Not implemented")
+}
+
+func readParameters(line string, tokens []string, callParameters bool) ([]string, error) {
+	var parameters []string
+	if len(tokens) < 2 || tokens[0] != "(" || tokens[len(tokens)-1] != ")" {
+		return nil, errors.New("SYNTAX ERROR: " + line)
+	}
+	for i, token := range tokens[1 : len(tokens)-1] {
+		if i%2 != 0 {
+			if callParameters {
+				if !isIdentifierOr0(token) {
+					return nil, errors.New("SYNTAX ERROR: " + line)
+				}
+			} else {
+				if !isIdentifier(token) {
+					return nil, errors.New("SYNTAX ERROR: " + line)
+				}
+				for _, parameter := range parameters {
+					if token == parameter {
+						return nil, errors.New("SYNTAX ERROR: " + line)
+					}
+				}
+			}
+			parameters = append(parameters, token)
+		} else {
+			if token != "," {
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+		}
+	}
+	return parameters, nil
+}
+
+func readLibrary(r *bufio.Reader, name string, program *program) ([]string, error) {
+	var library []string
+	for {
+		line, err := readLine(r)
+		if err == io.EOF {
+			return library, errors.New("UNEXPECTED EOF")
+		} else if err != nil {
+			return library, err
+		}
+		if ok, tokens := tokenizeLine(line, "SUBROUTINE"); ok {
+			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
+				return library, errors.New("SYNTAX ERROR: " + line)
+			}
+			defined := false
+			for _, subroutine := range program.subroutines {
+				if tokens[0] == subroutine.name {
+					defined = true
+					break
+				}
+			}
+			if !defined {
+				return library, errors.New("UNDEFINED SUBROUTINE: " + tokens[0])
+			}
+			library = append(library, tokens[0])
+		} else if ok, tokens := tokenizeLine(line, "END"); ok {
+			if len(tokens) != 1 || tokens[0] != name {
+				return library, errors.New("SYNTAX ERROR: " + line)
+			}
+			return library, nil
+		} else {
+			return library, errors.New("SYNTAX ERROR: " + line)
 		}
 	}
 }
@@ -117,6 +262,24 @@ func isIdentifier(s string) bool {
 	return s != "0" && isIdentifierOr0(s)
 }
 
+func checkCalls(uses, subroutines map[string]bool, statements []statement) error {
+	for _, statement := range statements {
+		if err := checkCalls(uses, subroutines, statement.statements); err != nil {
+			return err
+		}
+		if statement.stmtType == stmtCall {
+			if statement.parameters[0] == "" {
+				if !subroutines[statement.parameters[1]] {
+					return errors.New("UNDEFINED SUBROUTINE: " + statement.parameters[1])
+				}
+			} else if !uses[statement.parameters[0]] {
+				return errors.New("UNDECLARED LIBRARY: " + statement.parameters[0])
+			}
+		}
+	}
+	return nil
+}
+
 func unparse(w io.Writer, program *program) error {
 	for _, use := range program.uses {
 		if _, err := io.WriteString(w, "USE "+use+"\n"); err != nil {
@@ -140,13 +303,31 @@ func unparse(w io.Writer, program *program) error {
 			return err
 		}
 	}
-	if _, err := io.WriteString(w, "PROGRAM "+program.name+"\n"); err != nil {
-		return err
-	}
-	for _, statement := range program.statements {
-		const indent = 1
-		if err := unparseStatement(w, indent, statement); err != nil {
+	if len(program.library) > 0 {
+		if len(program.statements) > 0 {
+			panic("INVALID MODULE")
+		}
+		if _, err := io.WriteString(w, "LIBRARY "+program.name+"\n"); err != nil {
 			return err
+		}
+		for _, library := range program.library {
+			const indent = 1
+			if err := unparseIndent(w, indent); err != nil {
+				return err
+			}
+			if _, err := io.WriteString(w, "SUBROUTINE "+library+"\n"); err != nil {
+				return err
+			}
+		}
+	} else {
+		if _, err := io.WriteString(w, "PROGRAM "+program.name+"\n"); err != nil {
+			return err
+		}
+		for _, statement := range program.statements {
+			const indent = 1
+			if err := unparseStatement(w, indent, statement); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := io.WriteString(w, "END "+program.name+"\n"); err != nil {
@@ -278,10 +459,16 @@ func unparseStatement(w io.Writer, indent int, statement statement) error {
 			return err
 		}
 	case stmtCall:
-		if _, err := io.WriteString(w, "CALL "+statement.parameters[0]); err != nil {
-			return err
+		if statement.parameters[0] == "" {
+			if _, err := io.WriteString(w, "CALL "+statement.parameters[1]); err != nil {
+				return err
+			}
+		} else {
+			if _, err := io.WriteString(w, "CALL "+statement.parameters[0]+"."+statement.parameters[1]); err != nil {
+				return err
+			}
 		}
-		if err := unparseParameters(w, statement.parameters[1:]); err != nil {
+		if err := unparseParameters(w, statement.parameters[2:]); err != nil {
 			return err
 		}
 	case stmtReturn:

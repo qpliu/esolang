@@ -18,19 +18,23 @@ Syntax
 
 EBNF:
 
-  program = { use-declaration | newline }, { subroutine-declaration | newline }, program-declaration, { newline };
+  module = { use-declaration | newline }, { subroutine-definition | newline }, ( program-definition | library-definition ), { newline };
 
-  program-declaration = "PROGRAM", identifier, newline, statements, "END", identifier, newline;
+  program-definition = "PROGRAM", identifier, newline, statements, "END", identifier, newline;
+
+  library-definition = "LIBRARY", identifier, newline, { subroutine-declaration | newline }, "END", identifier, newline;
+
+  subroutine-declaration = "SUBROUTINE", identifier, newline;
 
   use-declaration = "USE", identifier, newline;
 
-  subroutine-declaration = "SUBROUTINE", identifier, "(", [ identifier, { ",", identifier }, ")", newline, statements, "END", identifier, newline;
+  subroutine-definition = "SUBROUTINE", identifier, "(", [ identifier, { ",", identifier }, ")", newline, statements, "END", identifier, newline;
 
   statements = { [ statement ], newline };
 
   statement = let-statement | if-statement | do-statement | call-statement | return-statement | exit-statement;
 
-  identifier-or-0 = identifier | "0"
+  identifier-or-0 = identifier | "0";
 
   let-statement = "LET", identifier, ( "=", identifier-or-0 | "<", identifier | ">", identifier-or-0 );
 
@@ -73,7 +77,7 @@ Example
 
   USE IO * USE THE I/O LIBRARY
 
-Subroutine declarations define subroutines.
+Subroutine definitions define subroutines.
 
 The end of the subroutine is an implicit return.
 
@@ -89,7 +93,9 @@ Example
     END DO
   END ASH NAZG
 
-The program declaration defines the main entry point.
+A module can either contain a program or a library.
+
+The program definition defines the main entry point.
 
 Example
 
@@ -104,6 +110,20 @@ Example
       * NOT REACHED
     END IF
   END DEAGOL
+
+A library definition contains a list of subroutines available to be
+used by other modules.
+
+Example
+
+  SUBROUTINE PRIVATE()
+  END PRIVATE
+  SUBROUTINE EXPORTED()
+    CALL PRIVATE()
+  END EXPORTED
+  LIBRARY LIBRARY
+    SUBROUTINE EXPORTED
+  END LIBRARY
 
 Statements
 
@@ -213,7 +233,7 @@ IO
   * IF ANY ARGUMENT REFERS TO THE SAME NODE AS ANOTHER ARGUMENT, THE
   * RESULT IS UNDEFINED.
   SUBROUTINE READBYTE(BYTE, EOF, 1, 2, 4, 8, 10, 20, 40, 80)
-    * UNSPECIFIED
+    * IMPLEMENTATION UNSPECIFIED
   END READBYTE
 
   * IO.WRITEBYTE WRITES A BYTE
@@ -226,8 +246,13 @@ IO
   * IF THERE IS AN EDGE FROM BYTE TO 40, THE 64 BIT IS 1, OTHERWISE IT IS 0.
   * IF THERE IS AN EDGE FROM BYTE TO 80, THE 128 BIT IS 1, OTHERWISE IT IS 0.
   SUBROUTINE WRITEBYTE(BYTE, 1, 2, 4, 8, 10, 20, 40, 80)
-    * UNSPECIFIED
+    * IMPLEMENTATION UNSPECIFIED
   END WRITEBYTE
+
+  LIBRARY IO
+    SUBROUTINE READBYTE
+    SUBROUTINE WRITEBYTE
+  END IO
 
 Example
 

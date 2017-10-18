@@ -16,6 +16,7 @@ SUBROUTINE HOME(X, Y)
       LET X < I
     END DO
   ELSE
+    CALL LIBRARY.DIE()
   END IF
   LET X > 0
 END HOME
@@ -46,6 +47,7 @@ func TestReadLine(t *testing.T) {
 		"LETX<I",
 		"ENDDO",
 		"ELSE",
+		"CALLLIBRARY.DIE()",
 		"ENDIF",
 		"LETX>0",
 		"ENDHOME",
@@ -177,6 +179,12 @@ func TestUnparse(t *testing.T) {
 							},
 							statement{
 								stmtType: stmtElse,
+								statements: []statement{
+									statement{
+										stmtType:   stmtCall,
+										parameters: []string{"LIBRARY", "DIE"},
+									},
+								},
 							},
 						},
 					},
@@ -211,7 +219,7 @@ func TestUnparse(t *testing.T) {
 					},
 					statement{
 						stmtType:   stmtCall,
-						parameters: []string{"HOME", "A", "C"},
+						parameters: []string{"", "HOME", "A", "C"},
 					},
 					statement{
 						stmtType:   stmtExit,

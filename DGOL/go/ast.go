@@ -5,6 +5,7 @@ type program struct {
 	subroutines []subroutine
 	name        string
 	statements  []statement
+	library     []string
 }
 
 type subroutine struct {
