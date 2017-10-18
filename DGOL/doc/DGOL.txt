@@ -73,6 +73,8 @@ The subroutines defined by the used library is available to the CALL
 statement by using the name of the library, followed by "." followed
 by the name of the subroutine.
 
+Duplicate use declarations are not allowed.
+
 Example
 
   USE IO * USE THE I/O LIBRARY
@@ -80,6 +82,10 @@ Example
 Subroutine definitions define subroutines.
 
 The end of the subroutine is an implicit return.
+
+Duplicate subroutine names are not allowed.
+
+Duplicate parameter names in a subroutine definition are not allowed.
 
 Example
 

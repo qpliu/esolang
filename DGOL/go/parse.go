@@ -49,7 +49,7 @@ func parse(r *bufio.Reader) (*program, error) {
 			}
 			const isSubroutine = true
 			const isIf = false
-			doLoopIdents := make(map[string]bool)
+			var doLoopIdents []string
 			parameters, statements, _, err := readStatements(r, line, tokens, name, isSubroutine, isIf, doLoopIdents)
 			if err != nil {
 				return nil, err
@@ -62,7 +62,7 @@ func parse(r *bufio.Reader) (*program, error) {
 			name := tokens[0]
 			const isSubroutine = false
 			const isIf = false
-			doLoopIdents := make(map[string]bool)
+			var doLoopIdents []string
 			parameters, statements, _, err := readStatements(r, line, tokens, name, isSubroutine, isIf, doLoopIdents)
 			if err != nil {
 				return nil, err
@@ -142,7 +142,7 @@ func readLine(r *bufio.Reader) (string, error) {
 	}
 }
 
-func readStatements(r *bufio.Reader, line string, tokens []string, name string, isSubroutine bool, isIf bool, doLoopIdents map[string]bool) ([]string, []statement, string, error) {
+func readStatements(r *bufio.Reader, line string, tokens []string, name string, isSubroutine bool, isIf bool, doLoopIdents []string) ([]string, []statement, string, error) {
 	var parameters []string
 	if len(tokens) > 1 && tokens[1] == "(" {
 		const callParameters = false
@@ -153,8 +153,130 @@ func readStatements(r *bufio.Reader, line string, tokens []string, name string, 
 		parameters = params
 	}
 
-	// TODO
-	return parameters, []statement{}, "", errors.New("Not implemented")
+	var statements []statement
+	for {
+		line, err := readLine(r)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if ok, tokens := tokenizeLine(line, "LET"); ok {
+			if len(tokens) != 3 || !isIdentifier(tokens[0]) || !isIdentifierOr0(tokens[2]) {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			stmtType := stmtLetEq
+			switch tokens[1] {
+			case "=":
+			case ">":
+				stmtType = stmtLetMkEdge
+			case "<":
+				stmtType = stmtLetRmEdge
+				if !isIdentifier(tokens[2]) {
+					return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+				}
+			default:
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			statements = append(statements, statement{
+				stmtType:   stmtType,
+				parameters: []string{tokens[0], tokens[2]},
+			})
+		} else if ok, tokens := tokenizeLine(line, "IF"); ok {
+			if len(tokens) != 3 || !isIdentifier(tokens[0]) || (tokens[1] != "=" && tokens[1] != ">") || !isIdentifier(tokens[2]) {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			seenElse := false
+			// TODO
+			_ = seenElse
+		} else if ok, tokens := tokenizeLine(line, "ELSE"); ok {
+			if !isIf {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			if len(tokens) == 0 {
+			} else if len(tokens) == 4 && tokens[0] == "IF" && isIdentifier(tokens[1]) && (tokens[2] == "=" || tokens[2] == ">") && isIdentifier(tokens[3]) {
+			} else {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			return parameters, statements, line, nil
+		} else if ok, tokens := tokenizeLine(line, "DO"); ok {
+			statement := statement{}
+			if len(tokens) == 1 {
+				if !isIdentifier(tokens[0]) {
+					return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+				}
+				statement.stmtType = stmtDoLoop
+				statement.parameters = []string{tokens[0]}
+			} else if len(tokens) == 3 {
+				if !isIdentifier(tokens[0]) || tokens[1] != "<" || !isIdentifier(tokens[2]) {
+					return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+				}
+				statement.stmtType = stmtDoEdges
+				statement.parameters = []string{tokens[0], tokens[2]}
+			} else {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			doLoopIdents = append(doLoopIdents, tokens[0])
+			_, doStatements, _, err := readStatements(r, line, tokens, "DO", isSubroutine, false, doLoopIdents)
+			if err != nil {
+				return nil, nil, "", err
+			}
+			doLoopIdents = doLoopIdents[:len(doLoopIdents)-1]
+			statement.statements = doStatements
+			statements = append(statements, statement)
+		} else if ok, tokens := tokenizeLine(line, "CALL"); ok {
+			var stmtParams []string
+			if len(tokens) < 3 || !isIdentifier(tokens[0]) {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			if tokens[1] == "." && isIdentifier(tokens[2]) {
+				stmtParams = append(stmtParams, tokens[0], tokens[2])
+				tokens = tokens[3:]
+			} else {
+				stmtParams = append(stmtParams, "", tokens[0])
+				tokens = tokens[1:]
+			}
+			callParams, err := readParameters(line, tokens, true)
+			if err != nil {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			for _, param := range callParams {
+				stmtParams = append(stmtParams, param)
+			}
+			statements = append(statements, statement{
+				stmtType:   stmtCall,
+				parameters: stmtParams,
+			})
+		} else if ok, tokens := tokenizeLine(line, "RETURN"); ok {
+			if !isSubroutine || len(tokens) != 0 {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			statements = append(statements, statement{stmtType: stmtReturn})
+		} else if ok, tokens := tokenizeLine(line, "EXIT"); ok {
+			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			withinDoLoop := false
+			for _, doLoopIdent := range doLoopIdents {
+				if tokens[0] == doLoopIdent {
+					withinDoLoop = true
+					break
+				}
+			}
+			if !withinDoLoop {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			statements = append(statements, statement{
+				stmtType:   stmtExit,
+				parameters: []string{tokens[0]},
+			})
+		} else if ok, tokens := tokenizeLine(line, "END"); ok {
+			if len(tokens) != 1 || tokens[0] != name {
+				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+			}
+			return parameters, statements, line, nil
+		} else {
+			return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+		}
+	}
 }
 
 func readParameters(line string, tokens []string, callParameters bool) ([]string, error) {
