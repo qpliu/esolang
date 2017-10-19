@@ -88,6 +88,10 @@ func parse(r *bufio.Reader) (*program, error) {
 		} else {
 			return nil, errors.New("SYNTAX ERROR: " + line)
 		}
+		line, err = readLine(r)
+		if err != nil {
+			return nil, err
+		}
 	}
 	line, err = readLine(r)
 	if err != io.EOF {
@@ -184,16 +188,56 @@ func readStatements(r *bufio.Reader, line string, tokens []string, name string, 
 			if len(tokens) != 3 || !isIdentifier(tokens[0]) || (tokens[1] != "=" && tokens[1] != ">") || !isIdentifier(tokens[2]) {
 				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
 			}
-			seenElse := false
-			// TODO
-			_ = seenElse
-		} else if ok, tokens := tokenizeLine(line, "ELSE"); ok {
-			if !isIf {
+			var ifBranches []statement
+			for {
+				_, ifBranchStmts, nextLine, err := readStatements(r, line, nil, "IF", isSubroutine, true, doLoopIdents)
+				if err != nil {
+					return nil, nil, "", err
+				}
+				ifBranch := statement{statements: ifBranchStmts}
+				seenElse := false
+				if len(tokens) == 0 {
+					ifBranch.stmtType = stmtElse
+					seenElse = true
+				} else if len(tokens) != 3 || !isIdentifier(tokens[0]) || (tokens[1] != "=" && tokens[1] != ">") || !isIdentifier(tokens[2]) {
+					return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+				} else if tokens[1] == "=" {
+					ifBranch.stmtType = stmtIfEq
+					ifBranch.parameters = []string{tokens[0], tokens[2]}
+				} else if tokens[1] == ">" {
+					ifBranch.stmtType = stmtIfEdge
+					ifBranch.parameters = []string{tokens[0], tokens[2]}
+				}
+				ifBranches = append(ifBranches, ifBranch)
+				line = nextLine
+				if ok, tokens := tokenizeLine(line, "ENDIF"); ok {
+					if len(tokens) != 0 {
+						return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+					}
+					break
+				}
+				if seenElse {
+					return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+				}
+				ok, tokens = tokenizeLine(line, "ELSEIF")
+				if !ok {
+					ok, tokens = tokenizeLine(line, "ELSE")
+					if !ok {
+						return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
+					}
+				}
+			}
+			statements = append(statements, statement{
+				stmtType:   stmtIf,
+				statements: ifBranches,
+			})
+		} else if ok, tokens := tokenizeLine(line, "ELSEIF"); ok {
+			if !isIf || len(tokens) != 3 || !isIdentifier(tokens[0]) || (tokens[1] != "=" && tokens[1] != ">") || !isIdentifier(tokens[2]) {
 				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
 			}
-			if len(tokens) == 0 {
-			} else if len(tokens) == 4 && tokens[0] == "IF" && isIdentifier(tokens[1]) && (tokens[2] == "=" || tokens[2] == ">") && isIdentifier(tokens[3]) {
-			} else {
+			return parameters, statements, line, nil
+		} else if ok, tokens := tokenizeLine(line, "ELSE"); ok {
+			if !isIf || len(tokens) != 0 {
 				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
 			}
 			return parameters, statements, line, nil
@@ -205,17 +249,14 @@ func readStatements(r *bufio.Reader, line string, tokens []string, name string, 
 				}
 				statement.stmtType = stmtDoLoop
 				statement.parameters = []string{tokens[0]}
-			} else if len(tokens) == 3 {
-				if !isIdentifier(tokens[0]) || tokens[1] != "<" || !isIdentifier(tokens[2]) {
-					return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
-				}
+			} else if len(tokens) == 3 && isIdentifier(tokens[0]) && tokens[1] == "<" && isIdentifier(tokens[2]) {
 				statement.stmtType = stmtDoEdges
 				statement.parameters = []string{tokens[0], tokens[2]}
 			} else {
 				return nil, nil, "", errors.New("SYNTAX ERROR: " + line)
 			}
 			doLoopIdents = append(doLoopIdents, tokens[0])
-			_, doStatements, _, err := readStatements(r, line, tokens, "DO", isSubroutine, false, doLoopIdents)
+			_, doStatements, _, err := readStatements(r, line, nil, "DO", isSubroutine, false, doLoopIdents)
 			if err != nil {
 				return nil, nil, "", err
 			}
@@ -285,7 +326,7 @@ func readParameters(line string, tokens []string, callParameters bool) ([]string
 		return nil, errors.New("SYNTAX ERROR: " + line)
 	}
 	for i, token := range tokens[1 : len(tokens)-1] {
-		if i%2 != 0 {
+		if i%2 == 0 {
 			if callParameters {
 				if !isIdentifierOr0(token) {
 					return nil, errors.New("SYNTAX ERROR: " + line)
@@ -427,7 +468,7 @@ func unparse(w io.Writer, program *program) error {
 	}
 	if len(program.library) > 0 {
 		if len(program.statements) > 0 {
-			panic("INVALID MODULE")
+			return errors.New("INVALID MODULE")
 		}
 		if _, err := io.WriteString(w, "LIBRARY "+program.name+"\n"); err != nil {
 			return err
@@ -506,7 +547,7 @@ func unparseStatement(w io.Writer, indent int, statement statement) error {
 		}
 	case stmtIf:
 		if len(statement.statements) == 0 {
-			panic("INVALID IF STATEMENT")
+			return errors.New("INVALID IF STATEMENT")
 		}
 		seenElse := false
 		for i, stmt := range statement.statements {
@@ -518,7 +559,7 @@ func unparseStatement(w io.Writer, indent int, statement statement) error {
 			switch stmt.stmtType {
 			case stmtIfEq, stmtIfEdge:
 				if seenElse {
-					panic("INVALID IF STATEMENT")
+					return errors.New("INVALID IF STATEMENT")
 				}
 				if i > 0 {
 					if _, err := io.WriteString(w, "ELSE "); err != nil {
@@ -536,13 +577,13 @@ func unparseStatement(w io.Writer, indent int, statement statement) error {
 				}
 			case stmtElse:
 				if i == 0 {
-					panic("INVALID IF STATEMENT")
+					return errors.New("INVALID IF STATEMENT")
 				}
 				if _, err := io.WriteString(w, "ELSE\n"); err != nil {
 					return err
 				}
 			default:
-				panic("INVALID IF STATEMENT")
+				return errors.New("INVALID IF STATEMENT")
 			}
 			for _, innerStmt := range stmt.statements {
 				if err := unparseStatement(w, indent+1, innerStmt); err != nil {
@@ -558,7 +599,7 @@ func unparseStatement(w io.Writer, indent int, statement statement) error {
 		}
 		return nil
 	case stmtIfEq, stmtIfEdge, stmtElse:
-		panic("INVALID STATEMENT")
+		return errors.New("INVALID STATEMENT")
 	case stmtDoLoop, stmtDoEdges:
 		if statement.stmtType == stmtDoLoop {
 			if _, err := io.WriteString(w, "DO "+statement.parameters[0]+"\n"); err != nil {
@@ -602,7 +643,7 @@ func unparseStatement(w io.Writer, indent int, statement statement) error {
 			return err
 		}
 	default:
-		panic("INVALID STATEMENT")
+		return errors.New("INVALID STATEMENT")
 	}
 	return nil
 }
