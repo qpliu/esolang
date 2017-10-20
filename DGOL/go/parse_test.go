@@ -356,6 +356,15 @@ LIBRARY A
   SUBROUTINE B
 END A
 `, "UNDECLARED LIBRARY: D")
+	testParseError(t, `USE C
+SUBROUTINE B()
+  IF A = A
+    CALL D.E()
+  END IF
+END B
+LIBRARY A
+END A
+`, "EMPTY LIBRARY: ENDA")
 }
 
 func testParseSuccess(t *testing.T, code string) {
@@ -479,6 +488,7 @@ func TestIsIdentifier(t *testing.T) {
 		{"007", true, true},
 		{"<", false, false},
 		{"AB1", true, true},
+		{"", false, false},
 	} {
 		if isIdentifier(data.s) != data.id {
 			t.Errorf("isIdentifier %s %v", data.s, data.id)

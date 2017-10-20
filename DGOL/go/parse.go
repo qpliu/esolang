@@ -63,12 +63,9 @@ func parse(r *bufio.Reader) (*program, error) {
 			const isSubroutine = false
 			const isIf = false
 			var doLoopIdents []string
-			parameters, statements, _, err := readStatements(r, line, tokens, name, isSubroutine, isIf, doLoopIdents)
+			_, statements, _, err := readStatements(r, line, nil, name, isSubroutine, isIf, doLoopIdents)
 			if err != nil {
 				return nil, err
-			}
-			if len(parameters) != 0 {
-				return nil, errors.New("SYNTAX ERROR: " + line)
 			}
 			program.name = name
 			program.statements = statements
@@ -356,13 +353,13 @@ func readLibrary(r *bufio.Reader, name string, program *program) ([]string, erro
 	for {
 		line, err := readLine(r)
 		if err == io.EOF {
-			return library, errors.New("UNEXPECTED EOF")
+			return nil, errors.New("UNEXPECTED EOF")
 		} else if err != nil {
-			return library, err
+			return nil, err
 		}
 		if ok, tokens := tokenizeLine(line, "SUBROUTINE"); ok {
 			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
-				return library, errors.New("SYNTAX ERROR: " + line)
+				return nil, errors.New("SYNTAX ERROR: " + line)
 			}
 			defined := false
 			for _, subroutine := range program.subroutines {
@@ -372,16 +369,19 @@ func readLibrary(r *bufio.Reader, name string, program *program) ([]string, erro
 				}
 			}
 			if !defined {
-				return library, errors.New("UNDEFINED SUBROUTINE: " + tokens[0])
+				return nil, errors.New("UNDEFINED SUBROUTINE: " + tokens[0])
 			}
 			library = append(library, tokens[0])
 		} else if ok, tokens := tokenizeLine(line, "END"); ok {
 			if len(tokens) != 1 || tokens[0] != name {
-				return library, errors.New("SYNTAX ERROR: " + line)
+				return nil, errors.New("SYNTAX ERROR: " + line)
+			}
+			if len(library) == 0 {
+				return nil, errors.New("EMPTY LIBRARY: " + line)
 			}
 			return library, nil
 		} else {
-			return library, errors.New("SYNTAX ERROR: " + line)
+			return nil, errors.New("SYNTAX ERROR: " + line)
 		}
 	}
 }
