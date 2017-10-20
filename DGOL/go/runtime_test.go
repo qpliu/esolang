@@ -89,7 +89,7 @@ func makeTestLibs(b *bytes.Buffer) map[string]map[string]func([]*vrbl) {
 }
 
 func testLinkError(t *testing.T, source []string, errMsg string) {
-	var modules []*program
+	var modules []*module
 	for _, src := range source {
 		module, err := parse(bufio.NewReader(bytes.NewBufferString(src)))
 		if err != nil {
@@ -108,7 +108,7 @@ func testLinkError(t *testing.T, source []string, errMsg string) {
 }
 
 func testRun(t *testing.T, source []string, expected string) {
-	var modules []*program
+	var modules []*module
 	for _, src := range source {
 		module, err := parse(bufio.NewReader(bytes.NewBufferString(src)))
 		if err != nil {
@@ -198,6 +198,28 @@ PROGRAM C
   CALL B.B()
 END C`,
 	}, "UNRESOLVED CALL: A.B")
+	testLinkError(t, []string{
+		`SUBROUTINE A()
+  CALL A2()
+END A
+SUBROUTINE A2()
+END A2
+LIBRARY A
+  SUBROUTINE A
+END A`,
+		`USE A
+SUBROUTINE B()
+  CALL A.A2()
+END B
+LIBRARY B
+  SUBROUTINE B
+END B`,
+		`USE A
+USE B
+PROGRAM C
+  CALL B.B()
+END C`,
+	}, "UNRESOLVED CALL: A.A2")
 
 	testRun(t, []string{
 		`USE TEST
@@ -347,10 +369,24 @@ PROGRAM A
   CALL B(A)
 END A`,
 	}, "ABC")
+
+	testRun(t, []string{
+		`USE TEST
+SUBROUTINE Z()
+  CALL TEST.A()
+END Z
+LIBRARY Z
+  SUBROUTINE Z
+END Z`,
+		`USE Z
+PROGRAM P
+  CALL Z.Z()
+END P`,
+	}, "A")
 }
 
 func runExample(source []string) {
-	var modules []*program
+	var modules []*module
 	for _, src := range source {
 		module, err := parse(bufio.NewReader(bytes.NewBufferString(src)))
 		if err != nil {

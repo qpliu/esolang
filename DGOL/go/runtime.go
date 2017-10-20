@@ -18,7 +18,7 @@ type scope struct {
 	vrbls      map[string]*vrbl
 }
 
-func link(modules []*program, stdlibs map[string]map[string]func([]*vrbl)) (func(), error) {
+func link(modules []*module, stdlibs map[string]map[string]func([]*vrbl)) (func(), error) {
 	var main func([]*vrbl)
 	routines := make(map[string]func([]*vrbl))
 	public := make(map[string]bool)

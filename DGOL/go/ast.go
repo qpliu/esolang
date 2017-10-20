@@ -1,6 +1,6 @@
 package main
 
-type program struct {
+type module struct {
 	uses        []string
 	subroutines []subroutine
 	name        string

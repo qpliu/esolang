@@ -368,13 +368,13 @@ END A
 }
 
 func testParseSuccess(t *testing.T, code string) {
-	program, err := parse(bufio.NewReader(bytes.NewBufferString(code)))
+	module, err := parse(bufio.NewReader(bytes.NewBufferString(code)))
 	if err != nil {
 		t.Errorf("parse: err=%s", err.Error())
 		return
 	}
 	buf := bytes.Buffer{}
-	err = unparse(&buf, program)
+	err = unparse(&buf, module)
 	if err != nil {
 		t.Errorf("unparse: err=%s", err.Error())
 	}
@@ -500,7 +500,7 @@ func TestIsIdentifier(t *testing.T) {
 }
 
 func TestUnparse(t *testing.T) {
-	program := &program{
+	module := &module{
 		uses: []string{"LIBRARY"},
 		subroutines: []subroutine{
 			subroutine{
@@ -588,7 +588,7 @@ func TestUnparse(t *testing.T) {
 		},
 	}
 	buf := bytes.Buffer{}
-	err := unparse(&buf, program)
+	err := unparse(&buf, module)
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}

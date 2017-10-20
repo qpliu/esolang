@@ -9,8 +9,8 @@ import (
 	"unicode"
 )
 
-func parse(r *bufio.Reader) (*program, error) {
-	program := &program{}
+func parse(r *bufio.Reader) (*module, error) {
+	module := &module{}
 	line, err := readLine(r)
 	if err != nil {
 		return nil, err
@@ -20,12 +20,12 @@ func parse(r *bufio.Reader) (*program, error) {
 			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
 				return nil, errors.New("SYNTAX ERROR: " + line)
 			}
-			for _, use := range program.uses {
+			for _, use := range module.uses {
 				if tokens[0] == use {
 					return nil, errors.New("DUPLICATE USE: " + line)
 				}
 			}
-			program.uses = append(program.uses, tokens[0])
+			module.uses = append(module.uses, tokens[0])
 		} else if strings.HasPrefix(line, "SUBROUTINE") || strings.HasPrefix(line, "PROGRAM") || strings.HasPrefix(line, "LIBRARY") {
 			break
 		} else {
@@ -42,7 +42,7 @@ func parse(r *bufio.Reader) (*program, error) {
 				return nil, errors.New("SYNTAX ERROR: " + line)
 			}
 			name := tokens[0]
-			for _, subroutine := range program.subroutines {
+			for _, subroutine := range module.subroutines {
 				if name == subroutine.name {
 					return nil, errors.New("DUPLICATE SUBROUTINE: " + line)
 				}
@@ -54,7 +54,7 @@ func parse(r *bufio.Reader) (*program, error) {
 			if err != nil {
 				return nil, err
 			}
-			program.subroutines = append(program.subroutines, subroutine{name, parameters, statements})
+			module.subroutines = append(module.subroutines, subroutine{name, parameters, statements})
 		} else if ok, tokens := tokenizeLine(line, "PROGRAM"); ok {
 			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
 				return nil, errors.New("SYNTAX ERROR: " + line)
@@ -67,20 +67,20 @@ func parse(r *bufio.Reader) (*program, error) {
 			if err != nil {
 				return nil, err
 			}
-			program.name = name
-			program.statements = statements
+			module.name = name
+			module.statements = statements
 			break
 		} else if ok, tokens := tokenizeLine(line, "LIBRARY"); ok {
 			if len(tokens) != 1 || !isIdentifier(tokens[0]) {
 				return nil, errors.New("SYNTAX ERROR: " + line)
 			}
 			name := tokens[0]
-			library, err := readLibrary(r, name, program)
+			library, err := readLibrary(r, name, module)
 			if err != nil {
 				return nil, err
 			}
-			program.name = name
-			program.library = library
+			module.name = name
+			module.library = library
 			break
 		} else {
 			return nil, errors.New("SYNTAX ERROR: " + line)
@@ -96,23 +96,23 @@ func parse(r *bufio.Reader) (*program, error) {
 	}
 
 	uses := make(map[string]bool)
-	for _, use := range program.uses {
+	for _, use := range module.uses {
 		uses[use] = true
 	}
 	subroutines := make(map[string]bool)
-	for _, subroutine := range program.subroutines {
+	for _, subroutine := range module.subroutines {
 		subroutines[subroutine.name] = true
 	}
-	for _, subroutine := range program.subroutines {
+	for _, subroutine := range module.subroutines {
 		if err := checkCalls(uses, subroutines, subroutine.statements); err != nil {
 			return nil, err
 		}
 	}
-	if err := checkCalls(uses, subroutines, program.statements); err != nil {
+	if err := checkCalls(uses, subroutines, module.statements); err != nil {
 		return nil, err
 	}
 
-	return program, nil
+	return module, nil
 }
 
 func readLine(r *bufio.Reader) (string, error) {
@@ -348,7 +348,7 @@ func readParameters(line string, tokens []string, callParameters bool) ([]string
 	return parameters, nil
 }
 
-func readLibrary(r *bufio.Reader, name string, program *program) ([]string, error) {
+func readLibrary(r *bufio.Reader, name string, module *module) ([]string, error) {
 	var library []string
 	for {
 		line, err := readLine(r)
@@ -362,7 +362,7 @@ func readLibrary(r *bufio.Reader, name string, program *program) ([]string, erro
 				return nil, errors.New("SYNTAX ERROR: " + line)
 			}
 			defined := false
-			for _, subroutine := range program.subroutines {
+			for _, subroutine := range module.subroutines {
 				if tokens[0] == subroutine.name {
 					defined = true
 					break
@@ -443,13 +443,13 @@ func checkCalls(uses, subroutines map[string]bool, statements []statement) error
 	return nil
 }
 
-func unparse(w io.Writer, program *program) error {
-	for _, use := range program.uses {
+func unparse(w io.Writer, module *module) error {
+	for _, use := range module.uses {
 		if _, err := io.WriteString(w, "USE "+use+"\n"); err != nil {
 			return err
 		}
 	}
-	for _, subroutine := range program.subroutines {
+	for _, subroutine := range module.subroutines {
 		if _, err := io.WriteString(w, "SUBROUTINE "+subroutine.name); err != nil {
 			return err
 		}
@@ -466,14 +466,14 @@ func unparse(w io.Writer, program *program) error {
 			return err
 		}
 	}
-	if len(program.library) > 0 {
-		if len(program.statements) > 0 {
+	if len(module.library) > 0 {
+		if len(module.statements) > 0 {
 			return errors.New("INVALID MODULE")
 		}
-		if _, err := io.WriteString(w, "LIBRARY "+program.name+"\n"); err != nil {
+		if _, err := io.WriteString(w, "LIBRARY "+module.name+"\n"); err != nil {
 			return err
 		}
-		for _, library := range program.library {
+		for _, library := range module.library {
 			const indent = 1
 			if err := unparseIndent(w, indent); err != nil {
 				return err
@@ -483,17 +483,17 @@ func unparse(w io.Writer, program *program) error {
 			}
 		}
 	} else {
-		if _, err := io.WriteString(w, "PROGRAM "+program.name+"\n"); err != nil {
+		if _, err := io.WriteString(w, "PROGRAM "+module.name+"\n"); err != nil {
 			return err
 		}
-		for _, statement := range program.statements {
+		for _, statement := range module.statements {
 			const indent = 1
 			if err := unparseStatement(w, indent, statement); err != nil {
 				return err
 			}
 		}
 	}
-	if _, err := io.WriteString(w, "END "+program.name+"\n"); err != nil {
+	if _, err := io.WriteString(w, "END "+module.name+"\n"); err != nil {
 		return err
 	}
 	return nil
