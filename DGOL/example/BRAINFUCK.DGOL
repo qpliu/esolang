@@ -1,0 +1,380 @@
+USE IO
+
+SUBROUTINE READ CODE(INITIAL IP, NEXT, PREVIOUS, PLUS, MINUS, LEFT, RIGHT, OPEN, CLOSE, READ, WRITE)
+  LET INITIAL IP = 0
+  LET IP = INITIAL IP
+
+  LET FIRST > FIRST
+  DO LOOP
+    CALL IO.READBYTE(BYTE, EOF, BIT1, BIT2, BIT4, BIT8, BIT10, BIT20, BIT40, BIT 80)
+    IF BYTE > EOF
+      EXIT LOOP
+    END IF
+
+    * ! = 21
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT10
+    ELSE IF BYTE > BIT8
+    ELSE IF BYTE > BIT4
+    ELSE IF BYTE > BIT2
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT1
+        EXIT LOOP
+      END IF
+    END IF
+
+    LET UNRECOGNIZED > UNRECOGNIZED
+
+    * + = 2B
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT10
+    ELSE IF BYTE > BIT4
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT8
+        IF BYTE > BIT2
+          IF BYTE > BIT1
+            LET UNRECOGNIZED < UNRECOGNIZED
+            LET INSTRUCTION = PLUS
+          END IF
+        END IF
+      END IF
+    END IF
+
+    * - = 2D
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT10
+    ELSE IF BYTE > BIT2
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT8
+        IF BYTE > BIT4
+          IF BYTE > BIT1
+            LET UNRECOGNIZED < UNRECOGNIZED
+            LET INSTRUCTION = MINUS
+          END IF
+        END IF
+      END IF
+    END IF
+
+    * < = 3C
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT2
+    ELSE IF BYTE > BIT1
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT10
+        IF BYTE > BIT8
+          IF BYTE > BIT4
+            LET UNRECOGNIZED < UNRECOGNIZED
+            LET INSTRUCTION = LEFT
+          END IF
+        END IF
+      END IF
+    END IF
+
+    * > = 3E
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT1
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT10
+        IF BYTE > BIT8
+          IF BYTE > BIT4
+            IF BYTE > BIT2
+              LET UNRECOGNIZED < UNRECOGNIZED
+              LET INSTRUCTION = RIGHT
+            END IF
+          END IF
+        END IF
+      END IF
+    END IF
+
+    * [ = 5B
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT20
+    ELSE IF BYTE > BIT4
+    ELSE IF BYTE > BIT40
+      IF BYTE > BIT10
+        IF BYTE > BIT8
+          IF BYTE > BIT2
+            IF BYTE > BIT1
+              LET UNRECOGNIZED < UNRECOGNIZED
+              LET INSTRUCTION = OPEN
+            END IF
+          END IF
+        END IF
+      END IF
+    END IF
+
+    * ] = 5D
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT20
+    ELSE IF BYTE > BIT2
+    ELSE IF BYTE > BIT40
+      IF BYTE > BIT10
+        IF BYTE > BIT8
+          IF BYTE > BIT4
+            IF BYTE > BIT1
+              LET UNRECOGNIZED < UNRECOGNIZED
+              LET INSTRUCTION = CLOSE
+            END IF
+          END IF
+        END IF
+      END IF
+    END IF
+
+    * , = 2C
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT10
+    ELSE IF BYTE > BIT2
+    ELSE IF BYTE > BIT1
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT8
+        IF BYTE > BIT4
+          LET UNRECOGNIZED < UNRECOGNIZED
+          LET INSTRUCTION = READ
+        END IF
+      END IF
+    END IF
+
+    * . = 2E
+    IF BYTE > BIT80
+    ELSE IF BYTE > BIT40
+    ELSE IF BYTE > BIT10
+    ELSE IF BYTE > BIT1
+    ELSE IF BYTE > BIT20
+      IF BYTE > BIT8
+        IF BYTE > BIT4
+          IF BYTE > BIT2
+            LET UNRECOGNIZED < UNRECOGNIZED
+            LET INSTRUCTION = WRITE
+          END IF
+        END IF
+      END IF
+    END IF
+
+    IF UNRECOGNIZED > UNRECOGNIZED
+    ELSE
+      IF FIRST > FIRST
+        LET FIRST < FIRST
+      ELSE
+        LET NEXT IP = 0
+        LET LINK TO NEXT = 0
+        LET LINK TO NEXT > NEXT IP
+        LET LINK TO NEXT > NEXT
+        LET IP > LINK TO NEXT
+        LET LINK TO PREVIOUS = 0
+        LET LINK TO PREVIOUS > IP
+        LET LINK TO PREVIOUS > PREVIOUS
+        LET NEXT IP > LINK TO PREVIOUS
+        LET IP = NEXT IP
+      END IF
+      LET IP > INSTRUCTION
+    END IF
+  END DO
+END READ CODE
+
+SUBROUTINE MOVE POINTER(POINTER, LINK MARKER, BACK LINK MARKER, CREATE NEW CELL)
+  DO LINK < POINTER
+    IF LINK > LINK MARKER
+      DO NEXT POINTER < LINK
+        IF NEXT POINTER = LINK MARKER
+        ELSE
+          LET POINTER = NEXT POINTER
+          RETURN
+        END IF
+      END DO
+    END IF
+  END DO
+  IF CREATE NEW CELL > CREATE NEW CELL
+    LET POINTER > NEW LINK
+    LET NEW LINK > LINK MARKER
+    LET NEW LINK > NEW CELL
+    LET NEW CELL > BACK LINK
+    LET BACK LINK > BACK LINK MARKER
+    LET BACK LINK > POINTER
+    LET POINTER = NEW CELL
+  ELSE
+    LET POINTER = 0
+    LET POINTER > POINTER
+  END IF
+END MOVE POINTER
+
+SUBROUTINE SKIP LOOP FORWARD(IP, NEXT, OPEN, CLOSE)
+  DO LOOP
+    CALL MOVE POINTER(IP, NEXT)
+    IF IP > IP
+      RETURN
+    ELSE IF IP > CLOSE
+      RETURN
+    ELSE IF IP > OPEN
+      CALL SKIP LOOP FORWARD(IP, NEXT, OPEN, CLOSE)
+    END IF
+  END DO
+END SKIP LOOP FORWARD
+
+SUBROUTINE SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+  DO LOOP
+    CALL MOVE POINTER(IP, PREVIOUS)
+    IF IP > IP
+      RETURN
+    ELSE IF IP > OPEN
+      RETURN
+    ELSE IF IP > CLOSE
+      CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+    END IF
+  END DO
+END SKIP LOOP BACKWARD
+
+SUBROUTINE INTERPRET(IP, NEXT, PREVIOUS, PLUS, MINUS, LEFT, RIGHT, OPEN, CLOSE, READ, WRITE)
+  DO LOOP
+
+    IF IP > PLUS
+      IF MEMORY > BIT1
+        LET MEMORY < BIT1
+        IF MEMORY > BIT2
+          LET MEMORY < BIT2
+          IF MEMORY > BIT4
+            LET MEMORY < BIT4
+            IF MEMORY > BIT8
+              LET MEMORY < BIT8
+              IF MEMORY > BIT10
+                LET MEMORY < BIT10
+                IF MEMORY > BIT20
+                  LET MEMORY < BIT20
+                  IF MEMORY > BIT40
+                    LET MEMORY < BIT40
+                    IF MEMORY > BIT80
+                      LET MEMORY < BIT80
+                    ELSE
+                     LET MEMORY > BIT80
+                    END IF
+                  ELSE
+                   LET MEMORY > BIT40
+                  END IF
+                ELSE
+                 LET MEMORY > BIT20
+                END IF
+              ELSE
+               LET MEMORY > BIT10
+              END IF
+            ELSE
+             LET MEMORY > BIT8
+            END IF
+          ELSE
+           LET MEMORY > BIT4
+          END IF
+        ELSE
+          LET MEMORY > BIT2
+        END IF
+      ELSE
+        LET MEMORY > BIT1
+      END IF
+
+    ELSE IF IP > MINUS
+      IF MEMORY > BIT1
+        LET MEMORY < BIT1
+      ELSE
+        LET MEMORY > BIT1
+        IF MEMORY > BIT2
+          LET MEMORY < BIT2
+        ELSE
+          LET MEMORY > BIT2
+          IF MEMORY > BIT4
+            LET MEMORY < BIT4
+          ELSE
+            LET MEMORY > BIT4
+            IF MEMORY > BIT8
+              LET MEMORY < BIT8
+            ELSE
+              LET MEMORY > BIT8
+              IF MEMORY > BIT10
+                LET MEMORY < BIT10
+              ELSE
+                LET MEMORY > BIT10
+                IF MEMORY > BIT20
+                  LET MEMORY < BIT20
+                ELSE
+                  LET MEMORY > BIT20
+                  IF MEMORY > BIT40
+                    LET MEMORY < BIT40
+                  ELSE
+                    LET MEMORY > BIT40
+                    IF MEMORY > BIT80
+                      LET MEMORY < BIT80
+                    ELSE
+                      LET MEMORY > BIT80
+                    END IF    
+                  END IF    
+                END IF    
+              END IF    
+            END IF    
+          END IF    
+        END IF    
+      END IF    
+
+    ELSE IF IP > LEFT
+      LET CREATE NEW CELL > CREATE NEW CELL
+      CALL MOVE POINTER(MEMORY, PREVIOUS, NEXT, CREATE NEW CELL)
+
+    ELSE IF IP > RIGHT
+      LET CREATE NEW CELL > CREATE NEW CELL
+      CALL MOVE POINTER(MEMORY, NEXT, PREVIOUS, CREATE NEW CELL)
+
+    ELSE IF IP > OPEN
+      IF MEMORY > BIT1
+      ELSE IF MEMORY > BIT2
+      ELSE IF MEMORY > BIT4
+      ELSE IF MEMORY > BIT8
+      ELSE IF MEMORY > BIT10
+      ELSE IF MEMORY > BIT20
+      ELSE IF MEMORY > BIT40
+      ELSE IF MEMORY > BIT80
+      ELSE
+        CALL SKIP LOOP FORWARD(IP, NEXT, OPEN, CLOSE)
+      END IF
+
+    ELSE IF IP > CLOSE
+      IF MEMORY > BIT1
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT2
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT4
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT8
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT10
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT20
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT40
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      ELSE IF MEMORY > BIT80
+        CALL SKIP LOOP BACKWARD(IP, PREVIOUS, OPEN, CLOSE)
+      END IF
+
+    ELSE IF IP > READ
+      CALL IO.READBYTE(MEMORY, EOF, BIT1, BIT2, BIT4, BIT8, BIT10, BIT20, BIT40, BIT80)
+      * MEMORY IS UNCHANGED ON EOF
+      * COULD SET MEMORY TO 00 OR FF IF EOF > EOF
+
+    ELSE IF IP > WRITE
+      CALL IO.WRITEBYTE(MEMORY, BIT1, BIT2, BIT4, BIT8, BIT10, BIT20, BIT40, BIT80)
+
+    ELSE
+      EXIT LOOP
+
+    END IF
+
+    CALL MOVE POINTER(IP, NEXT)
+
+  END DO
+END INTERPRET
+
+PROGRAM BRAINFUCK
+  CALL READ CODE(IP, NEXT, PREVIOUS, PLUS, MINUS, LEFT, RIGHT, OPEN, CLOSE, READ, WRITE)
+  CALL INTERPRET(IP, NEXT, PREVIOUS, PLUS, MINUS, LEFT, RIGHT, OPEN, CLOSE, READ, WRITE)
+END BRAINFUCK
