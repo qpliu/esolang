@@ -1,4 +1,4 @@
-module Scope(Scope,Var,new,push,pop,get,set,eq,addEdge,removeEdge,gc)
+module Scope(Scope,Var,new,push,pop,get,set,eq,hasEdge,addEdge,removeEdge,gc)
 where
 
 import qualified Data.Map as Map

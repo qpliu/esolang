@@ -219,17 +219,17 @@ check mod = checkMod mod
     checkMod (Ast.Library _ _ uses subroutines exports) = do
         useSet <- Monad.foldM checkDuplicateUses Set.empty uses
         subSet <- Monad.foldM checkDuplicateSubroutines Set.empty subroutines
-        mapM_ (checkCalls useSet subSet . getStatements) subroutines
-        mapM_ (checkExits . getStatements) subroutines
+        mapM_ (checkStatements (checkCall useSet subSet) () . getStatements) subroutines
+        mapM_ (checkStatements checkExit Set.empty . getStatements) subroutines
         Monad.foldM_ (checkExports subSet) Set.empty exports
     checkMod (Ast.Program _ _ uses subroutines program) = do
         useSet <- Monad.foldM checkDuplicateUses Set.empty uses
         subSet <- Monad.foldM checkDuplicateSubroutines Set.empty subroutines
-        mapM_ (checkCalls useSet subSet . getStatements) subroutines
-        mapM_ (checkExits . getStatements) subroutines
-        checkCalls useSet subSet program
-        checkExits program
-        checkReturns program
+        mapM_ (checkStatements (checkCall useSet subSet) () . getStatements) subroutines
+        mapM_ (checkStatements checkExit Set.empty . getStatements) subroutines
+        checkStatements (checkCall useSet subSet) () program
+        checkStatements checkExit Set.empty program
+        checkStatements checkReturn () program
     checkDuplicateUses useSet (Ast.Use loc name)
       | Set.member name useSet = locError loc "DUPLICATE USE"
       | otherwise = return (Set.insert name useSet)
@@ -237,10 +237,40 @@ check mod = checkMod mod
       | Set.member name subSet = locError loc "DUPLICATE SUBROUTINE"
       | otherwise = return (Set.insert name subSet)
     getStatements (Ast.Subroutine _ _ _ statements) = statements
-    checkCalls useSet subSet statements = undefined
-    checkExits statements = undefined
     checkExports subSet exportSet (Ast.Export loc name)
       | Set.member name exportSet = locError loc "DUPLICATE SUBROUTINE"
       | not (Set.member name subSet) = locError loc "UNDEFINED SUBROUTINE"
       | otherwise = return (Set.insert name exportSet)
-    checkReturns statements = undefined
+    checkCall useSet subSet () (Ast.Call loc lib name _)
+      | lib /= "" && not (Set.member lib useSet) = locError loc ("UNKNOWN LIBRARY " ++ lib)
+      | lib == "" && not (Set.member name subSet) = locError loc ("UNDEFINED SUBROUTINE " ++ name)
+    checkCall useSet subSet () _ = return ()
+    checkExit loops (Ast.DoLoop _ ident _) = return (Set.insert ident loops)
+    checkExit loops (Ast.DoEdges _ ident _ _) = return (Set.insert ident loops)
+    checkExit loops (Ast.Exit loc ident)
+      | Set.member ident loops = return loops
+      | otherwise = locError loc "INVALID EXIT"
+    checkExit loops _ = return loops
+    checkReturn () (Ast.Return loc) = locError loc "INVALID RETURN"
+    checkReturn () _ = return ()
+
+checkStatements :: (a -> Ast.Statement -> Either String a) -> a -> [Ast.Statement] -> Either String ()
+checkStatements checkStatement a statements = mapM_ check1 statements
+  where
+    check1 statement@(Ast.If ifBranches elseBranch) = do
+        a <- checkStatement a statement
+        mapM_ (checkIfBranch a) ifBranches
+        checkStatements checkStatement a elseBranch
+    check1 statement@(Ast.DoLoop _ _ body) = do
+        a <- checkStatement a statement
+        checkStatements checkStatement a body
+    check1 statement@(Ast.DoEdges _ _ _ body) = do
+        a <- checkStatement a statement
+        checkStatements checkStatement a body
+    check1 statement = do
+        checkStatement a statement
+        return ()
+    checkIfBranch a (Ast.IfEq _ _ _ body) =
+        checkStatements checkStatement a body
+    checkIfBranch a (Ast.IfEdge _ _ _ body) =
+        checkStatements checkStatement a body
