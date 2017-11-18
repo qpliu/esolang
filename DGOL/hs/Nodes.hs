@@ -1,4 +1,4 @@
-module Nodes(Nodes,Node,new,newNode,hasEdge,addEdge,removeEdge,gc)
+module Nodes(Nodes,Node,new,newNode,hasEdge,addEdge,removeEdge,edges,gc)
 where
 
 import qualified Data.Map as Map
@@ -24,6 +24,9 @@ addEdge (Nodes nodes) n1 n2 = Nodes (Map.adjust (Set.insert n2) n1 nodes)
 
 removeEdge :: Nodes -> Node -> Node -> Nodes
 removeEdge (Nodes nodes) n1 n2 = Nodes (Map.adjust (Set.delete n2) n1 nodes)
+
+edges :: Nodes -> Node -> [Node]
+edges (Nodes nodes) node = Set.toList (nodes Map.! node)
 
 gc :: Nodes -> [Node] -> Nodes
 gc (Nodes nodes) rootSet = Nodes (copyCollector rootSet Map.empty)
