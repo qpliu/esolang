@@ -12,9 +12,9 @@ type Subroutine = Scope.Scope -> [Scope.Var] -> IO Scope.Scope
 link :: [Ast.Module] -> [(String,Map.Map String Subroutine)] -> Either String (IO ())
 link modules stdlibs = do
     (Ast.Program _ _ _ _ prog) <- checkDuplicates modules
-    let exports = foldl collectExports Map.empty modules
-    let exports = foldl collectStdLibExports exports stdlibs
-    mapM_ (checkModuleCalls exports) modules
+    let exports1 = foldl collectExports Map.empty modules
+    let exports2 = foldl collectStdLibExports exports1 stdlibs
+    mapM_ (checkModuleCalls exports2) modules
     let libs = linkLibModules (Map.fromList stdlibs) modules
     let routine = linkRoutine libs "" prog []
     return (routine Scope.new [] >> return ())
@@ -75,9 +75,10 @@ checkModuleCalls exports mod =
         mapM_ checkStatementCalls statements
     checkStatementCalls (Ast.Call loc moduleName subroutineName _)
       | moduleName == "" = return ()
-      | maybe False (Set.member subroutineName) (Map.lookup moduleName exports) =
+      | maybe True (not . Set.member subroutineName) (Map.lookup moduleName exports) =
             locError loc "UNDEFINED SUBROUTINE"
       | otherwise = return ()
+    checkStatementCalls _ = return ()
     checkIfBranchCalls (Ast.IfEq _ _ _ statements) =
         mapM_ checkStatementCalls statements
     checkIfBranchCalls (Ast.IfEdge _ _ _ statements) =
@@ -97,11 +98,11 @@ linkLibModules stdlib modules = libs
 data Exit = Exit Ast.Name | Return | Fallthrough
 
 linkRoutine :: Map.Map String (Map.Map String Subroutine) -> Ast.Name -> [Ast.Statement] -> [Ast.Var] -> Subroutine
-linkRoutine libs libName statements params scope args = do
-    let scope = Scope.push scope
-    let scope = foldl bindParam scope (zip params (map Just args ++ repeat Nothing))
-    (_,scope) <- executeStatements scope statements
-    (return . Scope.gc . Scope.pop) scope
+linkRoutine libs libName statements params scope1 args = do
+    let scope2 = Scope.push scope1
+    let scope3 = foldl bindParam scope2 (zip params (map Just args ++ repeat Nothing))
+    (_,scope4) <- executeStatements scope3 statements
+    (return . Scope.gc . Scope.pop) scope4
   where
     bindParam scope (param,Just arg) = Scope.set scope param arg
     bindParam scope (param,Nothing) = snd (Scope.get scope param)
@@ -112,69 +113,67 @@ linkRoutine libs libName statements params scope args = do
         case exit of
             Fallthrough -> executeStatements scope statements
             _ -> return (exit,scope)
-    executeStatement scope (Ast.LetEq _ v1 v2) = do
-        let (var2,scope2) = Scope.get scope v2
+    executeStatement scope1 (Ast.LetEq _ v1 v2) = do
+        let (var2,scope2) = Scope.get scope1 v2
         return (Fallthrough,Scope.set scope2 v1 var2)
-    executeStatement scope (Ast.LetAddEdge _ v1 v2) = do
-        let (var1,scope1) = Scope.get scope v1
-        let (var2,scope2) = Scope.get scope1 v2
-        return (Fallthrough,Scope.addEdge scope2 var1 var2)
-    executeStatement scope (Ast.LetRemoveEdge _ v1 v2) = do
-        let (var1,scope1) = Scope.get scope v1
-        let (var2,scope2) = Scope.get scope1 v2
-        return (Fallthrough,Scope.removeEdge scope2 var1 var2)
+    executeStatement scope1 (Ast.LetAddEdge _ v1 v2) = do
+        let (var1,scope2) = Scope.get scope1 v1
+        let (var2,scope3) = Scope.get scope2 v2
+        return (Fallthrough,Scope.addEdge scope3 var1 var2)
+    executeStatement scope1 (Ast.LetRemoveEdge _ v1 v2) = do
+        let (var1,scope2) = Scope.get scope1 v1
+        let (var2,scope3) = Scope.get scope2 v2
+        return (Fallthrough,Scope.removeEdge scope3 var1 var2)
     executeStatement scope (Ast.If ifBranches elseBranch) = do
         executeIf scope ifBranches elseBranch
-    executeStatement scope (Ast.Call _ modName subName callArgs) = do
-        let (reverseArgs,scope) = foldl evalCallArg ([],scope) callArgs
-        let modName = if modName == "" then libName else modName
-        scope <- ((libs Map.! modName) Map.! subName) scope (reverse reverseArgs)
-        return (Fallthrough,scope)
+    executeStatement scope1 (Ast.Call _ modName subName callArgs) = do
+        let (reverseArgs,scope2) = foldl evalCallArg ([],scope1) callArgs
+        let modName2 = if modName == "" then libName else modName
+        scope3 <- ((libs Map.! modName2) Map.! subName) scope2 (reverse reverseArgs)
+        return (Fallthrough,scope3)
     executeStatement scope (Ast.Return _) = do
         return (Return,scope)
-    executeStatement scope doLoop@(Ast.DoLoop _ label statements) = do
-        (exit,scope) <- executeStatements scope statements
-        let scope = Scope.gc scope
+    executeStatement scope1 doLoop@(Ast.DoLoop _ label statements) = do
+        (exit,scope2) <- executeStatements scope1 statements
+        let scope3 = Scope.gc scope2
         case exit of
-            Fallthrough -> executeStatement scope doLoop
+            Fallthrough -> executeStatement scope3 doLoop
             Exit exitLabel ->
                 if label == exitLabel
-                    then return (Fallthrough,scope)
-                    else return (exit,scope)
-            _ -> return (exit,scope)
-    executeStatement scope (Ast.DoEdges _ v1 v2 statements) = do
-        let (var2,scope) = Scope.get scope v2
-        let (edges,scope) = Scope.edges scope var2
-        let scope = Scope.pushDoEdges scope edges
-        (exit,scope) <- executeDoEdges scope v1 edges statements
-        return (exit,Scope.gc (Scope.popDoEdges scope))
+                    then return (Fallthrough,scope3)
+                    else return (exit,scope3)
+            _ -> return (exit,scope3)
+    executeStatement scope1 (Ast.DoEdges _ v1 v2 statements) = do
+        let (var2,scope2) = Scope.get scope1 v2
+        let (edges,scope3) = Scope.edges scope2 var2
+        let scope4 = Scope.pushDoEdges scope3 edges
+        (exit,scope5) <- executeDoEdges scope4 v1 edges statements
+        return (exit,Scope.gc (Scope.popDoEdges scope5))
     executeStatement scope (Ast.Exit _ label) = do
         return (Exit label,scope)
 
-    evalCallArg (reverseArgs,scope) callArg =
-        let (arg,scope) = Scope.get scope callArg
-        in  (arg:reverseArgs,scope)
+    evalCallArg (reverseArgs,scope1) callArg =
+        let (arg,scope2) = Scope.get scope1 callArg
+        in  (arg:reverseArgs,scope2)
 
     executeIf scope [] elseBranch = executeStatements scope elseBranch
-    executeIf scope (Ast.IfEq _ v1 v2 statements:ifBranches) elseBranch = do
-        let (var1,scope) = Scope.get scope v1
-        let (var2,scope) = Scope.get scope v2
-        if Scope.eq scope var1 var2
-            then executeStatements scope statements
-            else executeIf scope ifBranches elseBranch
-    executeIf scope (Ast.IfEdge _ v1 v2 statements:ifBranches) elseBranch = do
-        let (var1,scope) = Scope.get scope v1
-        let (var2,scope) = Scope.get scope v2
-        if Scope.hasEdge scope var1 var2
-            then executeStatements scope statements
-            else executeIf scope ifBranches elseBranch
-
-
+    executeIf scope1 (Ast.IfEq _ v1 v2 statements:ifBranches) elseBranch = do
+        let (var1,scope2) = Scope.get scope1 v1
+        let (var2,scope3) = Scope.get scope2 v2
+        if Scope.eq scope3 var1 var2
+            then executeStatements scope3 statements
+            else executeIf scope3 ifBranches elseBranch
+    executeIf scope1 (Ast.IfEdge _ v1 v2 statements:ifBranches) elseBranch = do
+        let (var1,scope2) = Scope.get scope1 v1
+        let (var2,scope3) = Scope.get scope2 v2
+        if Scope.hasEdge scope3 var1 var2
+            then executeStatements scope3 statements
+            else executeIf scope3 ifBranches elseBranch
 
     executeDoEdges scope v1 [] statements = return (Fallthrough,scope)
-    executeDoEdges scope v1 (edge:edges) statements = do
-        let scope = Scope.set scope v1 edge
-        (exit,scope) <- executeStatements scope statements
+    executeDoEdges scope1 v1 (edge:edges) statements = do
+        let scope2 = Scope.set scope1 v1 edge
+        (exit,scope3) <- executeStatements scope2 statements
         case exit of
-            Fallthrough -> executeDoEdges (Scope.gc scope) v1 edges statements
-            _ -> return (exit,scope)
+            Fallthrough -> executeDoEdges (Scope.gc scope3) v1 edges statements
+            _ -> return (exit,scope3)

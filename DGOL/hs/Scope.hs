@@ -8,7 +8,7 @@ import qualified Data.Map as Map
 import qualified Vars
 import Vars(Var)
 
-newtype Scope = Scope (Vars.Vars,[Map.Map String Var],[[Var]])
+newtype Scope = Scope (Vars.Vars,[Map.Map String Var],[[Var]]) deriving Show
 
 new :: Scope
 new = Scope (Vars.new,[Map.empty],[])

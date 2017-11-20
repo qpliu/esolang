@@ -5,9 +5,9 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Nodes
 
-newtype Vars = Vars (Nodes.Nodes,Map.Map Var Nodes.Node)
+newtype Vars = Vars (Nodes.Nodes,Map.Map Var Nodes.Node) deriving Show
 
-newtype Var = Var Integer deriving (Eq,Ord)
+newtype Var = Var Integer deriving (Eq,Ord,Show)
 
 new :: Vars
 new = Vars (Nodes.new,Map.empty)

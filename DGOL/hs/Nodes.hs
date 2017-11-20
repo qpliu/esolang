@@ -4,9 +4,9 @@ where
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-newtype Nodes = Nodes (Map.Map Node (Set.Set Node))
+newtype Nodes = Nodes (Map.Map Node (Set.Set Node)) deriving Show
 
-newtype Node = Node Integer deriving (Eq,Ord)
+newtype Node = Node Integer deriving (Eq,Ord,Show)
 
 new :: Nodes
 new = Nodes Map.empty
