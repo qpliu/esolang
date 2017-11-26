@@ -2,20 +2,45 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "mymalloc.h"
 #include "nodes.h"
+
+struct node_pool {
+	int gc_mark;
+	struct node *first_node;
+};
+
+struct node {
+	int gc_mark;
+	struct node *next_node;
+	struct edge *first_edge;
+};
+
+struct edge {
+	struct node *node;
+	struct edge *next_edge;
+};
+
+struct edge_iterator {
+	int node_count;
+	int node_index;
+	struct node **nodes;
+};
 
 static void nodes_free_node(struct node *node)
 {
 	assert(node);
-	for (struct edge *edge = node->first_edge; edge; edge = edge->next_edge) {
-		free(edge);
+	for (struct edge *edge = node->first_edge; edge; ) {
+		struct edge *next_edge = edge->next_edge;
+		myfree(edge);
+		edge = next_edge;
 	}
-	free(node);
+	myfree(node);
 }
 
 struct node_pool *nodes_new_node_pool()
 {
-	struct node_pool *node_pool = malloc(sizeof(struct node_pool));
+	struct node_pool *node_pool = mymalloc(sizeof(struct node_pool));
 	assert(node_pool);
 	memset(node_pool, 0, sizeof(struct node_pool));
 	return node_pool;
@@ -23,16 +48,19 @@ struct node_pool *nodes_new_node_pool()
 
 void nodes_free_node_pool(struct node_pool *node_pool)
 {
-	for (struct node *node = node_pool->first_node; node; node = node->next_node) {
+	assert(node_pool);
+	for (struct node *node = node_pool->first_node; node; ) {
+		struct node *next_node = node->next_node;
 		nodes_free_node(node);
+		node = next_node;
 	}
-	free(node_pool);
+	myfree(node_pool);
 }
 
 struct node *nodes_new_node(struct node_pool *node_pool)
 {
 	assert(node_pool);
-	struct node *node = malloc(sizeof(struct node));
+	struct node *node = mymalloc(sizeof(struct node));
 	assert(node);
 	memset(node, 0, sizeof(struct node));
 	node->next_node = node_pool->first_node;
@@ -59,7 +87,7 @@ void nodes_add_edge(struct node *node1, struct node *node2)
 	}
 
 	struct edge *first_edge = node1->first_edge;
-	node1->first_edge = malloc(sizeof(struct edge));
+	node1->first_edge = mymalloc(sizeof(struct edge));
 	node1->first_edge->node = node2;
 	node1->first_edge->next_edge = first_edge;
 }
@@ -75,12 +103,54 @@ void nodes_remove_edge(struct node *node1, struct node *node2)
 	for (struct edge *edge = node1->first_edge; edge; edge = edge->next_edge) {
 		if (edge->node == node2) {
 			*last_edge_ptr = edge->next_edge;
-			free(edge);
+			myfree(edge);
 			return;
 		}
 		last_edge_ptr = &edge->next_edge;
 	}
 }
+
+struct edge_iterator *nodes_new_edge_iterator(struct node *node)
+{
+	assert(node);
+	if (!node->first_edge) {
+		return 0;
+	}
+
+	struct edge_iterator *edge_iterator = mymalloc(sizeof(struct edge_iterator));
+	assert(edge_iterator);
+	memset(edge_iterator, 0, sizeof(struct edge_iterator));
+	for (struct edge *edge = node->first_edge; edge; edge = edge->next_edge) {
+		edge_iterator->node_count++;
+	}
+	edge_iterator->nodes = mymalloc(edge_iterator->node_count*sizeof(struct node *));
+	int i = 0;
+	for (struct edge *edge = node->first_edge; edge; edge = edge->next_edge) {
+		edge_iterator->nodes[i++] = edge->node;
+	}
+	return edge_iterator;
+}
+
+struct node *nodes_edge_iterate(struct edge_iterator *edge_iterator)
+{
+	if (!edge_iterator) {
+		return 0;
+	}
+	if (edge_iterator->node_index >= edge_iterator->node_count) {
+		return 0;
+	}
+	return edge_iterator->nodes[edge_iterator->node_index++];
+}
+
+void nodes_free_edge_iterator(struct edge_iterator *edge_iterator)
+{
+	if (!edge_iterator) {
+		return;
+	}
+	myfree(edge_iterator->nodes);
+	myfree(edge_iterator);
+}
+
 
 static void nodes_gc_mark_node(struct node *node, int gc_mark)
 {
@@ -94,7 +164,7 @@ static void nodes_gc_mark_node(struct node *node, int gc_mark)
 	}
 }
 
-void nodes_gc(struct node_pool *node_pool, void *root_iterator_state, struct node *root_iterator(void *))
+void nodes_gc(struct node_pool *node_pool, void *root_iterator, struct node *root_iterate(void *))
 {
 	assert(node_pool);
 	if (!node_pool->first_node) {
@@ -104,7 +174,7 @@ void nodes_gc(struct node_pool *node_pool, void *root_iterator_state, struct nod
 	// mark
 	node_pool->gc_mark++;
 	int gc_mark = node_pool->gc_mark;
-	for (struct node *node = root_iterator(root_iterator_state); node; node = root_iterator(root_iterator_state)) {
+	for (struct node *node = root_iterate(root_iterator); node; node = root_iterate(root_iterator)) {
 		nodes_gc_mark_node(node, gc_mark);
 	}
 

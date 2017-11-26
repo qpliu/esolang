@@ -1,21 +1,13 @@
 #ifndef NODES_H
 #define NODES_H
 
-struct node_pool {
-	int gc_mark;
-	struct node *first_node;
-};
+struct node_pool;
 
-struct node {
-	int gc_mark;
-	struct node *next_node;
-	struct edge *first_edge;
-};
+struct node;
 
-struct edge {
-	struct node *node;
-	struct edge *next_edge;
-};
+struct edge;
+
+struct edge_iterator;
 
 struct node_pool *nodes_new_node_pool();
 
@@ -29,6 +21,12 @@ void nodes_add_edge(struct node *node1, struct node *node2);
 
 void nodes_remove_edge(struct node *node1, struct node *node2);
 
-void nodes_gc(struct node_pool *node_pool, void *root_iterator_state, struct node *root_iterator(void *));
+struct edge_iterator *nodes_new_edge_iterator(struct node *node);
+
+struct node *nodes_edge_iterate(struct edge_iterator *edge_iterator);
+
+void nodes_free_edge_iterator(struct edge_iterator *edge_iterator);
+
+void nodes_gc(struct node_pool *node_pool, void *root_iterator, struct node *root_iterate(void *));
 
 #endif /* NODES_H */
