@@ -26,8 +26,6 @@ struct var_edge_iterator {
 struct vars *vars_new_vars()
 {
 	struct vars *vars = mymalloc(sizeof(struct vars));
-	assert(vars);
-	memset(vars, 0, sizeof(struct vars));
 	vars->node_pool = nodes_new_node_pool();
 	return vars;
 }
@@ -48,8 +46,6 @@ static struct var *vars_new_var_with_node(struct vars *vars, struct node *node)
 {
 	assert(vars);
 	struct var *var = mymalloc(sizeof(struct var));
-	assert(var);
-	memset(var, 0, sizeof(struct var));
 	var->next_var = vars->first_var;
 	vars->first_var = var;
 	var->node = node;
@@ -102,7 +98,6 @@ struct var_edge_iterator *vars_new_edge_iterator(struct vars *vars, struct var *
 	assert(vars);
 	assert(var);
 	struct var_edge_iterator *var_edge_iterator = mymalloc(sizeof(struct var_edge_iterator));
-	memset(var_edge_iterator, 0, sizeof(struct var_edge_iterator));
 	var_edge_iterator->vars = vars;
 	var_edge_iterator->edge_iterator = nodes_new_edge_iterator(var->node);
 	return var_edge_iterator;

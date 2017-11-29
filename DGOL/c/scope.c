@@ -28,13 +28,11 @@ static struct scope *scope_new_scope(struct vars *vars, struct scope *parent_sco
 {
 	assert(vars);
 	struct scope *scope = mymalloc(sizeof(struct scope));
-	memset(scope, 0, sizeof(struct scope));
 
 	scope->vars = vars;
 	scope->parent_scope = parent_scope;
 	scope->scope_var_count = scope_var_count;
 	scope->scope_vars = mymalloc(scope_var_count*sizeof(struct var *));
-	memset(scope->scope_vars, 0, scope_var_count*sizeof(struct var *));
 
 	return scope;
 }
@@ -101,14 +99,12 @@ void scope_push_do_edges(struct scope *scope, struct var *var)
 	assert(var);
 
 	struct scope_var_list_stack *scope_var_list_stack = mymalloc(sizeof(struct scope_var_list_stack));
-	memset(scope_var_list_stack, 0, sizeof(struct scope_var_list_stack));
 	scope_var_list_stack->next_scope_var_list_stack = scope->scope_var_list_stack;
 	scope->scope_var_list_stack = scope_var_list_stack;
 
 	struct var_edge_iterator *var_edge_iterator = vars_new_edge_iterator(scope->vars, var);
 	for (struct var *edge = vars_edge_iterate(var_edge_iterator); edge; edge = vars_edge_iterate(var_edge_iterator)) {
 		struct scope_var_list *scope_var_list = mymalloc(sizeof(struct scope_var_list));
-		memset(scope_var_list, 0, sizeof(struct scope_var_list));
 		scope_var_list->var = edge;
 		scope_var_list->next_scope_var_list = scope_var_list_stack->scope_var_list;
 		scope_var_list_stack->scope_var_list = scope_var_list;

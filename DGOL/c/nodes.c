@@ -40,10 +40,7 @@ static void nodes_free_node(struct node *node)
 
 struct node_pool *nodes_new_node_pool()
 {
-	struct node_pool *node_pool = mymalloc(sizeof(struct node_pool));
-	assert(node_pool);
-	memset(node_pool, 0, sizeof(struct node_pool));
-	return node_pool;
+	return mymalloc(sizeof(struct node_pool));
 }
 
 void nodes_free_node_pool(struct node_pool *node_pool)
@@ -61,8 +58,6 @@ struct node *nodes_new_node(struct node_pool *node_pool)
 {
 	assert(node_pool);
 	struct node *node = mymalloc(sizeof(struct node));
-	assert(node);
-	memset(node, 0, sizeof(struct node));
 	node->next_node = node_pool->first_node;
 	node_pool->first_node = node;
 	return node;
@@ -118,8 +113,6 @@ struct edge_iterator *nodes_new_edge_iterator(struct node *node)
 	}
 
 	struct edge_iterator *edge_iterator = mymalloc(sizeof(struct edge_iterator));
-	assert(edge_iterator);
-	memset(edge_iterator, 0, sizeof(struct edge_iterator));
 	for (struct edge *edge = node->first_edge; edge; edge = edge->next_edge) {
 		edge_iterator->node_count++;
 	}

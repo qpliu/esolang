@@ -1,5 +1,3 @@
-#include "nodes.h"
-
 #ifndef VARS_H
 #define VARS_H
 

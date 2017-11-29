@@ -1,7 +1,9 @@
 #ifndef MYMALLOC_H
 #define MYMALLOC_H
 
-#define mymalloc malloc
-#define myfree free
+#include <stdlib.h>
+
+void *mymalloc(size_t);
+void myfree(void *);
 
 #endif /* MYMALLOC_H */
