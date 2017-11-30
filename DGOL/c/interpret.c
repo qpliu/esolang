@@ -199,12 +199,14 @@ static void interpret_routine(struct program *program, struct routine *routine, 
 	assert(exit_code == EXIT_CODE_RETURN || exit_code == EXIT_CODE_FALLTHROUGH);
 
 	*scope = scope_pop(*scope);
-	scope_gc(*scope);
+	if (*scope) {
+		scope_gc(*scope);
+	}
 }
 
 void interpret(struct program *program)
 {
 	struct scope *scope = 0;
 	interpret_routine(program, &program->program, &scope, 0, 0);
-	scope_free(scope);
+	assert(!scope);
 }

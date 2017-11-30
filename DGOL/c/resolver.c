@@ -44,7 +44,7 @@ struct do_label_stack {
 	struct do_label_stack *parent;
 };
 
-static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_stack *do_label_stack, struct ast_statement *first_statement, int module_index, int module_count, struct indexer *module_indexer, struct indexer **routine_indexer, struct indexer **public_routine_set, struct indexer *scope_indexer, int is_program_body)
+static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_stack *do_label_stack, struct ast_statement *first_statement, int module_index, int module_count, struct indexer *module_indexer, struct indexer **routine_indexer, struct indexer **public_routine_set, struct indexer *scope_indexer, int is_program_body, struct indexer *use_set)
 {
 	*stmt_count = 0;
 	for (struct ast_statement *ast_stmt = first_statement; ast_stmt; ast_stmt = ast_stmt->next_statement) {
@@ -92,6 +92,10 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 				assert(stmt->arg_count >= 2);
 				if (j == 0) {
 					if (arg->name) {
+						if (indexer_find_index(use_set, arg->name) < 0) {
+							fprintf(stderr, "CALL UNUSED MODULE %s\n", arg->name);
+							exit(1);
+						}
 						stmt->args[j] = indexer_find_index(module_indexer, arg->name);
 						if (stmt->args[j] < 0) {
 							fprintf(stderr, "CALL UNKNOWN MODULE %s\n", arg->name);
@@ -148,13 +152,13 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 		case stmt_if_branch_eq:
 		case stmt_if_branch_edge:
 		case stmt_if_branch_else:
-			resolve_stmts(&stmt->stmt_count, &stmt->stmts, do_label_stack, ast_stmt->first_child_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body);
+			resolve_stmts(&stmt->stmt_count, &stmt->stmts, do_label_stack, ast_stmt->first_child_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body, use_set);
 			break;
 		case stmt_do_edges:
 		case stmt_do_loop:
 		{
 			struct do_label_stack push_do_label_stack = { stmt->args[0], do_label_stack };
-			resolve_stmts(&stmt->stmt_count, &stmt->stmts, &push_do_label_stack, ast_stmt->first_child_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body);
+			resolve_stmts(&stmt->stmt_count, &stmt->stmts, &push_do_label_stack, ast_stmt->first_child_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body, use_set);
 			break;
 		}
 		case stmt_exit:
@@ -178,7 +182,7 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 	}
 }
 
-static void resolve_routine(struct routine *routine, struct ast_routine *ast_routine, int module_index, int module_count, struct indexer *module_indexer, struct indexer **routine_indexer, struct indexer **public_routine_set, int is_program_body)
+static void resolve_routine(struct routine *routine, struct ast_routine *ast_routine, int module_index, int module_count, struct indexer *module_indexer, struct indexer **routine_indexer, struct indexer **public_routine_set, int is_program_body, struct indexer *use_set)
 {
 	struct indexer *scope_indexer = indexer_new();
 	for (struct ast_name_list *parameter = ast_routine->first_parameter; parameter; parameter = parameter->next_name) {
@@ -189,7 +193,7 @@ static void resolve_routine(struct routine *routine, struct ast_routine *ast_rou
 		}
 	}
 	routine->parameter_count = indexer_count(scope_indexer);
-	resolve_stmts(&routine->stmt_count, &routine->stmts, 0, ast_routine->first_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body);
+	resolve_stmts(&routine->stmt_count, &routine->stmts, 0, ast_routine->first_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body, use_set);
 	routine->var_count = indexer_count(scope_indexer);
 
 	indexer_free(scope_indexer);
@@ -197,14 +201,23 @@ static void resolve_routine(struct routine *routine, struct ast_routine *ast_rou
 
 static void resolve_module(struct program *program, int module_index, struct ast_module *ast_module, struct indexer *module_indexer, struct indexer **routine_indexer, struct indexer **public_routine_set)
 {
+	struct indexer *use_set = indexer_new();
+	for (struct ast_name_list *use = ast_module->first_use; use; use = use->next_name) {
+		int use_index = indexer_index_unique(use_set, use->name);
+		if (use_index < 0) {
+			fprintf(stderr, "DUPLICATE USE %s\n", use->name);
+			exit(1);
+		}
+	}
 	int routine_count = indexer_count(routine_indexer[module_index]);
 	program->modules[module_index].routine_count = routine_count;
 	program->modules[module_index].routines = mymalloc(routine_count*sizeof(struct routine));
 	for (struct ast_routine *ast_routine = ast_module->first_routine; ast_routine; ast_routine = ast_routine->next_routine) {
 		int routine_index = indexer_find_index(routine_indexer[module_index], ast_routine->name);
 		assert(routine_index >= 0);
-		resolve_routine(&program->modules[module_index].routines[routine_index],  ast_routine, module_index, program->module_count, module_indexer, routine_indexer, public_routine_set, 0);
+		resolve_routine(&program->modules[module_index].routines[routine_index],  ast_routine, module_index, program->module_count, module_indexer, routine_indexer, public_routine_set, 0, use_set);
 	}
+	indexer_free(use_set);
 }
 
 static void resolve_lib_module(struct program *program, int module_index, struct dgol_lib_module *lib_module, struct indexer **routine_indexer)
@@ -291,7 +304,16 @@ struct program *resolve(struct ast_module *modules, struct dgol_lib *libs)
 		}
 	}
 
-	resolve_routine(&program->program, program_ast_module->program, program_index, module_count, module_indexer, routine_indexer, public_routine_set, 1);
+	struct indexer *use_set = indexer_new();
+	for (struct ast_name_list *use = program_ast_module->first_use; use; use = use->next_name) {
+		int use_index = indexer_index_unique(use_set, use->name);
+		if (use_index < 0) {
+			fprintf(stderr, "DUPLICATE USE %s\n", use->name);
+			exit(1);
+		}
+	}
+
+	resolve_routine(&program->program, program_ast_module->program, program_index, module_count, module_indexer, routine_indexer, public_routine_set, 1, use_set);
 
 	for (int i = 0; i < module_count; i++) {
 		indexer_free(routine_indexer[i]);
@@ -299,6 +321,7 @@ struct program *resolve(struct ast_module *modules, struct dgol_lib *libs)
 	}
 	myfree(routine_indexer);
 	myfree(public_routine_set);
+	indexer_free(use_set);
 	indexer_free(lib_module_set);
 	indexer_free(module_indexer);
 	return program;
