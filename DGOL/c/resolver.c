@@ -190,6 +190,7 @@ static void resolve_routine(struct routine *routine, struct ast_routine *ast_rou
 	}
 	routine->parameter_count = indexer_count(scope_indexer);
 	resolve_stmts(&routine->stmt_count, &routine->stmts, 0, ast_routine->first_statement, module_index, module_count, module_indexer, routine_indexer, public_routine_set, scope_indexer, is_program_body);
+	routine->var_count = indexer_count(scope_indexer);
 
 	indexer_free(scope_indexer);
 }

@@ -15,6 +15,7 @@ struct stmt {
 
 struct routine {
 	int parameter_count;
+	int var_count;
 	int stmt_count;
 	struct stmt *stmts;
 	void (*library_routine)(struct scope *scope, int arg_count, struct var **args);

@@ -5,13 +5,13 @@
 
 struct scope;
 
-struct scope *scope_new(int var_count);
-
 void scope_free(struct scope *scope);
 
 struct scope *scope_push(struct scope *scope, int var_count);
 
 struct scope *scope_pop(struct scope *scope);
+
+struct var *scope_new_var(struct scope *scope);
 
 struct var *scope_get(struct scope *scope, int var_index);
 

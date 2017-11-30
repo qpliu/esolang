@@ -24,24 +24,6 @@ struct scope {
 	struct scope_var_list_stack *scope_var_list_stack;
 };
 
-static struct scope *scope_new_scope(struct vars *vars, struct scope *parent_scope, int scope_var_count)
-{
-	assert(vars);
-	struct scope *scope = mymalloc(sizeof(struct scope));
-
-	scope->vars = vars;
-	scope->parent_scope = parent_scope;
-	scope->scope_var_count = scope_var_count;
-	scope->scope_vars = mymalloc(scope_var_count*sizeof(struct var *));
-
-	return scope;
-}
-
-struct scope *scope_new(int var_count)
-{
-	return scope_new_scope(vars_new_vars(), 0, var_count);
-}
-
 void scope_free(struct scope *scope)
 {
 	while (scope) {
@@ -51,7 +33,18 @@ void scope_free(struct scope *scope)
 
 struct scope *scope_push(struct scope *scope, int var_count)
 {
-	return scope_new_scope(scope->vars, scope, var_count);
+	struct scope *new_scope = mymalloc(sizeof(struct scope));
+
+	if (scope) {
+		new_scope->vars = scope->vars;
+	} else {
+		new_scope->vars = vars_new_vars();
+	}
+	new_scope->parent_scope = scope;
+	new_scope->scope_var_count = var_count;
+	new_scope->scope_vars = mymalloc(var_count*sizeof(struct var *));
+
+	return new_scope;
 }
 
 struct scope *scope_pop(struct scope *scope)
@@ -67,6 +60,12 @@ struct scope *scope_pop(struct scope *scope)
 		vars_free_vars(vars);
 	}
 	return parent_scope;
+}
+
+struct var *scope_new_var(struct scope *scope)
+{
+	assert(scope);
+	return vars_new_var(scope->vars);
 }
 
 struct var *scope_get(struct scope *scope, int var_index)
