@@ -3,7 +3,10 @@
 
 #include <stdlib.h>
 
-void *mymalloc(size_t);
-void myfree(void *);
+#define mymalloc(sz) _mymalloc(sz,__FILE__,__LINE__)
+#define myfree(ptr) _myfree(ptr,__FILE__,__LINE__)
+
+void *_mymalloc(size_t,char *,int);
+void _myfree(void *,char *,int);
 
 #endif /* MYMALLOC_H */

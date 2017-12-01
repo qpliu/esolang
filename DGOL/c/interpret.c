@@ -187,6 +187,7 @@ static void interpret_routine(struct program *program, struct routine *routine, 
 	assert(routine);
 	if (routine->library_routine) {
 		routine->library_routine(*scope, arg_count, args);
+		scope_gc(*scope);
 		return;
 	}
 	*scope = scope_push(*scope, routine->var_count);

@@ -3,7 +3,7 @@
 
 #include "mymalloc.h"
 
-void *mymalloc(size_t size)
+void *_mymalloc(size_t size, char *file, int line)
 {
 	void *ptr = malloc(size);
 	assert(ptr);
@@ -11,7 +11,7 @@ void *mymalloc(size_t size)
 	return ptr;
 }
 
-void myfree(void *ptr)
+void _myfree(void *ptr, char *file, int line)
 {
 	assert(ptr);
 	free(ptr);
