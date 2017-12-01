@@ -94,27 +94,81 @@ static int parse_is_identifier(char *line_buffer, int start_index, int end_index
 	return 1;
 }
 
-static int parse_use(struct ast_module *module, char *line_buffer, int line_len)
+static struct ast_name_list *parse_use(struct ast_module *module, char *line_buffer, int line_len)
 {
 	if (line_len < 4 || line_buffer[0] != 'U' || line_buffer[1] != 'S' || line_buffer[2] != 'E') {
 		return 0;
 	}
-	struct ast_name_list **use = &module->first_use;
-	while (*use) {
-		use = &(*use)->next_name;
+	if (!parse_is_identifier(line_buffer, 3, line_len, 0)) {
+		fprintf(stderr, "SYNTAX ERROR\n");
+		exit(1);
 	}
-	*use = mymalloc(sizeof(struct ast_name_list));
-	(*use)->name = parse_strdup(line_buffer, 3, line_len);
-	return 1;
+	struct ast_name_list *use = mymalloc(sizeof(struct ast_name_list));
+	use->name = parse_strdup(line_buffer, 3, line_len);
+	return use;
 }
 
-static int parse_subroutine(FILE *file, struct ast_module *module, char *line_buffer, int line_buffer_len, int line_len)
+static struct ast_name_list *parse_argument_list(char *line_buffer, int line_len, int start_index, int allow_0)
+{
+	if (line_buffer[start_index] != '(') {
+		fprintf(stderr, "SYNTAX ERROR\n");
+		exit(1);
+	}
+	start_index++;
+	if (start_index >= line_len) {
+		fprintf(stderr, "SYNTAX ERROR\n");
+		exit(1);
+	}
+	if (line_buffer[start_index] == ')') {
+		if (start_index < line_len) {
+			fprintf(stderr, "SYNTAX ERROR\n");
+			exit(1);
+		}
+		return 0;
+	}
+	struct ast_name_list *result = 0;
+	struct ast_name_list **name = &result;
+	for (;;) {
+		if (start_index >= line_len) {
+			fprintf(stderr, "SYNTAX ERROR\n");
+			exit(1);
+		}
+		int end_index = parse_token_end_index(line_buffer, line_len, start_index);
+		if (end_index >= line_len || !parse_is_identifier(line_buffer, start_index, end_index, allow_0)) {
+			fprintf(stderr, "SYNTAX ERROR\n");
+			exit(1);
+		}
+		*name = mymalloc(sizeof(struct ast_name_list));
+		(*name)->name = parse_strdup(line_buffer, start_index, end_index);
+		name = &(*name)->next_name;
+		if (line_buffer[end_index] == ',') {
+			start_index = end_index + 1;
+		} else if (line_buffer[end_index] == ')' && end_index + 1 == line_len) {
+			return result;
+		} else {
+			fprintf(stderr, "SYNTAX ERROR\n");
+			exit(1);
+		}
+	}
+}
+
+static struct ast_routine *parse_subroutine(FILE *file, char *line_buffer, int line_buffer_len, int line_len)
 {
 	if (line_len < 13 || line_buffer[0] != 'S' || line_buffer[1] != 'U' || line_buffer[2] != 'B' || line_buffer[3] != 'R' || line_buffer[4] != 'O' || line_buffer[5] != 'U' || line_buffer[6] != 'T' || line_buffer[7] != 'I' || line_buffer[8] != 'N' || line_buffer[9] != 'E') {
 		return 0;
 	}
+	int start_index = 10;
+	int end_index = parse_token_end_index(line_buffer, line_len, start_index);
+	if (!parse_is_identifier(line_buffer, start_index, end_index, 0)) {
+		fprintf(stderr, "SYNTAX ERROR\n");
+		exit(1);
+	}
+
+	struct ast_routine *routine = mymalloc(sizeof(struct ast_routine));
+	routine->name = parse_strdup(line_buffer, start_index, end_index);
+	routine->first_parameter = parse_argument_list(line_buffer, line_len, end_index, 0);
 	//...
-	return 1;
+	return routine;
 }
 
 static int parse_exports(FILE *file, struct ast_module *module, char *line_buffer, int line_buffer_len, int line_len)
@@ -141,17 +195,21 @@ struct ast_module *parse(FILE *file)
 
 	char line_buffer[LINE_BUFFER_LEN];
 	int line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0);
-	for (;;) {
-		if (!parse_use(module, line_buffer, line_len)) {
+	for (struct ast_name_list **use = &module->first_use;;) {
+		*use = parse_use(module, line_buffer, line_len);
+		if (!use) {
 			break;
 		}
+		use = &(*use)->next_name;
 		line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0);
 	}
 
-	for (;;) {
-		if (!parse_subroutine(file, module, line_buffer, LINE_BUFFER_LEN, line_len)) {
+	for (struct ast_routine **routine = &module->first_routine;;) {
+		*routine = parse_subroutine(file, line_buffer, LINE_BUFFER_LEN, line_len);
+		if (!*routine) {
 			break;
 		}
+		routine = &(*routine)->next_routine;
 		line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0);
 	}
 
