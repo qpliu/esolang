@@ -157,8 +157,7 @@ static int interpret_stmt(struct program *program, struct stmt *stmt, struct sco
 	}
 	case stmt_if_branch_else:
 	{
-		assert(stmt->arg_count == 1);
-		assert(!stmt->stmts);
+		assert(stmt->arg_count == 0);
 		int exit_code = interpret_stmts(program, stmt->stmt_count, stmt->stmts, scope);
 		if (exit_code == EXIT_CODE_FALLTHROUGH) {
 			return EXIT_CODE_IF_BRANCH_TAKEN;

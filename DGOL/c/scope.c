@@ -56,6 +56,7 @@ struct scope *scope_pop(struct scope *scope)
 		scope_pop_do_edges(scope);
 	}
 	myfree(scope->scope_vars);
+	myfree(scope);
 	if (!parent_scope) {
 		vars_free_vars(vars);
 	}

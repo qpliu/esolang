@@ -4,13 +4,14 @@
 #include "ast.h"
 #include "dgol_libs.h"
 #include "interpret.h"
+#include "mymalloc.h"
 #include "parse.h"
 #include "resolver.h"
 
 int main(int argc, char **argv)
 {
 	struct ast_module *ast_modules = 0;
-	for (int i = argc-1; i >= 0; i--) {
+	for (int i = argc-1; i >= 1; i--) {
 		FILE *file = fopen(argv[i], "r");
 		if (!file) {
 			fprintf(stderr, "ERROR OPENING FILE %s\n", argv[i]);
@@ -32,6 +33,7 @@ int main(int argc, char **argv)
 	interpret(program);
 
 	resolver_free_program(program);
+	mymalloc_done();
 
 	return 0;
 }

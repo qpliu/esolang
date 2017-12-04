@@ -57,7 +57,7 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 	*stmts = mymalloc(*stmt_count*sizeof(struct stmt));
 	int i = 0;
 	for (struct ast_statement *ast_stmt = first_statement; ast_stmt; ast_stmt = ast_stmt->next_statement) {
-		struct stmt *stmt = &*stmts[i];
+		struct stmt *stmt = *stmts + i;
 		i++;
 		stmt->stmt_type = ast_stmt->statement_type;
 		stmt->arg_count = 0;
@@ -291,6 +291,7 @@ struct program *resolve(struct ast_module *modules, struct dgol_lib *libs)
 
 	struct program *program = mymalloc(sizeof(struct program));
 	program->module_count = module_count;
+	program->modules = mymalloc(module_count*sizeof(struct module));
 	for (struct ast_module *m = modules; m; m = m->next_ast_module) {
 		int module_index = indexer_find_index(module_indexer, m->name);
 		assert(module_index >= 0);
@@ -358,17 +359,17 @@ static void resolver_free_module(struct module *module)
 	if (module->routines) {
 		myfree(module->routines);
 	}
-	myfree(module);
 }
 
 void resolver_free_program(struct program *program)
 {
 	assert(program);
 	for (int i = 0; i < program->module_count; i++) {
-		resolver_free_module(&program->modules[i]);
+		resolver_free_module(program->modules + i);
 	}
 	if (program->modules) {
 		myfree(program->modules);
 	}
+	resolver_free_routine(&program->program);
 	myfree(program);
 }

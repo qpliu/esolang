@@ -9,4 +9,6 @@
 void *_mymalloc(size_t,char *,int);
 void _myfree(void *,char *,int);
 
+void mymalloc_done();
+
 #endif /* MYMALLOC_H */
