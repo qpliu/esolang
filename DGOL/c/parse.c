@@ -181,7 +181,7 @@ static struct ast_statement *parse_if_branch(char *line_buffer, int line_len, in
 	if (line_buffer[cond_index] == '=') {
 		branch->statement_type = stmt_if_branch_eq;
 	} else if (line_buffer[cond_index] == '>') {
-		branch->statement_type = stmt_if_branch_eq;
+		branch->statement_type = stmt_if_branch_edge;
 	} else {
 		assert(0);
 	}
@@ -278,7 +278,7 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 				(*first_statement)->statement_type = stmt_do_loop;
 				(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
 				(*first_statement)->first_argument->name = parse_strdup(line_buffer, 2, index);
-			} else if (index < line_len - 2 && line_buffer[index] == '<' && parse_is_identifier(line_buffer, index+1, line_len, 0)) {
+			} else if (index < line_len - 1 && line_buffer[index] == '<' && parse_is_identifier(line_buffer, index+1, line_len, 0)) {
 				*first_statement = mymalloc(sizeof(struct ast_statement));
 				(*first_statement)->statement_type = stmt_do_edges;
 				(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
