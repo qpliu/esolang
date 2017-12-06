@@ -60,6 +60,8 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 		struct stmt *stmt = *stmts + i;
 		i++;
 		stmt->stmt_type = ast_stmt->statement_type;
+		stmt->filename = ast_stmt->filename;
+		stmt->line_number = ast_stmt->line_number;
 		stmt->arg_count = 0;
 		for (struct ast_name_list *arg = ast_stmt->first_argument; arg; arg = arg->next_name) {
 			stmt->arg_count++;
@@ -93,12 +95,12 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 				if (j == 0) {
 					if (arg->name) {
 						if (indexer_find_index(use_set, arg->name) < 0) {
-							fprintf(stderr, "CALL UNUSED MODULE %s\n", arg->name);
+							fprintf(stderr, "%s:%d CALL UNUSED MODULE %s\n", stmt->filename, stmt->line_number, arg->name);
 							exit(1);
 						}
 						stmt->args[j] = indexer_find_index(module_indexer, arg->name);
 						if (stmt->args[j] < 0) {
-							fprintf(stderr, "CALL UNKNOWN MODULE %s\n", arg->name);
+							fprintf(stderr, "%s:%d CALL UNKNOWN MODULE %s\n", stmt->filename, stmt->line_number, arg->name);
 							exit(1);
 						}
 					} else {
@@ -108,11 +110,11 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 				} else if (j == 1) {
 					stmt->args[j] = indexer_find_index(routine_indexer[stmt->args[0]], arg->name);
 					if (stmt->args[j] < 0) {
-						fprintf(stderr, "CALL UNKNOWN SUBROUTINE %s\n", arg->name);
+						fprintf(stderr, "%s:%d CALL UNKNOWN SUBROUTINE %s\n", stmt->filename, stmt->line_number, arg->name);
 						exit(1);
 					}
 					if (stmt->args[0] != module_index && indexer_find_index(public_routine_set[stmt->args[0]], arg->name) < 0) {
-						fprintf(stderr, "CALL UNKNOWN SUBROUTINE %s\n", arg->name);
+						fprintf(stderr, "%s:%d CALL UNKNOWN SUBROUTINE %s\n", stmt->filename, stmt->line_number, arg->name);
 						exit(1);
 					}
 				} else {
@@ -144,7 +146,7 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 		case stmt_return:
 			assert(!ast_stmt->first_child_statement);
 			if (is_program_body) {
-				fprintf(stderr, "INVALID RETURN\n");
+				fprintf(stderr, "%s:%d INVALID RETURN\n", stmt->filename, stmt->line_number);
 				exit(1);
 			}
 			break;
@@ -171,7 +173,7 @@ static void resolve_stmts(int *stmt_count, struct stmt **stmts, struct do_label_
 				}
 			}
 			if (!do_label_found) {
-				fprintf(stderr, "INVALID EXIT\n");
+				fprintf(stderr, "%s:%d INVALID EXIT\n", stmt->filename, stmt->line_number);
 				exit(1);
 			}
 			break;

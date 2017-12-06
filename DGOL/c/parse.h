@@ -5,7 +5,7 @@
 
 #include "ast.h"
 
-struct ast_module *parse(FILE *file);
+struct ast_module *parse(FILE *file, char *filename);
 
 void parse_free_ast_modules(struct ast_module *ast_module);
 

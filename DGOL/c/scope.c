@@ -93,6 +93,14 @@ void scope_set(struct scope *scope, int var_index, struct var *var)
 	}
 }
 
+void scope_refer(struct scope *scope, int var_index, struct var *var)
+{
+	assert(scope);
+	assert(var_index < scope->scope_var_count);
+
+	scope->scope_vars[var_index] = var;
+}
+
 void scope_push_do_edges(struct scope *scope, struct var *var)
 {
 	assert(scope);

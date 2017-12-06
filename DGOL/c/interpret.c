@@ -192,7 +192,7 @@ static void interpret_routine(struct program *program, struct routine *routine, 
 	*scope = scope_push(*scope, routine->var_count);
 
 	for (int i = 0; i < arg_count && i < routine->parameter_count; i++) {
-		scope_set(*scope, i, args[i]);
+		scope_refer(*scope, i, args[i]);
 	}
 
 	int exit_code = interpret_stmts(program, routine->stmt_count, routine->stmts, scope);

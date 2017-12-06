@@ -17,7 +17,7 @@ int main(int argc, char **argv)
 			fprintf(stderr, "ERROR OPENING FILE %s\n", argv[i]);
 			exit(1);
 		}
-		struct ast_module *ast_module = parse(file);
+		struct ast_module *ast_module = parse(file, argv[i]);
 		fclose(file);
 		ast_module->next_ast_module = ast_modules;
 		ast_modules = ast_module;

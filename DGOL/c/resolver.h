@@ -7,6 +7,8 @@
 
 struct stmt {
 	enum stmt_type stmt_type;
+	char *filename;
+	int line_number;
 	int arg_count;
 	int *args;
 	int stmt_count;

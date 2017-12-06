@@ -10,7 +10,7 @@
 
 #define LINE_BUFFER_LEN 1000
 
-static int parse_read_line(FILE *file, char *line_buffer, int line_buffer_len, int eof_expected)
+static int parse_read_line(FILE *file, char *line_buffer, int line_buffer_len, int eof_expected, char *filename, int *line_number)
 {
 	int count = 0;
 	int in_comment = 0;
@@ -19,21 +19,22 @@ static int parse_read_line(FILE *file, char *line_buffer, int line_buffer_len, i
 		if (c == EOF) {
 			line_buffer[count] = 0;
 			if (eof_expected && count > 0) {
-				fprintf(stderr, "UNEXPECTED TRAILING GARBAGE\n");
+				fprintf(stderr, "%s:%d UNEXPECTED TRAILING GARBAGE\n", filename, *line_number);
 				exit(1);
 			} else if (!eof_expected) {
-				fprintf(stderr, "UNEXPECTED EOF\n");
+				fprintf(stderr, "%s:%d UNEXPECTED EOF\n", filename, *line_number);
 				exit(1);
 			}
 			return count;
 		}
 		if (c == '\n') {
+			(*line_number)++;
 			if (count == 0) {
 				in_comment = 0;
 				continue;
 			}
 			if (eof_expected) {
-				fprintf(stderr, "UNEXPECTED TRAILING GARBAGE\n");
+				fprintf(stderr, "%s:%d UNEXPECTED TRAILING GARBAGE\n", filename, *line_number);
 				exit(1);
 			}
 			line_buffer[count] = 0;
@@ -49,7 +50,7 @@ static int parse_read_line(FILE *file, char *line_buffer, int line_buffer_len, i
 		line_buffer[count] = c;
 		count++;
 		if (count >= line_buffer_len) {
-			fprintf(stderr, "LINE TOO LONG\n");
+			fprintf(stderr, "%s:%d LINE TOO LONG\n", filename, *line_number);
 			exit(1);
 		}
 	}
@@ -95,13 +96,13 @@ static int parse_is_identifier(char *line_buffer, int start_index, int end_index
 	return 1;
 }
 
-static struct ast_name_list *parse_use(struct ast_module *module, char *line_buffer, int line_len)
+static struct ast_name_list *parse_use(struct ast_module *module, char *line_buffer, int line_len, char *filename, int *line_number)
 {
 	if (line_len < 4 || line_buffer[0] != 'U' || line_buffer[1] != 'S' || line_buffer[2] != 'E') {
 		return 0;
 	}
 	if (!parse_is_identifier(line_buffer, 3, line_len, 0)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	struct ast_name_list *use = mymalloc(sizeof(struct ast_name_list));
@@ -109,20 +110,20 @@ static struct ast_name_list *parse_use(struct ast_module *module, char *line_buf
 	return use;
 }
 
-static struct ast_name_list *parse_argument_list(char *line_buffer, int line_len, int start_index, int allow_0)
+static struct ast_name_list *parse_argument_list(char *line_buffer, int line_len, int start_index, int allow_0, char *filename, int *line_number)
 {
 	if (line_buffer[start_index] != '(') {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	start_index++;
 	if (start_index >= line_len) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	if (line_buffer[start_index] == ')') {
 		if (start_index+1 < line_len) {
-			fprintf(stderr, "SYNTAX ERROR\n");
+			fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 			exit(1);
 		}
 		return 0;
@@ -131,12 +132,12 @@ static struct ast_name_list *parse_argument_list(char *line_buffer, int line_len
 	struct ast_name_list **name = &result;
 	for (;;) {
 		if (start_index >= line_len) {
-			fprintf(stderr, "SYNTAX ERROR\n");
+			fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 			exit(1);
 		}
 		int end_index = parse_token_end_index(line_buffer, line_len, start_index);
 		if (end_index >= line_len || !parse_is_identifier(line_buffer, start_index, end_index, allow_0)) {
-			fprintf(stderr, "SYNTAX ERROR\n");
+			fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 			exit(1);
 		}
 		*name = mymalloc(sizeof(struct ast_name_list));
@@ -147,41 +148,47 @@ static struct ast_name_list *parse_argument_list(char *line_buffer, int line_len
 		} else if (line_buffer[end_index] == ')' && end_index + 1 == line_len) {
 			return result;
 		} else {
-			fprintf(stderr, "SYNTAX ERROR\n");
+			fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 			exit(1);
 		}
 	}
 }
 
-static struct ast_statement *parse_if_branch(char *line_buffer, int line_len, int first_if_branch)
+static struct ast_statement *parse_if_branch(char *line_buffer, int line_len, int first_if_branch, char *filename, int *line_number)
 {
 	int else_offset = 0;
 	if (!first_if_branch) {
 		else_offset = 4;
 		if (line_len < 4 || line_buffer[0] != 'E' || line_buffer[1] != 'L' || line_buffer[2] != 'S' || line_buffer[3] != 'E') {
-			fprintf(stderr, "SYNTAX ERROR\n");
+			fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 			exit(1);
 		}
 		if (line_len == 4) {
 			struct ast_statement *branch = mymalloc(sizeof(struct ast_statement));
 			branch->statement_type = stmt_if_branch_else;
+			branch->filename = filename;
+			branch->line_number = *line_number;
 			return branch;
 		}
 	}
 	if (line_len < else_offset + 5 || line_buffer[else_offset] != 'I' || line_buffer[else_offset+1] != 'F') {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	int cond_index = parse_token_end_index(line_buffer, line_len, else_offset+2);
 	if (cond_index+2 > line_len || (line_buffer[cond_index] != '=' && line_buffer[cond_index] != '>') || !parse_is_identifier(line_buffer, else_offset+2, cond_index, 0) || !parse_is_identifier(line_buffer, cond_index+1, line_len, 0)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	struct ast_statement *branch = mymalloc(sizeof(struct ast_statement));
 	if (line_buffer[cond_index] == '=') {
 		branch->statement_type = stmt_if_branch_eq;
+		branch->filename = filename;
+		branch->line_number = *line_number;
 	} else if (line_buffer[cond_index] == '>') {
 		branch->statement_type = stmt_if_branch_edge;
+		branch->filename = filename;
+		branch->line_number = *line_number;
 	} else {
 		assert(0);
 	}
@@ -192,15 +199,15 @@ static struct ast_statement *parse_if_branch(char *line_buffer, int line_len, in
 	return branch;
 }
 
-static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, struct ast_statement **first_statement)
+static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, struct ast_statement **first_statement, char *filename, int *line_number)
 {
 	for (;;) {
-		int line_len = parse_read_line(file, line_buffer, line_buffer_len, 0);
+		int line_len = parse_read_line(file, line_buffer, line_buffer_len, 0, filename, line_number);
 		if (line_len > 5 && line_buffer[0] == 'L' && line_buffer[1] == 'E' && line_buffer[2] == 'T') {
 			int lhs_start_index = 3;
 			int lhs_end_index = parse_token_end_index(line_buffer, line_len, lhs_start_index);
 			if (lhs_end_index > line_len - 2 || !parse_is_identifier(line_buffer, lhs_start_index, lhs_end_index, 0) || !parse_is_identifier(line_buffer, lhs_end_index + 1, line_len, 1)) {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
 			enum stmt_type stmt_type;
@@ -211,11 +218,13 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 			} else if (line_buffer[lhs_end_index] == '<' && parse_is_identifier(line_buffer,  lhs_end_index + 1, line_len, 0)) {
 				stmt_type = stmt_let_remove_edge;
 			} else {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
 			*first_statement = mymalloc(sizeof(struct ast_statement));
 			(*first_statement)->statement_type = stmt_type;
+			(*first_statement)->filename = filename;
+			(*first_statement)->line_number = *line_number;
 			(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
 			(*first_statement)->first_argument->name = parse_strdup(line_buffer, lhs_start_index, lhs_end_index);
 			(*first_statement)->first_argument->next_name = mymalloc(sizeof(struct ast_name_list));
@@ -224,10 +233,12 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 		} else if (line_len > 4 && line_buffer[0] == 'I' && line_buffer[1] == 'F') {
 			*first_statement = mymalloc(sizeof(struct ast_statement));
 			(*first_statement)->statement_type = stmt_if;
+			(*first_statement)->filename = filename;
+			(*first_statement)->line_number = *line_number;
 			int first_if_branch = 1;
 			for (struct ast_statement **branch = &(*first_statement)->first_child_statement;;) {
-				*branch = parse_if_branch(line_buffer, line_len, first_if_branch);
-				line_len = parse_statements(file, line_buffer, line_buffer_len, &(*branch)->first_child_statement);
+				*branch = parse_if_branch(line_buffer, line_len, first_if_branch, filename, line_number);
+				line_len = parse_statements(file, line_buffer, line_buffer_len, &(*branch)->first_child_statement, filename, line_number);
 				if ((*branch)->statement_type == stmt_if_branch_else || line_len < 4 || line_buffer[0] != 'E' || line_buffer[1] != 'L' || line_buffer[2] != 'S' || line_buffer[3] != 'E') {
 					break;
 				}
@@ -235,7 +246,7 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 				branch = &(*branch)->next_statement;
 			}
 			if (line_len != 5 || line_buffer[0] != 'E' || line_buffer[1] != 'N' || line_buffer[2] != 'D' || line_buffer[3] != 'I' || line_buffer[4] != 'F') {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
 			first_statement = &(*first_statement)->next_statement;
@@ -245,7 +256,7 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 			int name_start_index = 4;
 			int name_end_index = parse_token_end_index(line_buffer, line_len, name_start_index);
 			if (!parse_is_identifier(line_buffer, name_start_index, name_end_index, 0)) {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
 			routine_name = parse_strdup(line_buffer, name_start_index, name_end_index);
@@ -254,54 +265,64 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 				name_start_index = name_end_index + 1;
 				name_end_index = parse_token_end_index(line_buffer, line_len, name_start_index);
 				if (!parse_is_identifier(line_buffer, name_start_index, name_end_index, 0)) {
-					fprintf(stderr, "SYNTAX ERROR\n");
+					fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 					exit(1);
 				}
 				routine_name = parse_strdup(line_buffer, name_start_index, name_end_index);
 			}
 			*first_statement = mymalloc(sizeof(struct ast_statement));
 			(*first_statement)->statement_type = stmt_call;
+			(*first_statement)->filename = filename;
+			(*first_statement)->line_number = *line_number;
 			(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
 			(*first_statement)->first_argument->name = module_name;
 			(*first_statement)->first_argument->next_name = mymalloc(sizeof(struct ast_name_list));
 			(*first_statement)->first_argument->next_name->name = routine_name;
-			(*first_statement)->first_argument->next_name->next_name = parse_argument_list(line_buffer, line_len, name_end_index, 1);
+			(*first_statement)->first_argument->next_name->next_name = parse_argument_list(line_buffer, line_len, name_end_index, 1, filename, line_number);
 			first_statement = &(*first_statement)->next_statement;
 		} else if (line_len == 6 && line_buffer[0] == 'R' && line_buffer[1] == 'E' && line_buffer[2] == 'T' && line_buffer[3] == 'U' && line_buffer[4] == 'R' && line_buffer[5] == 'N') {
 			*first_statement = mymalloc(sizeof(struct ast_statement));
 			(*first_statement)->statement_type = stmt_return;
+			(*first_statement)->filename = filename;
+			(*first_statement)->line_number = *line_number;
 			first_statement = &(*first_statement)->next_statement;
 		} else if (line_len > 2 && line_buffer[0] == 'D' && line_buffer[1] == 'O') {
 			int index = parse_token_end_index(line_buffer, line_len, 2);
 			if (index == line_len && parse_is_identifier(line_buffer, 2, index, 0)) {
 				*first_statement = mymalloc(sizeof(struct ast_statement));
 				(*first_statement)->statement_type = stmt_do_loop;
+				(*first_statement)->filename = filename;
+				(*first_statement)->line_number = *line_number;
 				(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
 				(*first_statement)->first_argument->name = parse_strdup(line_buffer, 2, index);
 			} else if (index < line_len - 1 && line_buffer[index] == '<' && parse_is_identifier(line_buffer, index+1, line_len, 0)) {
 				*first_statement = mymalloc(sizeof(struct ast_statement));
 				(*first_statement)->statement_type = stmt_do_edges;
+				(*first_statement)->filename = filename;
+				(*first_statement)->line_number = *line_number;
 				(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
 				(*first_statement)->first_argument->name = parse_strdup(line_buffer, 2, index);
 				(*first_statement)->first_argument->next_name = mymalloc(sizeof(struct ast_name_list));
 				(*first_statement)->first_argument->next_name->name = parse_strdup(line_buffer, index+1, line_len);
 			} else {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
-			line_len = parse_statements(file, line_buffer, line_buffer_len, &(*first_statement)->first_child_statement);
+			line_len = parse_statements(file, line_buffer, line_buffer_len, &(*first_statement)->first_child_statement, filename, line_number);
 			if (line_len != 5 || line_buffer[0] != 'E' || line_buffer[1] != 'N' || line_buffer[2] != 'D' || line_buffer[3] != 'D' || line_buffer[4] != 'O') {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
 			first_statement = &(*first_statement)->next_statement;
 		} else if (line_len > 4 && line_buffer[0] == 'E' && line_buffer[1] == 'X' && line_buffer[2] == 'I' && line_buffer[3] == 'T') {
 			if (!parse_is_identifier(line_buffer, 4, line_len, 0)) {
-				fprintf(stderr, "SYNTAX ERROR\n");
+				fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 				exit(1);
 			}
 			*first_statement = mymalloc(sizeof(struct ast_statement));
 			(*first_statement)->statement_type = stmt_exit;
+			(*first_statement)->filename = filename;
+			(*first_statement)->line_number = *line_number;
 			(*first_statement)->first_argument = mymalloc(sizeof(struct ast_name_list));
 			(*first_statement)->first_argument->name = parse_strdup(line_buffer, 4, line_len);
 			first_statement = &(*first_statement)->next_statement;
@@ -311,7 +332,7 @@ static int parse_statements(FILE *file, char *line_buffer, int line_buffer_len, 
 	}
 }
 
-static struct ast_routine *parse_subroutine(FILE *file, char *line_buffer, int line_buffer_len, int line_len)
+static struct ast_routine *parse_subroutine(FILE *file, char *line_buffer, int line_buffer_len, int line_len, char *filename, int *line_number)
 {
 	if (line_len < 13 || line_buffer[0] != 'S' || line_buffer[1] != 'U' || line_buffer[2] != 'B' || line_buffer[3] != 'R' || line_buffer[4] != 'O' || line_buffer[5] != 'U' || line_buffer[6] != 'T' || line_buffer[7] != 'I' || line_buffer[8] != 'N' || line_buffer[9] != 'E') {
 		return 0;
@@ -319,35 +340,35 @@ static struct ast_routine *parse_subroutine(FILE *file, char *line_buffer, int l
 	int start_index = 10;
 	int end_index = parse_token_end_index(line_buffer, line_len, start_index);
 	if (!parse_is_identifier(line_buffer, start_index, end_index, 0)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 
 	struct ast_routine *routine = mymalloc(sizeof(struct ast_routine));
 	routine->name = parse_strdup(line_buffer, start_index, end_index);
-	routine->first_parameter = parse_argument_list(line_buffer, line_len, end_index, 0);
+	routine->first_parameter = parse_argument_list(line_buffer, line_len, end_index, 0, filename, line_number);
 
-	line_len = parse_statements(file, line_buffer, line_buffer_len, &routine->first_statement);
+	line_len = parse_statements(file, line_buffer, line_buffer_len, &routine->first_statement, filename, line_number);
 	if (line_len < 4 || line_buffer[0] != 'E' || line_buffer[1] != 'N' || line_buffer[2] != 'D' || strcmp(routine->name, line_buffer + 3)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	return routine;
 }
 
-static int parse_exports(FILE *file, char *line_buffer, int line_buffer_len, int line_len, struct ast_module *module)
+static int parse_exports(FILE *file, char *line_buffer, int line_buffer_len, int line_len, struct ast_module *module, char *filename, int *line_number)
 {
 	if (line_len < 8 || line_buffer[0] != 'L' || line_buffer[1] != 'I' || line_buffer[2] != 'B' || line_buffer[3] != 'R' || line_buffer[4] != 'A' || line_buffer[5] != 'R' || line_buffer[6] != 'Y') {
 		return 0;
 	}
 	if (!parse_is_identifier(line_buffer, 7, line_len, 0)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	module->name = parse_strdup(line_buffer, 7, line_len);
 
 	for (struct ast_name_list **export = &module->first_export;;) {
-		line_len = parse_read_line(file, line_buffer, line_buffer_len, 0);
+		line_len = parse_read_line(file, line_buffer, line_buffer_len, 0, filename, line_number);
 		if (line_len > 10 && line_buffer[0] == 'S' && line_buffer[1] == 'U' && line_buffer[2] == 'B' && line_buffer[3] == 'R' && line_buffer[4] == 'O' && line_buffer[5] == 'U' && line_buffer[6] == 'T' && line_buffer[7] == 'I' && line_buffer[8] == 'N' && line_buffer[9] == 'E' && parse_is_identifier(line_buffer, 10, line_len, 0)) {
 			*export = mymalloc(sizeof(struct ast_name_list));
 			(*export)->name = parse_strdup(line_buffer, 10, line_len);
@@ -355,60 +376,61 @@ static int parse_exports(FILE *file, char *line_buffer, int line_buffer_len, int
 		} else if (line_len > 3 && line_buffer[0] == 'E' && line_buffer[1] == 'N' && line_buffer[2] == 'D' && !strcmp(module->name, line_buffer + 3)) {
 			return 1;
 		} else {
-			fprintf(stderr, "SYNTAX ERROR\n");
+			fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 			exit(1);
 		}
 	}
 	return 1;
 }
 
-static int parse_program(FILE *file, char *line_buffer, int line_buffer_len, int line_len, struct ast_module *module)
+static int parse_program(FILE *file, char *line_buffer, int line_buffer_len, int line_len, struct ast_module *module, char *filename, int *line_number)
 {
 	if (line_len < 8 || line_buffer[0] != 'P' || line_buffer[1] != 'R' || line_buffer[2] != 'O' || line_buffer[3] != 'G' || line_buffer[4] != 'R' || line_buffer[5] != 'A' || line_buffer[6] != 'M') {
 		return 0;
 	}
 	if (!parse_is_identifier(line_buffer, 7, line_len, 0)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	module->name = parse_strdup(line_buffer, 7, line_len);
 	module->program = mymalloc(sizeof(struct ast_routine));
-	line_len = parse_statements(file, line_buffer, line_buffer_len, &module->program->first_statement);
+	line_len = parse_statements(file, line_buffer, line_buffer_len, &module->program->first_statement, filename, line_number);
 	if (line_len < 4 || line_buffer[0] != 'E' || line_buffer[1] != 'N' || line_buffer[2] != 'D' || strcmp(module->name, line_buffer + 3)) {
-		fprintf(stderr, "SYNTAX ERROR\n");
+		fprintf(stderr, "%s:%d SYNTAX ERROR\n", filename, *line_number);
 		exit(1);
 	}
 	return 1;
 }
 
-struct ast_module *parse(FILE *file)
+struct ast_module *parse(FILE *file, char *filename)
 {
 	struct ast_module *module = mymalloc(sizeof(struct ast_module));
 
 	char line_buffer[LINE_BUFFER_LEN];
-	int line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0);
+	int line_number = 0;
+	int line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0, filename, &line_number);
 	for (struct ast_name_list **use = &module->first_use;;) {
-		*use = parse_use(module, line_buffer, line_len);
+		*use = parse_use(module, line_buffer, line_len, filename, &line_number);
 		if (!*use) {
 			break;
 		}
 		use = &(*use)->next_name;
-		line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0);
+		line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0, filename, &line_number);
 	}
 
 	for (struct ast_routine **routine = &module->first_routine;;) {
-		*routine = parse_subroutine(file, line_buffer, LINE_BUFFER_LEN, line_len);
+		*routine = parse_subroutine(file, line_buffer, LINE_BUFFER_LEN, line_len, filename, &line_number);
 		if (!*routine) {
 			break;
 		}
 		routine = &(*routine)->next_routine;
-		line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0);
+		line_len = parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 0, filename, &line_number);
 	}
 
-	if (parse_exports(file, line_buffer, LINE_BUFFER_LEN, line_len, module)) {
-		parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 1);
-	} else if (parse_program(file, line_buffer, LINE_BUFFER_LEN, line_len, module)) {
-		parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 1);
+	if (parse_exports(file, line_buffer, LINE_BUFFER_LEN, line_len, module, filename, &line_number)) {
+		parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 1, filename, &line_number);
+	} else if (parse_program(file, line_buffer, LINE_BUFFER_LEN, line_len, module, filename, &line_number)) {
+		parse_read_line(file, line_buffer, LINE_BUFFER_LEN, 1, filename, &line_number);
 	} else {
 		fprintf(stderr, "SYNTAX ERROR\n");
 		exit(1);

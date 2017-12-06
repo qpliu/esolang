@@ -17,6 +17,8 @@ struct var *scope_get(struct scope *scope, int var_index);
 
 void scope_set(struct scope *scope, int var_index, struct var *var);
 
+void scope_refer(struct scope *scope, int var_index, struct var *var);
+
 void scope_push_do_edges(struct scope *scope, struct var *var);
 
 struct var *scope_pop_do_edge(struct scope *scope);

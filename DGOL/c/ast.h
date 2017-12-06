@@ -23,6 +23,8 @@ enum stmt_type {
 
 struct ast_statement {
 	enum stmt_type statement_type;
+	char *filename;
+	int line_number;
 	struct ast_name_list *first_argument;
 	struct ast_statement *first_child_statement;
 	struct ast_statement *next_statement;
