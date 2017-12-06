@@ -104,7 +104,7 @@ linkRoutine libs libName statements params scope1 args = do
     (_,scope4) <- executeStatements scope3 statements
     (return . Scope.gc . Scope.pop) scope4
   where
-    bindParam scope (param,Just arg) = Scope.set scope param arg
+    bindParam scope (param,Just arg) = Scope.refer scope param arg
     bindParam scope (param,Nothing) = snd (Scope.get scope param)
     executeStatements scope [] = do
         return (Fallthrough,scope)

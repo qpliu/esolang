@@ -1,6 +1,6 @@
 module Scope
     (Scope,Var,
-     new,push,pop,get,set,eq,hasEdge,addEdge,removeEdge,
+     new,push,pop,get,set,refer,eq,hasEdge,addEdge,removeEdge,
      edges,pushDoEdges,popDoEdges,gc)
 where
 
@@ -34,6 +34,10 @@ set :: Scope -> String -> Var -> Scope
 set s v1 v2 =
     let (var1,Scope (vars,scopes,doEdges)) = get s v1
     in  Scope (Vars.set vars var1 v2,scopes,doEdges)
+
+refer :: Scope -> String -> Var -> Scope
+refer s@(Scope (vars,scope:scopes,doEdges)) v1 v2 =
+    Scope (vars,Map.insert v1 v2 scope:scopes,doEdges)
 
 eq :: Scope -> Var -> Var -> Bool
 eq (Scope (vars,_,_)) v1 v2 = Vars.eq vars v1 v2
