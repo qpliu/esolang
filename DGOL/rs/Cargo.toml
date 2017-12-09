@@ -1,0 +1,7 @@
+[package]
+name = "dgol"
+version = "0.1.0"
+description = "DGOL (Directed Graph Oriented Language) interpreter"
+
+[[bin]]
+name = "dgol"
