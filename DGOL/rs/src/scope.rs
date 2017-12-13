@@ -151,4 +151,12 @@ impl<'a> Scope<'a> {
         assert!(do_edges_index < self.do_edges.len());
         self.do_edges[do_edges_index] = None;
     }
+
+    pub fn call_arg(&self, index: usize) -> *mut Option<Node> {
+        if index >= self.call_args.len() {
+            ptr::null_mut()
+        } else {
+            self.call_args[index]
+        }
+    }
 }

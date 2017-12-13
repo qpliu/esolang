@@ -1,3 +1,5 @@
+mod dgol_libs;
+mod interp;
 mod nodes;
 mod scope;
 
@@ -18,4 +20,5 @@ fn main() {
     new_scope.do_edges_start(0, &node);
     new_scope.do_edges_next(0);
     new_scope.do_edges_end(0);
+    dgol_libs::dgol_libs();
 }
