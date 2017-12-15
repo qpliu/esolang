@@ -1,6 +1,6 @@
 use std::io;
 use std::io::{Read,Write};
-use super::interp::{Module,Routine};
+use super::interp::{Program,Module,Routine};
 use super::nodes::Node;
 use super::scope::Scope;
 
@@ -41,8 +41,16 @@ impl Module for DGOLLib {
         None
     }
 
+    fn exported_routine_index(&self, name: &str) -> Option<usize> {
+        self.routine_index(name)
+    }
+
     fn routine(&self, index: usize) -> &Routine {
         &self.routines[index] as &Routine
+    }
+
+    fn program(&self) -> Option<&Routine> {
+        None
     }
 }
 
@@ -56,7 +64,7 @@ impl Routine for DGOLLibRoutine {
         self.name
     }
 
-    fn execute(&self, scope: &mut Scope) {
+    fn execute(&self, program: &Program, scope: &mut Scope) {
         (self.routine)(scope);
     }
 }

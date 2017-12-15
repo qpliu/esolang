@@ -1,3 +1,4 @@
+mod ast;
 mod dgol_libs;
 mod interp;
 mod nodes;
