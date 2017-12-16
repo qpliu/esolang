@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::io::{Error,ErrorKind,Result,Read};
+
 use super::interp;
 use super::scope::Scope;
 
@@ -13,6 +16,7 @@ pub struct Routine {
     name: Box<str>,
     parameters: Box<[Box<str>]>,
     statements: Box<[Statement]>,
+    exported: bool,
 
     var_count: usize,
     do_edges_count: usize,
@@ -76,22 +80,8 @@ impl interp::Module for Module {
         &self.name
     }
 
-    fn routine_index(&self, name: &str) -> Option<usize> {
-        for (i, routine) in self.routines.iter().enumerate() {
-            if &routine.name as &str == name {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    fn exported_routine_index(&self, name: &str) -> Option<usize> {
-        for export in self.exports.iter() {
-            if &export as &str == name {
-                return self.routine_index(name)
-            }
-        }
-        None
+    fn routine_count(&self) -> usize {
+        self.routines.len()
     }
 
     fn routine(&self, index: usize) -> &interp::Routine {
@@ -108,7 +98,37 @@ impl interp::Routine for Routine {
         &self.name
     }
 
+    fn exported(&self) -> bool {
+        self.exported
+    }
+
     fn execute(&self, program: &interp::Program, scope: &mut Scope) {
+        panic!("not implemented")
+    }
+}
+
+pub fn err<T>(msg: &str) -> Result<T> {
+    Err(Error::new(ErrorKind::Other, msg))
+}
+
+impl Module {
+    pub fn parse(filename: &str, r: &mut Read) -> Result<Self> {
+        panic!("not implemented")
+    }
+
+    pub fn resolve(&mut self, module_index: usize, module_routine_indexes: &HashMap<String, (usize,HashMap<String,(usize,bool)>)>) -> Result<()> {
+        for routine in self.routines.iter_mut() {
+            routine.resolve(module_index, module_routine_indexes)?;
+        }
+        for routine in self.program.iter_mut() {
+            routine.resolve(module_index, module_routine_indexes)?;
+        }
+        Ok(())
+    }
+}
+
+impl Routine {
+    fn resolve(&mut self, module_index: usize, module_routine_indexes: &HashMap<String, (usize,HashMap<String,(usize,bool)>)>) -> Result<()> {
         panic!("not implemented")
     }
 }

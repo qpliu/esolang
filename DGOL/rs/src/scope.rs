@@ -10,19 +10,13 @@ pub struct Scope<'a> {
 }
 
 impl<'a> Scope<'a> {
-    pub fn new(var_count: usize, do_edges_count: usize, max_call_arg_count: usize) -> Self {
-        let mut vars = Vec::with_capacity(var_count);
-        vars.resize(var_count, None);
-        let mut do_edges = Vec::with_capacity(do_edges_count);
-        do_edges.resize(do_edges_count, None);
-        let mut call_args = Vec::with_capacity(max_call_arg_count);
-        call_args.resize(max_call_arg_count, ptr::null_mut());
+    pub fn new() -> Self {
         Scope{
             parent: None,
             params: vec![].into_boxed_slice(),
-            vars: vars.into_boxed_slice(),
-            do_edges: do_edges.into_boxed_slice(),
-            call_args: call_args.into_boxed_slice(),
+            vars: vec![].into_boxed_slice(),
+            do_edges: vec![].into_boxed_slice(),
+            call_args: vec![].into_boxed_slice(),
         }
     }
 

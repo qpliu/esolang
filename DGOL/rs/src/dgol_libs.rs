@@ -32,17 +32,8 @@ impl Module for DGOLLib {
         self.name
     }
 
-    fn routine_index(&self, name: &str) -> Option<usize> {
-        for (i, routine) in self.routines.iter().enumerate() {
-            if name == routine.name() {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    fn exported_routine_index(&self, name: &str) -> Option<usize> {
-        self.routine_index(name)
+    fn routine_count(&self) -> usize {
+        self.routines.len()
     }
 
     fn routine(&self, index: usize) -> &Routine {
@@ -62,6 +53,10 @@ struct DGOLLibRoutine {
 impl Routine for DGOLLibRoutine {
     fn name(&self) -> &str {
         self.name
+    }
+
+    fn exported(&self) -> bool {
+        true
     }
 
     fn execute(&self, program: &Program, scope: &mut Scope) {
