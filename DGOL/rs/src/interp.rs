@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Result;
 
 use super::ast;
+use super::nodes::NodePool;
 use super::scope::Scope;
 
 pub struct Program {
@@ -11,6 +12,7 @@ pub struct Program {
 
 pub trait Module {
     fn name(&self) -> &str;
+    fn src_location(&self) -> Option<&(usize,usize)>;
     fn routine_count(&self) -> usize;
     fn routine(&self, index: usize) -> &Routine;
     fn program(&self) -> Option<&Routine>;
@@ -18,30 +20,36 @@ pub trait Module {
 
 pub trait Routine {
     fn name(&self) -> &str;
+    fn src_location(&self) -> Option<&(usize,usize)>;
     fn exported(&self) -> bool;
-    fn execute(&self, program: &Program, scope: &mut Scope);
+    fn execute(&self, program: &Program, scope: &mut Scope, node_pool: &mut NodePool);
 }
 
 impl Program {
+    pub fn module(&self, module_index: usize) -> &Module {
+        use std::ops::Deref;
+        self.modules[module_index].deref()
+    }
+
     pub fn resolve(modules: Vec<ast::Module>, libs: Box<[Box<Module>]>) -> Result<Self> {
         let mut program_module_index = None;
         let mut module_routine_indexes = HashMap::new();
         let mut module_index = 0;
         for module in modules.iter() {
             if module_routine_indexes.contains_key(module.name()) {
-                return ast::err(&format!("DUPLICATE MODULE NAME: {}", module.name()));
+                return ast::err(module.src_location(), &format!("DUPLICATE MODULE NAME: {}", module.name()));
             }
             let mut routine_indexes = HashMap::new();
             for index in 0 .. module.routine_count() {
                 let routine = module.routine(index);
                 if routine_indexes.contains_key(routine.name()) {
-                    return ast::err(&format!("DUPLICATE SUBROUTINE NAME: {} IN MODULE: {}", routine.name(), module.name()));
+                    return ast::err(routine.src_location(), &format!("DUPLICATE SUBROUTINE NAME: {} IN MODULE: {}", routine.name(), module.name()));
                 }
                 routine_indexes.insert(routine.name().to_owned(), (index,routine.exported()));
             }
             if module.program().is_some() {
                 if program_module_index.is_some() {
-                    return ast::err("MULTIPLE PROGRAM MODULES");
+                    return ast::err(module.src_location(), "MULTIPLE PROGRAM MODULES");
                 }
                 program_module_index = Some(module_index);
             }
@@ -49,7 +57,7 @@ impl Program {
             module_index += 1;
         }
         if program_module_index.is_none() {
-            return ast::err("NO PROGRAM MODULE");
+            return ast::err(None, "NO PROGRAM MODULE");
         }
         let program_module_index = program_module_index.unwrap();
         let mut used_libs = HashMap::new();
@@ -69,7 +77,7 @@ impl Program {
         let mut module_vec: Vec<Box<Module>> = Vec::new();
         module_index = 0;
         for mut module in modules.into_iter() {
-            module.resolve(module_index, &module_routine_indexes);
+            module.resolve(module_index, &module_routine_indexes)?;
             module_vec.push(Box::new(module));
             module_index += 1;
         }
@@ -86,6 +94,6 @@ impl Program {
     }
 
     pub fn execute(&self) {
-        self.modules[self.program_module_index].program().unwrap().execute(&self, &mut Scope::new());
+        self.modules[self.program_module_index].program().unwrap().execute(&self, &mut Scope::new(), &mut NodePool::new());
     }
 }

@@ -1,6 +1,7 @@
-use std::env::args;
+use std::env;
 use std::fs::File;
 use std::io::{Result,Write,stderr};
+use std::process;
 
 mod ast;
 mod dgol_libs;
@@ -15,15 +16,16 @@ fn main() {
         },
         Err(err) => {
             let _ = stderr().write_fmt(format_args!("{}\n", err));
+            process::exit(1);
         },
     }
 }
 
 fn program() -> Result<interp::Program> {
     let mut modules = Vec::new();
-    for arg in args() {
+    for (i,arg) in env::args().skip(1).enumerate() {
         let mut f = File::open(&arg)?;
-        let module = ast::Module::parse(&arg, &mut f)?;
+        let module = ast::Module::parse(i, &mut f)?;
         modules.push(module);
     }
     interp::Program::resolve(modules, dgol_libs::dgol_libs())

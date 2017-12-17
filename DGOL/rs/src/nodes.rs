@@ -46,7 +46,6 @@ const PAGE_SIZE: usize = 256;
 const NEW_PAGE_THRESHOLD: usize = 240;
 
 impl NodePage {
-
     fn new() -> Self {
         let mut nodes = Vec::with_capacity(PAGE_SIZE);
         for _ in 0 .. PAGE_SIZE {

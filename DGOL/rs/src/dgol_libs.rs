@@ -1,7 +1,7 @@
 use std::io;
 use std::io::{Read,Write};
 use super::interp::{Program,Module,Routine};
-use super::nodes::Node;
+use super::nodes::{Node,NodePool};
 use super::scope::Scope;
 
 pub fn dgol_libs() -> Box<[Box<Module>]> {
@@ -32,6 +32,10 @@ impl Module for DGOLLib {
         self.name
     }
 
+    fn src_location(&self) -> Option<&(usize,usize)> {
+        None
+    }
+
     fn routine_count(&self) -> usize {
         self.routines.len()
     }
@@ -55,11 +59,15 @@ impl Routine for DGOLLibRoutine {
         self.name
     }
 
+    fn src_location(&self) -> Option<&(usize,usize)> {
+        None
+    }
+
     fn exported(&self) -> bool {
         true
     }
 
-    fn execute(&self, program: &Program, scope: &mut Scope) {
+    fn execute(&self, _: &Program, scope: &mut Scope, _: &mut NodePool) {
         (self.routine)(scope);
     }
 }
