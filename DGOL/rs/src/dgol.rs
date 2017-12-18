@@ -24,8 +24,8 @@ fn main() {
 fn program() -> Result<interp::Program> {
     let mut modules = Vec::new();
     for (i,arg) in env::args().skip(1).enumerate() {
-        let mut f = File::open(&arg)?;
-        let module = ast::Module::parse(i, &mut f)?;
+        let f = File::open(&arg)?;
+        let module = ast::Module::parse(i, f)?;
         modules.push(module);
     }
     interp::Program::resolve(modules, dgol_libs::dgol_libs())

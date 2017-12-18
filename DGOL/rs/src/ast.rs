@@ -1,5 +1,6 @@
 use std::collections::{HashMap,HashSet};
 use std::io::{Error,ErrorKind,Result,Read};
+use std::marker::PhantomData;
 
 use super::interp;
 use super::nodes::NodePool;
@@ -166,8 +167,8 @@ pub fn err<T>(src_location: Option<&(usize,usize)>, msg: &str) -> Result<T> {
 }
 
 impl Module {
-    pub fn parse(filename_index: usize, r: &mut Read) -> Result<Self> {
-        panic!("not implemented")
+    pub fn parse<R: Read>(filename_index: usize, r: R) -> Result<Self> {
+        ModuleParser::parse(filename_index, r)
     }
 
     pub fn resolve(&mut self, module_index: usize, module_routine_indexes: &HashMap<String, (usize,HashMap<String,(usize,bool)>)>) -> Result<()> {
@@ -347,6 +348,253 @@ impl IfBranch {
         }
         None
     }
+}
+
+fn is_identifier(token: &str) -> bool {
+    token != "0" && is_identifier_or_0(token)
+}
+
+fn is_identifier_or_0(token: &str) -> bool {
+    for ch in token.chars() {
+        if !ch.is_alphanumeric() {
+            return false;
+        }
+    }
+    token.len() > 0
+}
+
+struct ModuleParser<'a,R:'a> {
+    filename_index: usize,
+    reader: R,
+    current_line: String,
+    current_line_number: usize,
+    current_token_index: usize,
+    seen_eof: bool,
+    phantom_data: PhantomData<&'a R>,
+
+    name: String,
+    uses: Vec<Box<str>>,
+    routines: Vec<Routine>,
+    exports: Vec<Box<str>>,
+    program: Option<Routine>,
+}
+
+struct RoutineParser<'a,R:'a> {
+    module_parser: &'a mut ModuleParser<'a,R>,
+
+    src_location: (usize,usize),
+    name: String,
+    parameters: Vec<Box<str>>,
+    statements: Vec<Statement>,
+}
+
+impl<'a,R:Read> ModuleParser<'a,R> {
+    pub fn parse(filename_index: usize, r: R) -> Result<Module> {
+        let mut module_parser = ModuleParser {
+            filename_index: filename_index,
+            reader: r,
+            current_line: String::new(),
+            current_line_number: 0,
+            current_token_index: 0,
+            seen_eof: false,
+            phantom_data: PhantomData,
+
+            name: String::new(),
+            uses: Vec::new(),
+            routines: Vec::new(),
+            exports: Vec::new(),
+            program: None,
+        };
+        module_parser.next_line(false)?;
+        module_parser.parse_uses()?;
+        module_parser.parse_subroutines()?;
+        if !module_parser.parse_exports()? {
+            if !module_parser.parse_program()? {
+                return module_parser.err("SYNTAX ERROR");
+            }
+        }
+        Ok(Module {
+                src_location:(filename_index,1),
+                name: module_parser.name.into_boxed_str(),
+                uses: module_parser.uses.into_boxed_slice(),
+                routines: module_parser.routines.into_boxed_slice(),
+                exports: module_parser.exports.into_boxed_slice(),
+                program: module_parser.program,
+            })
+    }
+
+    fn next_line(&mut self, expect_eof: bool) -> Result<()> {
+        if self.seen_eof {
+            if expect_eof {
+                return Ok(());
+            } else {
+                return self.err("UNEXPECTED EOF");
+            }
+        }
+        self.current_line_number += 1;
+        self.current_line.clear();
+        let mut in_comment = false;
+        loop {
+            let mut buffer = [0u8; 1];
+            let count = self.reader.read(&mut buffer)?;
+            if count == 0 {
+                self.seen_eof = true;
+                if !self.current_line.is_empty() || expect_eof {
+                    return Ok(());
+                } else {
+                    return self.err("UNEXPECTED EOF");
+                }
+            }
+            let ch = char::from(buffer[0]); // Change to decoding UTF-8 when it is better supported in the std lib
+            if in_comment {
+                if ch == '\n' {
+                    if !self.current_line.is_empty() {
+                        if !expect_eof {
+                            return Ok(());
+                        } else {
+                            return self.err("UNEXPECTED TRAILING JUNK");
+                        }
+                    } else {
+                        in_comment = false;
+                        self.current_line_number += 1;
+                    }
+                }
+            } else {
+                if ch == '\n' {
+                    if !self.current_line.is_empty() {
+                        return Ok(());
+                    } else {
+                        self.current_line_number += 1;
+                    }
+                } else if ch == '*' {
+                    in_comment = true;
+                } else {
+                    self.current_line.push(ch);
+                }
+            }
+        }
+    }
+
+    fn starts_with(&mut self, token: &str) -> bool {
+        if self.current_line.starts_with(token) {
+            self.current_token_index = token.len();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn next_token(&mut self) -> Option<String> {
+        let start = self.current_token_index;
+        let len = self.current_line.len();
+        if start >= len {
+            return None;
+        }
+        let mut token = String::new();
+        for ch in self.current_line[start ..].chars() {
+            if ch.is_alphanumeric() {
+                token.push(ch);
+            } else if token.is_empty() {
+                token.push(ch);
+                self.current_token_index += token.len();
+                return Some(token);
+            } else {
+                self.current_token_index += token.len();
+                return Some(token);
+            }
+        }
+        self.current_token_index += token.len();
+        return Some(token);
+    }
+
+    fn call_args(&mut self) -> Result<Box<[Box<str>]>> {
+        match self.next_token() {
+            None => return self.err("SYNTAX ERROR"),
+            Some(token) => {
+                if token != "(" {
+                    return self.err("SYNTAX ERROR");
+                }
+            },
+        }
+        let mut result = Vec::new();
+        loop {
+            match self.next_token() {
+                None => return self.err("SYNTAX ERROR"),
+                Some(token) => {
+                    if is_identifier_or_0(&token) {
+                        result.push(token.into_boxed_str());
+                    } else if token == ")" && result.is_empty() {
+                        break;
+                    }
+                },
+            }
+            match self.next_token() {
+                None => return self.err("SYNTAX ERROR"),
+                Some(token) => {
+                    if token == ")" {
+                        break;
+                    } else if token != "," {
+                        return self.err("SYNTAX ERROR");
+                    }
+                },
+            }
+        }
+        match self.next_token() {
+            None => Ok(result.into_boxed_slice()),
+            _ => self.err("SYNTAX ERROR"),
+        }
+    }
+
+    fn err<T>(&self, msg: &str) -> Result<T> {
+        err(Some(&(self.filename_index,self.current_line_number)), msg)
+    }
+
+    fn parse_uses(&mut self) -> Result<()> {
+        loop {
+            if !self.starts_with("USE") {
+                return Ok(());
+            }
+            let token = match self.next_token() {
+                None => return self.err("SYNTAX ERROR"),
+                Some(token) => token,
+            };
+            if !is_identifier(&token) {
+                return self.err("SYNTAX ERROR");
+            }
+            match self.next_token() {
+                None => (),
+                _ => return self.err("SYNTAX ERROR"),
+            }
+            self.uses.push(token.into_boxed_str());
+            self.next_line(false)?;
+        }
+    }
+
+    fn parse_subroutines(&mut self) -> Result<()> {
+        loop {
+            if !self.starts_with("SUBROUTINE") {
+                return Ok(());
+            }
+            panic!("not implemented");
+        }
+    }
+
+    fn parse_exports(&mut self) -> Result<bool> {
+        if !self.starts_with("LIBRARY") {
+            return Ok(false);
+        }
+        panic!("not implemented");
+    }
+
+    fn parse_program(&mut self) -> Result<bool> {
+        if !self.starts_with("PROGRAM") {
+            return Ok(false);
+        }
+        panic!("not implemented");
+    }
+}
+
+impl<'a,R> RoutineParser<'a,R> {
 }
 
 struct ModuleResolver<'a> {
