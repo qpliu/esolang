@@ -118,7 +118,7 @@ impl NodeCell {
     }
 
     fn has_edge(&self, other: &Node) -> bool {
-        assert!(self.is_empty());
+        assert!(!self.is_empty());
         for edges in self.edges.iter() {
             return edges.contains(other);
         }
@@ -126,7 +126,7 @@ impl NodeCell {
     }
 
     fn add_edge(&mut self, other: &Node) {
-        assert!(self.is_empty());
+        assert!(!self.is_empty());
         if !self.has_edge(other) {
             for mut edges in self.edges.iter_mut() {
                 edges.push(other.clone());
@@ -156,7 +156,7 @@ impl NodeCell {
     }
 
     fn has_gc_mark(&self, gc_mark: u8) -> bool {
-        assert!(self.is_empty());
+        assert!(!self.is_empty());
         self.gc_mark == gc_mark
     }
 }

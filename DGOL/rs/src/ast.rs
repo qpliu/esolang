@@ -1,6 +1,5 @@
 use std::collections::{HashMap,HashSet};
 use std::io::{Error,ErrorKind,Result,Read};
-use std::marker::PhantomData;
 
 use super::interp;
 use super::nodes::NodePool;
@@ -59,7 +58,7 @@ enum Statement {
         src_location: (usize,usize),
     },
     DoLoop {
-        src_location: (usize,usize),
+        _src_location: (usize,usize),
         arg: Box<str>,
         statements: Box<[Statement]>,
         do_index: usize,
@@ -86,14 +85,14 @@ enum IfBranch {
         arg_indexes: [usize; 2],
         statements: Box<[Statement]>,
     },
-    Edges {
+    Edge {
         src_location: (usize,usize),
         args: [Box<str>; 2],
         arg_indexes: [usize; 2],
         statements: Box<[Statement]>,
     },
     Else {
-        src_location: (usize,usize),
+        _src_location: (usize,usize),
         statements: Box<[Statement]>,
     },
 }
@@ -248,7 +247,7 @@ impl Statement {
                 Next::Return
             },
             &Statement::DoLoop {
-                src_location: _,
+                _src_location: _,
                 arg: _,
                 ref statements,
                 ref do_index,
@@ -327,7 +326,7 @@ impl IfBranch {
                     return Some(execute_statements(statements, program, scope, node_pool))
                 }
             },
-            &IfBranch::Edges {
+            &IfBranch::Edge {
                 src_location: _,
                 args: _,
                 ref arg_indexes,
@@ -340,7 +339,7 @@ impl IfBranch {
                 }
             },
             &IfBranch::Else {
-                src_location: _,
+                _src_location: _,
                 ref statements,
             } => {
                 return Some(execute_statements(statements, program, scope, node_pool));
@@ -363,14 +362,13 @@ fn is_identifier_or_0(token: &str) -> bool {
     token.len() > 0
 }
 
-struct ModuleParser<'a,R:'a> {
+struct ModuleParser<R> {
     filename_index: usize,
     reader: R,
     current_line: String,
     current_line_number: usize,
     current_token_index: usize,
     seen_eof: bool,
-    phantom_data: PhantomData<&'a R>,
 
     name: String,
     uses: Vec<Box<str>>,
@@ -379,16 +377,7 @@ struct ModuleParser<'a,R:'a> {
     program: Option<Routine>,
 }
 
-struct RoutineParser<'a,R:'a> {
-    module_parser: &'a mut ModuleParser<'a,R>,
-
-    src_location: (usize,usize),
-    name: String,
-    parameters: Vec<Box<str>>,
-    statements: Vec<Statement>,
-}
-
-impl<'a,R:Read> ModuleParser<'a,R> {
+impl<R:Read> ModuleParser<R> {
     pub fn parse(filename_index: usize, r: R) -> Result<Module> {
         let mut module_parser = ModuleParser {
             filename_index: filename_index,
@@ -397,7 +386,6 @@ impl<'a,R:Read> ModuleParser<'a,R> {
             current_line_number: 0,
             current_token_index: 0,
             seen_eof: false,
-            phantom_data: PhantomData,
 
             name: String::new(),
             uses: Vec::new(),
@@ -413,6 +401,7 @@ impl<'a,R:Read> ModuleParser<'a,R> {
                 return module_parser.err("SYNTAX ERROR");
             }
         }
+        module_parser.next_line(true)?;
         Ok(Module {
                 src_location:(filename_index,1),
                 name: module_parser.name.into_boxed_str(),
@@ -468,7 +457,7 @@ impl<'a,R:Read> ModuleParser<'a,R> {
                     }
                 } else if ch == '*' {
                     in_comment = true;
-                } else {
+                } else if !ch.is_whitespace() {
                     self.current_line.push(ch);
                 }
             }
@@ -507,42 +496,85 @@ impl<'a,R:Read> ModuleParser<'a,R> {
         return Some(token);
     }
 
-    fn call_args(&mut self) -> Result<Box<[Box<str>]>> {
+    fn next_token_is(&mut self, token: &str) -> bool {
+        let start = self.current_token_index;
         match self.next_token() {
-            None => return self.err("SYNTAX ERROR"),
-            Some(token) => {
-                if token != "(" {
-                    return self.err("SYNTAX ERROR");
+            None => false,
+            Some(tok) => {
+                if tok == token {
+                    true
+                } else {
+                    self.current_token_index = start;
+                    false
                 }
             },
         }
-        let mut result = Vec::new();
-        loop {
-            match self.next_token() {
-                None => return self.err("SYNTAX ERROR"),
-                Some(token) => {
-                    if is_identifier_or_0(&token) {
-                        result.push(token.into_boxed_str());
-                    } else if token == ")" && result.is_empty() {
-                        break;
-                    }
-                },
-            }
-            match self.next_token() {
-                None => return self.err("SYNTAX ERROR"),
-                Some(token) => {
-                    if token == ")" {
-                        break;
-                    } else if token != "," {
-                        return self.err("SYNTAX ERROR");
-                    }
-                },
-            }
+    }
+
+    fn next_token_must_be(&mut self, token: &str) -> Result<()> {
+        if self.next_token_is(token) {
+            Ok(())
+        } else {
+            self.err("SYNTAX ERROR")
         }
+    }
+
+    fn next_identifier(&mut self) -> Result<String> {
         match self.next_token() {
-            None => Ok(result.into_boxed_slice()),
-            _ => self.err("SYNTAX ERROR"),
+            None => self.err("SYNTAX ERROR"),
+            Some(token) => {
+                if !is_identifier(&token) {
+                    self.err("SYNTAX ERROR")
+                } else {
+                    Ok(token)
+                }
+            },
         }
+    }
+
+    fn next_identifier_or_0(&mut self) -> Result<String> {
+        match self.next_token() {
+            None => self.err("SYNTAX ERROR"),
+            Some(token) => {
+                if !is_identifier_or_0(&token) {
+                    self.err("SYNTAX ERROR")
+                } else {
+                    Ok(token)
+                }
+            },
+        }
+    }
+
+    fn no_more_tokens(&mut self) -> Result<()> {
+        if self.next_token().is_some() {
+            return self.err("SYNTAX ERROR");
+        }
+        Ok(())
+    }
+
+    fn is_end(&mut self, name: &str) -> Result<()> {
+        if !self.starts_with("END") {
+            return self.err("SYNTAX ERROR");
+        }
+        self.next_token_must_be(name)?;
+        self.no_more_tokens()?;
+        Ok(())
+    }
+
+    fn call_args(&mut self) -> Result<Box<[Box<str>]>> {
+        self.next_token_must_be("(")?;
+        let mut result = Vec::new();
+        if !self.next_token_is(")") {
+            loop {
+                result.push(self.next_identifier_or_0()?.into_boxed_str());
+                if self.next_token_is(")") {
+                    break;
+                }
+                self.next_token_must_be(",")?;
+            }
+        }
+        self.no_more_tokens()?;
+        Ok(result.into_boxed_slice())
     }
 
     fn err<T>(&self, msg: &str) -> Result<T> {
@@ -554,17 +586,8 @@ impl<'a,R:Read> ModuleParser<'a,R> {
             if !self.starts_with("USE") {
                 return Ok(());
             }
-            let token = match self.next_token() {
-                None => return self.err("SYNTAX ERROR"),
-                Some(token) => token,
-            };
-            if !is_identifier(&token) {
-                return self.err("SYNTAX ERROR");
-            }
-            match self.next_token() {
-                None => (),
-                _ => return self.err("SYNTAX ERROR"),
-            }
+            let token = self.next_identifier()?;
+            self.no_more_tokens()?;
             self.uses.push(token.into_boxed_str());
             self.next_line(false)?;
         }
@@ -572,10 +595,13 @@ impl<'a,R:Read> ModuleParser<'a,R> {
 
     fn parse_subroutines(&mut self) -> Result<()> {
         loop {
-            if !self.starts_with("SUBROUTINE") {
-                return Ok(());
+            match self.parse_subroutine()? {
+                None => return Ok(()),
+                Some(routine) => {
+                    self.routines.push(routine);
+                    self.next_line(false)?;
+                },
             }
-            panic!("not implemented");
         }
     }
 
@@ -583,18 +609,242 @@ impl<'a,R:Read> ModuleParser<'a,R> {
         if !self.starts_with("LIBRARY") {
             return Ok(false);
         }
-        panic!("not implemented");
+        let name = self.next_identifier()?;
+        self.no_more_tokens()?;
+        self.next_line(false)?;
+        loop {
+            if !self.starts_with("SUBROUTINE") {
+                break;
+            }
+            let export = self.next_identifier()?;
+            self.no_more_tokens()?;
+            let mut valid_export = false;
+            for mut routine in self.routines.iter_mut() {
+                use std::ops::Deref;
+                if export == routine.name.deref() {
+                    routine.exported = true;
+                    valid_export = true;
+                    break;
+                }
+            }
+            if !valid_export {
+                return self.err(&format!("UNDEFINED SUBROUTINE: {}", export));
+            }
+            self.exports.push(export.into_boxed_str());
+            self.next_line(false)?;
+        }
+        self.is_end(name.as_str())?;
+        Ok(true)
     }
 
     fn parse_program(&mut self) -> Result<bool> {
         if !self.starts_with("PROGRAM") {
             return Ok(false);
         }
-        panic!("not implemented");
+        let name = self.next_identifier()?;
+        self.name.push_str(&name);
+        self.no_more_tokens()?;
+        let parameters = Vec::new().into_boxed_slice();
+        self.program = Some(self.parse_routine_body(name, parameters)?);
+        Ok(true)
     }
-}
 
-impl<'a,R> RoutineParser<'a,R> {
+    fn parse_subroutine(&mut self) -> Result<Option<Routine>> {
+        if !self.starts_with("SUBROUTINE") {
+            return Ok(None);
+        }
+        let name = self.next_identifier()?;
+        let parameters = self.call_args()?;
+        Ok(Some(self.parse_routine_body(name, parameters)?))
+    }
+
+    fn parse_routine_body(&mut self, name: String, parameters: Box<[Box<str>]>) -> Result<Routine> {
+        let src_location = (self.filename_index,self.current_line_number);
+        let statements = self.parse_statements()?;
+        self.is_end(name.as_str())?;
+        Ok(Routine {
+                src_location,
+                name: name.into_boxed_str(),
+                parameters,
+                statements: statements.into_boxed_slice(),
+                exported: false,
+
+                var_count: 0,
+                do_edges_count: 0,
+                max_call_arg_count: 0,
+            })
+    }
+
+    fn parse_statements(&mut self) -> Result<Vec<Statement>> {
+        let mut statements = Vec::new();
+        loop {
+            self.next_line(false)?;
+            match self.parse_statement()? {
+                None => return Ok(statements),
+                Some(statement) => statements.push(statement),
+            }
+        }
+    }
+
+    fn parse_statement(&mut self) -> Result<Option<Statement>> {
+        let src_location = (self.filename_index,self.current_line_number);
+        if self.starts_with("LET") {
+            let arg0 = self.next_identifier()?;
+            if self.next_token_is("=") {
+                let arg1 = self.next_identifier_or_0()?;
+                self.no_more_tokens()?;
+                Ok(Some(Statement::LetEq {
+                            src_location,
+                            args: [arg0.into_boxed_str(), arg1.into_boxed_str()],
+                            arg0_index: 0,
+                            arg1_index: None,
+                        }))
+            } else if self.next_token_is(">") {
+                let arg1 = self.next_identifier_or_0()?;
+                self.no_more_tokens()?;
+                Ok(Some(Statement::LetAddEdge {
+                            src_location,
+                            args: [arg0.into_boxed_str(), arg1.into_boxed_str()],
+                            arg0_index: 0,
+                            arg1_index: None,
+                        }))
+            } else if self.next_token_is("<") {
+                let arg1 = self.next_identifier_or_0()?;
+                self.no_more_tokens()?;
+                Ok(Some(Statement::LetRemoveEdge {
+                            src_location,
+                            args: [arg0.into_boxed_str(), arg1.into_boxed_str()],
+                            arg_indexes: [0,0],
+                        }))
+            } else {
+                self.err("SYNTAX ERROR")
+            }
+        } else if self.starts_with("IF") {
+            let mut if_branches = Vec::new();
+            loop {
+                let if_branch = self.parse_if_branch(if_branches.is_empty())?;
+                match if_branch {
+                    None => break,
+                    Some(branch) => {
+                        let is_else = match &branch {
+                            &IfBranch::Else {
+                                _src_location: _,
+                                statements: _,
+                            } => true,
+                            _ => false,
+                        };
+                        if_branches.push(branch);
+                        if is_else {
+                            break;
+                        }
+                    },
+                }
+            }
+            self.is_end("IF")?;
+            Ok(Some(Statement::If(if_branches.into_boxed_slice())))
+        } else if self.starts_with("CALL") {
+            let first_name = self.next_identifier()?;
+            let (module_name,routine_name) = if self.next_token_is(".") {
+                let second_name = self.next_identifier()?;
+                (Some(first_name.into_boxed_str()),second_name.into_boxed_str())
+            } else {
+                (None,first_name.into_boxed_str())
+            };
+            let args = self.call_args()?;
+            Ok(Some(Statement::Call {
+                        src_location,
+                        module_name,
+                        routine_name,
+                        args,
+                        module_index: 0,
+                        routine_index: 0,
+                        arg_indexes: Vec::new().into_boxed_slice(),
+                    }))
+        } else if self.starts_with("RETURN") {
+            self.no_more_tokens()?;
+            Ok(Some(Statement::Return { src_location }))
+        } else if self.starts_with("DO") {
+            let arg = self.next_identifier()?;
+            if self.next_token_is("<") {
+                let arg1 = self.next_identifier()?;
+                self.no_more_tokens()?;
+                let statements = self.parse_statements()?;
+                self.is_end("DO")?;
+                Ok(Some(Statement::DoEdges {
+                            src_location,
+                            args: [arg.into_boxed_str(), arg1.into_boxed_str()],
+                            statements: statements.into_boxed_slice(),
+                            arg_indexes: [0,0],
+                            do_index: 0,
+                            do_edges_index: 0,
+                        }))
+            } else {
+                self.no_more_tokens()?;
+                let statements = self.parse_statements()?;
+                self.is_end("DO")?;
+                Ok(Some(Statement::DoLoop {
+                            _src_location: src_location,
+                            arg: arg.into_boxed_str(),
+                            statements: statements.into_boxed_slice(),
+                            do_index: 0,
+                        }))
+            }
+        } else if self.starts_with("EXIT") {
+            let arg = self.next_identifier()?;
+            self.no_more_tokens()?;
+            Ok(Some(Statement::Exit {
+                        src_location,
+                        arg: arg.into_boxed_str(),
+                        do_index: 0,
+                    }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_if_branch(&mut self, is_first_branch: bool) -> Result<Option<IfBranch>> {
+        let src_location = (self.filename_index,self.current_line_number);
+        if is_first_branch {
+            if !self.starts_with("IF") {
+                return self.err("SYNTAX ERROR");
+            }
+        } else {
+            if self.starts_with("ELSEIF") {
+            } else if self.starts_with("ELSE") {
+                self.no_more_tokens()?;
+                let statements = self.parse_statements()?;
+                return Ok(Some(IfBranch::Else {
+                            _src_location: src_location,
+                            statements: statements.into_boxed_slice(),
+                        }));
+            } else {
+                return Ok(None);
+            }
+        }
+        let arg0 = self.next_identifier()?;
+        if self.next_token_is("=") {
+            let arg1 = self.next_identifier()?;
+            self.no_more_tokens()?;
+            let statements = self.parse_statements()?;
+            Ok(Some(IfBranch::Eq {
+                        src_location,
+                        args: [arg0.into_boxed_str(), arg1.into_boxed_str()],
+                        arg_indexes: [0,0],
+                        statements: statements.into_boxed_slice(),
+                    }))
+        } else {
+            self.next_token_must_be(">")?;
+            let arg1 = self.next_identifier()?;
+            self.no_more_tokens()?;
+            let statements = self.parse_statements()?;
+            Ok(Some(IfBranch::Edge {
+                        src_location,
+                        args: [arg0.into_boxed_str(), arg1.into_boxed_str()],
+                        arg_indexes: [0,0],
+                        statements: statements.into_boxed_slice(),
+                    }))
+        }
+    }
 }
 
 struct ModuleResolver<'a> {
@@ -785,10 +1035,12 @@ impl<'a> RoutineResolver<'a> {
                         }
                     },
                 }
-                for i in 0 .. args.len() {
+                let mut vec = Vec::new();
+                for arg in args.iter() {
                     use std::ops::Deref;
-                    arg_indexes[i] = self.resolve_var_or_0(args[i].deref());
+                    vec.push(self.resolve_var_or_0(arg.deref()));
                 }
+                *arg_indexes = vec.into_boxed_slice();
                 if args.len() > self.max_call_arg_count {
                     self.max_call_arg_count = args.len();
                 }
@@ -801,7 +1053,7 @@ impl<'a> RoutineResolver<'a> {
                 }
             },
             &mut Statement::DoLoop {
-                src_location: _,
+                _src_location: _,
                 ref arg,
                 ref mut statements,
                 ref mut do_index,
@@ -856,7 +1108,7 @@ impl<'a> RoutineResolver<'a> {
                 arg_indexes[1] = self.resolve_var(src_location, args[1].deref())?;
                 self.resolve_statements(statements)?;
             },
-            &mut IfBranch::Edges {
+            &mut IfBranch::Edge {
                 ref src_location,
                 ref args,
                 ref mut arg_indexes,
@@ -868,7 +1120,7 @@ impl<'a> RoutineResolver<'a> {
                 self.resolve_statements(statements)?;
             },
             &mut IfBranch::Else {
-                src_location: _,
+                _src_location: _,
                 ref mut statements,
             } => {
                 self.resolve_statements(statements)?;
