@@ -2,6 +2,9 @@
 
 == format:
 == program = (name ones names functions)
+==            name is name of the main function
+==            ones is arity of the main function in base-1 
+==            names and functions are lists associated names and functions
 == names = (name name ...)
 == functions = (definitions definitions ...)
 == definitions = (definition definition ...)
@@ -11,6 +14,7 @@
 == bound-pattern = 0 bits
 == literal-pattern = 1 0 bits
 == wild-pattern = 1 1 bits
+== name = bits
 == bits = bit ...
 == bit = 0 | 1
 == ones = 1 ...
@@ -20,8 +24,11 @@
 == concat = 1 value
 == value = literal | binding | funcall
 == binding = 0 ones
+==            ones is the index of the bound pattern in base-1
 == literal = 1 0 bits
-== funcall = 1 1 (bits ones)
+== funcall = 1 1 (name ones)
+==            name is the name of the function being called
+==            ones is the arity of the function being called in base-1
 
 bitcode bitcode arg arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9 =
     interpret-bitcode bitcode
