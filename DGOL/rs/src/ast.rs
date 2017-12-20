@@ -58,7 +58,7 @@ enum Statement {
         src_location: (usize,usize),
     },
     DoLoop {
-        _src_location: (usize,usize),
+        src_location: (usize,usize),
         arg: Box<str>,
         statements: Box<[Statement]>,
         do_index: usize,
@@ -92,7 +92,7 @@ enum IfBranch {
         statements: Box<[Statement]>,
     },
     Else {
-        _src_location: (usize,usize),
+        src_location: (usize,usize),
         statements: Box<[Statement]>,
     },
 }
@@ -165,6 +165,13 @@ pub fn err<T>(src_location: Option<&(usize,usize)>, msg: &str) -> Result<T> {
     }
 }
 
+fn trace(&(filename_index,line_number): &(usize,usize), msg: &str) {
+    if false {
+        use std::env::args;
+        println!("{}:{} {}", args().nth(filename_index+1).unwrap(), line_number, msg);
+    }
+}
+
 impl Module {
     pub fn parse<R: Read>(filename_index: usize, r: R) -> Result<Self> {
         ModuleParser::parse(filename_index, r)
@@ -179,11 +186,12 @@ impl Statement {
     fn execute(&self, program: &interp::Program, scope: &mut Scope, node_pool: &mut NodePool) -> Next {
         match self {
             &Statement::LetEq {
-                src_location: _,
-                args: _,
+                ref src_location,
                 ref arg0_index,
                 ref arg1_index,
+                ..
             } => {
+                trace(src_location, "LET=");
                 let node = match arg1_index {
                     &Some(index) => scope.get_var(index, node_pool),
                     &None => scope.new_node(node_pool),
@@ -192,11 +200,12 @@ impl Statement {
                 Next::Fallthrough
             },
             &Statement::LetAddEdge {
-                src_location: _,
-                args: _,
+                ref src_location,
                 ref arg0_index,
                 ref arg1_index,
+                ..
             } => {
+                trace(src_location, "LET>");
                 let node = match arg1_index {
                     &Some(index) => scope.get_var(index, node_pool),
                     &None => scope.new_node(node_pool),
@@ -205,10 +214,11 @@ impl Statement {
                 Next::Fallthrough
             },
             &Statement::LetRemoveEdge {
-                src_location: _,
-                args: _,
+                ref src_location,
                 ref arg_indexes,
+                ..
             } => {
+                trace(src_location, "LET<");
                 let node0 = scope.get_var(arg_indexes[0], node_pool);
                 let node1 = scope.get_var(arg_indexes[1], node_pool);
                 node0.remove_edge(&node1);
@@ -224,14 +234,13 @@ impl Statement {
                 Next::Fallthrough
             },
             &Statement::Call {
-                src_location: _,
-                module_name: _,
-                routine_name: _,
-                args: _,
+                ref src_location,
                 ref module_index,
                 ref routine_index,
                 ref arg_indexes,
+                ..
             } => {
+                trace(src_location, "CALL");
                 scope.clear_call_args();
                 for i in 0 .. arg_indexes.len() {
                     if let Some(arg_index) = arg_indexes[i] {
@@ -242,16 +251,18 @@ impl Statement {
                 Next::Fallthrough
             },
             &Statement::Return {
-                src_location: _,
+                ref src_location,
             } => {
+                trace(src_location, "RETURN");
                 Next::Return
             },
             &Statement::DoLoop {
-                _src_location: _,
-                arg: _,
+                ref src_location,
                 ref statements,
                 ref do_index,
+                ..
             } => {
+                trace(src_location, "DO");
                 loop {
                     let next = execute_statements(statements, program, scope, node_pool);
                     match next {
@@ -267,13 +278,14 @@ impl Statement {
                 }
             },
             &Statement::DoEdges {
-                src_location: _,
-                args: _,
+                ref src_location,
                 ref statements,
                 ref arg_indexes,
                 ref do_index,
                 ref do_edges_index,
+                ..
             } => {
+                trace(src_location, "DO<");
                 let node1 = scope.get_var(arg_indexes[1], node_pool);
                 scope.do_edges_start(*do_edges_index, &node1);
                 let mut next = Next::Fallthrough;
@@ -301,10 +313,11 @@ impl Statement {
                 next
             },
             &Statement::Exit {
-                src_location: _,
-                arg: _,
+                ref src_location,
                 ref do_index,
+                ..
             } => {
+                trace(src_location, "EXIT");
                 Next::Exit(*do_index)
             },
         }
@@ -315,11 +328,12 @@ impl IfBranch {
     fn execute(&self, program: &interp::Program, scope: &mut Scope, node_pool: &mut NodePool) -> Option<Next> {
         match self {
             &IfBranch::Eq {
-                src_location: _,
-                args: _,
+                ref src_location,
                 ref arg_indexes,
                 ref statements,
+                ..
             } => {
+                trace(src_location, "IF=");
                 let arg0 = scope.get_var(arg_indexes[0], node_pool);
                 let arg1 = scope.get_var(arg_indexes[1], node_pool);
                 if arg0 == arg1 {
@@ -327,11 +341,12 @@ impl IfBranch {
                 }
             },
             &IfBranch::Edge {
-                src_location: _,
-                args: _,
+                ref src_location,
                 ref arg_indexes,
                 ref statements,
+                ..
             } => {
+                trace(src_location, "IF>");
                 let arg0 = scope.get_var(arg_indexes[0], node_pool);
                 let arg1 = scope.get_var(arg_indexes[1], node_pool);
                 if arg0.has_edge(&arg1) {
@@ -339,9 +354,10 @@ impl IfBranch {
                 }
             },
             &IfBranch::Else {
-                _src_location: _,
+                ref src_location,
                 ref statements,
             } => {
+                trace(src_location, "ELSE");
                 return Some(execute_statements(statements, program, scope, node_pool));
             },
         }
@@ -727,10 +743,7 @@ impl<R:Read> ModuleParser<R> {
                     None => break,
                     Some(branch) => {
                         let is_else = match &branch {
-                            &IfBranch::Else {
-                                _src_location: _,
-                                statements: _,
-                            } => true,
+                            &IfBranch::Else { .. } => true,
                             _ => false,
                         };
                         if_branches.push(branch);
@@ -783,7 +796,7 @@ impl<R:Read> ModuleParser<R> {
                 let statements = self.parse_statements()?;
                 self.is_end("DO")?;
                 Ok(Some(Statement::DoLoop {
-                            _src_location: src_location,
+                            src_location: src_location,
                             arg: arg.into_boxed_str(),
                             statements: statements.into_boxed_slice(),
                             do_index: 0,
@@ -814,7 +827,7 @@ impl<R:Read> ModuleParser<R> {
                 self.no_more_tokens()?;
                 let statements = self.parse_statements()?;
                 return Ok(Some(IfBranch::Else {
-                            _src_location: src_location,
+                            src_location: src_location,
                             statements: statements.into_boxed_slice(),
                         }));
             } else {
@@ -1053,10 +1066,10 @@ impl<'a> RoutineResolver<'a> {
                 }
             },
             &mut Statement::DoLoop {
-                _src_location: _,
                 ref arg,
                 ref mut statements,
                 ref mut do_index,
+                ..
             } => {
                 use std::ops::Deref;
                 *do_index = self.do_count;
@@ -1120,8 +1133,8 @@ impl<'a> RoutineResolver<'a> {
                 self.resolve_statements(statements)?;
             },
             &mut IfBranch::Else {
-                _src_location: _,
                 ref mut statements,
+                ..
             } => {
                 self.resolve_statements(statements)?;
             },
