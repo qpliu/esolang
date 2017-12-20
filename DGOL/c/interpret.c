@@ -16,6 +16,27 @@ static void interpret_routine(struct program *program, struct routine *routine, 
 
 static int interpret_stmt(struct program *program, struct stmt *stmt, struct scope **scope)
 {
+#if 0
+	{
+		char *stmt_type = 0;
+		switch (stmt->stmt_type) {
+		case stmt_let_eq: stmt_type = "LET="; break;
+		case stmt_let_add_edge: stmt_type = "LET>"; break;
+		case stmt_let_remove_edge: stmt_type = "LET<"; break;
+		case stmt_if: stmt_type = "IF"; break;
+		case stmt_call: stmt_type = "CALL"; break;
+		case stmt_return: stmt_type = "RETURN"; break;
+		case stmt_do_loop: stmt_type = "DO"; break;
+		case stmt_do_edges: stmt_type = "DO<"; break;
+		case stmt_exit: stmt_type = "EXIT"; break;
+		case stmt_if_branch_eq: stmt_type = "IF="; break;
+		case stmt_if_branch_edge: stmt_type = "IF>"; break;
+		case stmt_if_branch_else: stmt_type = "ELSE"; break;
+		default: assert(0);
+		}
+		printf("%s:%d %s\n", stmt->filename, stmt->line_number, stmt_type);
+	}
+#endif
 	switch (stmt->stmt_type) {
 	case stmt_let_eq:
 		assert(stmt->arg_count == 2);
