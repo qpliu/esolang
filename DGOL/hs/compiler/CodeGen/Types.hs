@@ -1,15 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module CodeGen.Types(
-    nodeType,pNodeType,ppNodeType,pppNodeType,nodeTypedef,
-    pageSize,pageType,pPageType,pageTypedef,
-    frameType,pFrameType,frameTypedef,
-    doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef
+    nodeTypeName,nodeType,pNodeType,ppNodeType,pppNodeType,nodeTypedef,
+    pageSize,pageTypeName,pageType,pPageType,pageTypedef,
+    frameTypeName,frameType,pFrameType,frameTypedef,
+    doEdgesIteratorTypeName,doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef
 )
 where
 
 import LLVM.AST.Name(Name)
-import LLVM.AST.Type(Type(ArrayType,NamedTypeReference,StructureType),i1,i8,i64,ptr,isPacked,elementTypes,nArrayElements,elementType)
+import LLVM.AST.Type(Type(ArrayType,NamedTypeReference,StructureType),i1,i8,i32,ptr,isPacked,elementTypes,nArrayElements,elementType)
 import LLVM.IRBuilder.Module(ModuleBuilder,typedef)
 
 nodeTypeName :: Name
@@ -33,7 +33,7 @@ nodeTypedef = typedef nodeTypeName (Just (StructureType {
     elementTypes = [
         i8, -- gc mark
         i1, -- live flag
-        i64, -- size of allocated array of edges
+        i32, -- size of allocated array of edges
         ppNodeType -- array of edges
         ]
     }))
@@ -76,11 +76,11 @@ frameTypedef = typedef frameTypeName (Just (StructureType {
     isPacked = False,
     elementTypes = [
         pFrameType, -- link to caller frame (for gc and getting parameters by reference)
-        i64, -- number of vars
+        i32, -- number of vars
         ppNodeType, -- array of vars (stack allocated)
-        i64, -- number of DO EDGES iterators
+        i32, -- number of DO EDGES iterators
         pDoEdgesIteratorType, -- array of DO EDGES iterators (stack allocated)
-        i64, -- number of call arguments
+        i32, -- number of call arguments
         pppNodeType -- array of call arguments (stack allocated)
         ]
     }))
@@ -98,8 +98,8 @@ doEdgesIteratorTypedef :: ModuleBuilder ()
 doEdgesIteratorTypedef = typedef doEdgesIteratorTypeName (Just (StructureType {
     isPacked = False,
     elementTypes = [
-        i64, -- iterator index
-        i64, -- size of allocated array of edges
+        i32, -- iterator index
+        i32, -- size of allocated array of edges
         ppNodeType -- array of edges
         ]
     }))
