@@ -1,0 +1,105 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+module CodeGen.Types(
+    nodeType,pNodeType,ppNodeType,pppNodeType,nodeTypedef,
+    pageSize,pageType,pPageType,pageTypedef,
+    frameType,pFrameType,frameTypedef,
+    doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef
+)
+where
+
+import LLVM.AST.Name(Name)
+import LLVM.AST.Type(Type(ArrayType,NamedTypeReference,StructureType),i1,i8,i64,ptr,isPacked,elementTypes,nArrayElements,elementType)
+import LLVM.IRBuilder.Module(ModuleBuilder,typedef)
+
+nodeTypeName :: Name
+nodeTypeName = "node"
+
+nodeType :: Type
+nodeType = NamedTypeReference nodeTypeName
+
+pNodeType :: Type
+pNodeType = ptr nodeType
+
+ppNodeType :: Type
+ppNodeType = ptr pNodeType
+
+pppNodeType :: Type
+pppNodeType = ptr ppNodeType
+
+nodeTypedef :: ModuleBuilder ()
+nodeTypedef = typedef nodeTypeName (Just (StructureType {
+    isPacked = False,
+    elementTypes = [
+        i8, -- gc mark
+        i1, -- live flag
+        i64, -- size of allocated array of edges
+        ppNodeType -- array of edges
+        ]
+    }))
+
+pageSize :: Num a => a
+pageSize = 256
+
+pageTypeName :: Name
+pageTypeName = "page"
+
+pageType :: Type
+pageType = NamedTypeReference pageTypeName
+
+pPageType :: Type
+pPageType = ptr pageType
+
+pageTypedef :: ModuleBuilder ()
+pageTypedef = typedef pageTypeName (Just (StructureType {
+    isPacked = False,
+    elementTypes = [
+        pPageType, -- link to next page
+        ArrayType {
+            nArrayElements = pageSize,
+            elementType = nodeType
+            }
+        ]
+    }))
+
+frameTypeName :: Name
+frameTypeName = "frame"
+
+frameType :: Type
+frameType = NamedTypeReference frameTypeName
+
+pFrameType :: Type
+pFrameType = ptr frameType
+
+frameTypedef :: ModuleBuilder ()
+frameTypedef = typedef frameTypeName (Just (StructureType {
+    isPacked = False,
+    elementTypes = [
+        pFrameType, -- link to caller frame (for gc and getting parameters by reference)
+        i64, -- number of vars
+        ppNodeType, -- array of vars (stack allocated)
+        i64, -- number of DO EDGES iterators
+        pDoEdgesIteratorType, -- array of DO EDGES iterators (stack allocated)
+        i64, -- number of call arguments
+        pppNodeType -- array of call arguments (stack allocated)
+        ]
+    }))
+
+doEdgesIteratorTypeName :: Name
+doEdgesIteratorTypeName = "doEdgesIterator"
+
+doEdgesIteratorType :: Type
+doEdgesIteratorType = NamedTypeReference doEdgesIteratorTypeName
+
+pDoEdgesIteratorType :: Type
+pDoEdgesIteratorType = ptr doEdgesIteratorType
+
+doEdgesIteratorTypedef :: ModuleBuilder ()
+doEdgesIteratorTypedef = typedef doEdgesIteratorTypeName (Just (StructureType {
+    isPacked = False,
+    elementTypes = [
+        i64, -- iterator index
+        i64, -- size of allocated array of edges
+        ppNodeType -- array of edges
+        ]
+    }))
