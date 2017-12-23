@@ -2,7 +2,8 @@
 
 module CodeGen.Types(
     nodeTypeName,nodeType,pNodeType,ppNodeType,pppNodeType,nodeTypedef,
-    pageSize,pageTypeName,pageType,pPageType,pageTypedef,
+    pageSize,newPageThreshold,
+    pageTypeName,pageType,pPageType,pageTypedef,
     frameTypeName,frameType,pFrameType,frameTypedef,
     doEdgesIteratorTypeName,doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef
 )
@@ -40,6 +41,9 @@ nodeTypedef = typedef nodeTypeName (Just (StructureType {
 
 pageSize :: Num a => a
 pageSize = 256
+
+newPageThreshold :: Num a => a
+newPageThreshold = 240
 
 pageTypeName :: Name
 pageTypeName = "page"
