@@ -2,53 +2,44 @@
 {-# LANGUAGE RecursiveDo #-}
 
 module CodeGen.Runtime(
-    runtimeDefs,
     runtimeDecls,
+    runtimeDefs,
     memset,memcpy,malloc,free,
-    newNode,
-    intConst,nullConst,
-    eq
+    newNode
 )
 where
 
-import Data.Word(Word32)
-
-import LLVM.AST(Definition(GlobalDefinition),Module)
-import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,memberValues,integerBits,integerValue,isPacked,structName,memberType,memberValues)
+import LLVM.AST(Definition(GlobalDefinition))
+import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,memberValues,integerBits,integerValue,isPacked,structName,memberType)
 import LLVM.AST.Global(initializer,name,type',globalVariableDefaults)
-import LLVM.AST.Instruction(Instruction(GetElementPtr),inBounds,address,indices,metadata)
-import LLVM.AST.IntegerPredicate(IntegerPredicate(UGE))
-import qualified LLVM.AST.IntegerPredicate
 import LLVM.AST.Name(Name)
-import LLVM.AST.Operand(Operand(ConstantOperand))
-import LLVM.AST.Type(Type(FunctionType,StructureType),void,i1,i8,i32,elementTypes,ptr,resultType,argumentTypes,isVarArg)
+import LLVM.AST.Operand(Operand)
+import LLVM.AST.Type(Type(StructureType),void,i1,i8,i32,elementTypes,ptr)
 import qualified LLVM.AST.Type
 import LLVM.IRBuilder.Instruction(add,bitcast,br,call,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
-import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function,buildModule)
+import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function)
 import LLVM.IRBuilder.Monad(emitInstr,block)
 
 import CodeGen.Types(
-    nodeTypeName,nodeType,pNodeType,ppNodeType,pppNodeType,nodeTypedef,
+    nodeTypeName,nodeType,pNodeType,ppNodeType,nodeTypedef,
     pageSize,newPageThreshold,
     pageTypeName,pageType,pPageType,pageTypedef,
-    frameTypeName,frameType,pFrameType,frameTypedef,
-    doEdgesIteratorTypeName,doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef)
-
-eq :: LLVM.AST.IntegerPredicate.IntegerPredicate
-eq = LLVM.AST.IntegerPredicate.EQ
+    pFrameType,frameTypedef,
+    doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef)
+import CodeGen.Util(
+    eq,uge,
+    intConst,nullConst,
+    functionRef,globalRef
+    )
 
 newNodeName :: Name
 newNodeName = "newNode"
 
 newNodeDecl :: ModuleBuilder Operand
-newNodeDecl = extern newNodeName [pFrameType] nodeType
+newNodeDecl = extern newNodeName [pFrameType] pNodeType
 
 newNode :: Operand
-newNode = ConstantOperand (GlobalReference (ptr (FunctionType {
-    resultType = pNodeType,
-    argumentTypes = [pFrameType],
-    isVarArg = False
-    })) newNodeName)
+newNode = functionRef newNodeName [pFrameType] pNodeType
 
 newNodeImpl :: ModuleBuilder Operand
 newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [topFrame] -> mdo
@@ -91,7 +82,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     -- iterate to next node in page
     newNodePageLoopNextIndex <- block
     newNodeNextIndex <- add newNodeIndex (intConst 32 1)
-    newNodeIndexRangeCheck <- icmp UGE newNodeNextIndex (intConst 32 pageSize)
+    newNodeIndexRangeCheck <- icmp uge newNodeNextIndex (intConst 32 pageSize)
     condBr newNodeIndexRangeCheck newNodePageLoopNextPage newNodePageLoop
 
     -- iterate to next page
@@ -144,7 +135,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         (markVarNextIndex,markVarLoopBody)
         ]
     markVarNextIndex <- add markVarIndex (intConst 32 1)
-    markVarIndexCheck <- icmp UGE markVarIndex markVarArraySize
+    markVarIndexCheck <- icmp uge markVarIndex markVarArraySize
     condBr markVarIndexCheck markDoEdgesIteratorsLoop markVarLoopBody
 
     -- mark var
@@ -161,7 +152,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         (markDoEdgesIteratorsNextIndex,markIteratorEdgesLoop)
         ]
     markDoEdgesIteratorsNextIndex <- add markDoEdgesIteratorsIndex (intConst 32 1)
-    markDoEdgesIteratorsIndexCheck <- icmp UGE markDoEdgesIteratorsIndex markDoEdgesIteratorsSize
+    markDoEdgesIteratorsIndexCheck <- icmp uge markDoEdgesIteratorsIndex markDoEdgesIteratorsSize
     condBr markDoEdgesIteratorsIndexCheck markFrameLoop markDoEdgesIteratorLoopBody
 
     -- set up current doEdgeIterator
@@ -186,7 +177,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         (markIteratorEdgesNextIndex,markIteratorEdgesLoopBody)
         ]
     markIteratorEdgesNextIndex <- add markIteratorEdgesIndex (intConst 32 1)
-    markIteratorEdgesIndexCheck <- icmp UGE markIteratorEdgesIndex markIteratorEdgesSize
+    markIteratorEdgesIndexCheck <- icmp uge markIteratorEdgesIndex markIteratorEdgesSize
     condBr markIteratorEdgesIndexCheck markDoEdgesIteratorsLoop markIteratorEdgesLoopBody
 
     -- mark edge
@@ -270,7 +261,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         (sweepPageLiveCount,sweepCollectNodeClearEdges)
         ]
     sweepNextIndex <- add sweepIndex (intConst 32 1)
-    sweepIndexRangeCheck <- icmp UGE sweepNextIndex (intConst 32 pageSize)
+    sweepIndexRangeCheck <- icmp uge sweepNextIndex (intConst 32 pageSize)
     condBr sweepIndexRangeCheck sweepPageLoopNextPage sweepPageLoop
 
     sweepPageLoopNextPage <- block
@@ -280,7 +271,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     condBr newNodePageNullCheck checkForNewPage sweepPageLoop
 
     checkForNewPage <- block
-    newPageCheck <- icmp UGE sweepNextPageLiveCount (intConst 32 newPageThreshold)
+    newPageCheck <- icmp uge sweepNextPageLiveCount (intConst 32 newPageThreshold)
     condBr newPageCheck newPage retryNewNode
 
     newPage <- block
@@ -312,8 +303,7 @@ globalStateType = StructureType {
     }
 
 globalState :: Operand
-globalState =
-    ConstantOperand (GlobalReference (ptr globalStateType) globalStateName)
+globalState = globalRef globalStateName globalStateType
 
 globalStateDef :: ModuleBuilder ()
 globalStateDef = do
@@ -353,11 +343,7 @@ gcMarkNodeName :: Name
 gcMarkNodeName = "gcMarkNode"
 
 gcMarkNode :: Operand
-gcMarkNode = ConstantOperand (GlobalReference (ptr (FunctionType {
-    resultType = void,
-    argumentTypes = [i8,pNodeType],
-    isVarArg = False
-    })) gcMarkNodeName)
+gcMarkNode = functionRef gcMarkNodeName [i8,pNodeType] void
 
 gcMarkNodeImpl :: ModuleBuilder Operand
 gcMarkNodeImpl = do
@@ -393,7 +379,7 @@ gcMarkNodeImpl = do
             (nextEdgeIndex,checkEdgesLoopBody)
             ]
         -- if edgeIndex >= node.edgeArraySize, return
-        edgeIndexCheck <- icmp UGE edgeIndex nodeEdgesArraySize
+        edgeIndexCheck <- icmp uge edgeIndex nodeEdgesArraySize
         condBr edgeIndexCheck done checkEdgesLoopBody
         
         checkEdgesLoopBody <- block
@@ -410,11 +396,7 @@ memsetName :: Name
 memsetName = "llvm.memset.p0i8.i32"
 
 memset :: Operand
-memset = ConstantOperand (GlobalReference (ptr (FunctionType {
-    resultType = void,
-    argumentTypes = [ptr i8, i8, i32, i32, i1],
-    isVarArg = False
-    })) memsetName)
+memset = functionRef memsetName [ptr i8,i8,i32,i32,i1] void
 
 memsetDecl :: ModuleBuilder Operand
 memsetDecl = extern memsetName [ptr i8,i8,i32,i32,i1] void
@@ -423,11 +405,7 @@ memcpyName :: Name
 memcpyName = "llvm.memcpy.p0i8.i32"
 
 memcpy :: Operand
-memcpy = ConstantOperand (GlobalReference (ptr (FunctionType {
-    resultType = void,
-    argumentTypes = [ptr i8, ptr i8, i32, i32, i1],
-    isVarArg = False
-    })) memsetName)
+memcpy = functionRef memcpyName [ptr i8,ptr i8,i32,i32,i1] void
 
 memcpyDecl :: ModuleBuilder Operand
 memcpyDecl = extern memcpyName [ptr i8,ptr i8,i32,i32,i1] void
@@ -436,11 +414,7 @@ mallocName :: Name
 mallocName = "malloc"
 
 malloc :: Operand
-malloc = ConstantOperand (GlobalReference (ptr (FunctionType {
-    resultType = ptr i8,
-    argumentTypes = [i32],
-    isVarArg = False
-    })) mallocName)
+malloc = functionRef mallocName [i32] (ptr i8)
 
 mallocDecl :: ModuleBuilder Operand
 mallocDecl = extern mallocName [i32] (ptr i8)
@@ -449,21 +423,10 @@ freeName :: Name
 freeName = "free"
 
 free :: Operand
-free = ConstantOperand (GlobalReference (ptr (FunctionType {
-    resultType = void,
-    argumentTypes = [ptr i8],
-    isVarArg = False
-    })) freeName)
+free = functionRef freeName [ptr i8] void
 
 freeDecl :: ModuleBuilder Operand
 freeDecl = extern freeName [ptr i8] void
-
-intConst :: Word32 -> Integer -> Operand
-intConst bits value =
-    ConstantOperand (Int { integerBits = bits, integerValue = value })
-
-nullConst :: Type -> Operand
-nullConst t = ConstantOperand (Null { constantType = t })
 
 runtimeDefs :: ModuleBuilder ()
 runtimeDefs = do
