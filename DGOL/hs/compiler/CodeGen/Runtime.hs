@@ -6,7 +6,8 @@ module CodeGen.Runtime(
     runtimeDecls,
     memset,memcpy,malloc,free,
     newNode,
-    intConst,nullConst
+    intConst,nullConst,
+    eq
 )
 where
 
@@ -32,6 +33,9 @@ import CodeGen.Types(
     pageTypeName,pageType,pPageType,pageTypedef,
     frameTypeName,frameType,pFrameType,frameTypedef,
     doEdgesIteratorTypeName,doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef)
+
+eq :: LLVM.AST.IntegerPredicate.IntegerPredicate
+eq = LLVM.AST.IntegerPredicate.EQ
 
 newNodeName :: Name
 newNodeName = "newNode"
@@ -94,7 +98,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     newNodePageLoopNextPage <- block
     newNodeNextPagePtr <- gep newNodePage [intConst 32 0, intConst 32 0]
     newNodeNextPage <- load newNodeNextPagePtr 0
-    newNodePageNullCheck <- icmp LLVM.AST.IntegerPredicate.EQ newNodeNextPage (nullConst pPageType)
+    newNodePageNullCheck <- icmp eq newNodeNextPage (nullConst pPageType)
     condBr newNodePageNullCheck startGCMark newNodePageLoop
 
     -- mark
@@ -117,7 +121,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         (topFrame,startGCMark),
         (markNextFrame,markDoEdgesIteratorsLoop)
         ]
-    frameCheck <- icmp LLVM.AST.IntegerPredicate.EQ frame (nullConst pFrameType)
+    frameCheck <- icmp eq frame (nullConst pFrameType)
     condBr frameCheck startGCSweep markFrameLoopBody
 
     markFrameLoopBody <- block
@@ -163,7 +167,12 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     -- set up current doEdgeIterator
     markDoEdgesIteratorLoopBody <- block
     markIteratorEdgesInitialIndexPtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 0]
-    markIteratorEdgesInitialIndex <- load markIteratorEdgesInitialIndexPtr 0
+    -- workaround for
+    -- *** Exception: gep: Can't index into a NamedTypeReference (Name "frame")
+    -- caused by
+    -- markIteratorEdgesInitialIndex <- load markIteratorEdgesInitialIndexPtr 0
+    markIteratorEdgesInitialIndex_workaround <- load markIteratorEdgesInitialIndexPtr 0
+    markIteratorEdgesInitialIndex <- bitcast markIteratorEdgesInitialIndex_workaround i32
     markIteratorEdgesSizePtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 1]
     markIteratorEdgesSize <- load markIteratorEdgesSizePtr 0
     markIteratorEdgesArrayPtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 2]
@@ -172,7 +181,6 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
 
     -- iterate over edges in current doEdgeIterator
     markIteratorEdgesLoop <- block
-    br startGCSweep {-
     markIteratorEdgesIndex <- phi [
         (markIteratorEdgesInitialIndex,markDoEdgesIteratorLoopBody),
         (markIteratorEdgesNextIndex,markIteratorEdgesLoopBody)
@@ -181,10 +189,12 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     markIteratorEdgesIndexCheck <- icmp UGE markIteratorEdgesIndex markIteratorEdgesSize
     condBr markIteratorEdgesIndexCheck markDoEdgesIteratorsLoop markIteratorEdgesLoopBody
 
+    -- mark edge
     markIteratorEdgesLoopBody <- block
-    -- ...
+    iteratorEdgePtr <- gep markIteratorEdgesArray [markIteratorEdgesIndex]
+    iteratorEdge <- load iteratorEdgePtr 0
+    call gcMarkNode [(newGcMark,[]),(iteratorEdge,[])]
     br markIteratorEdgesLoop
--}
 
     -- sweep
     -- iterate over pages, for each page
@@ -226,7 +236,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     sweepCheckNode <- block
     sweepGcMarkPtr <- gep sweepPage [intConst 32 0, intConst 32 1, sweepIndex, intConst 32 0]
     sweepGcMark <- load sweepGcMarkPtr 0
-    sweepGcMarkCheck <- icmp LLVM.AST.IntegerPredicate.EQ newGcMark sweepGcMark
+    sweepGcMarkCheck <- icmp eq newGcMark sweepGcMark
     incrementedPageLiveCount <- add sweepPageLiveCount (intConst 32 1)
     condBr sweepGcMarkCheck sweepPageLoopNextIndex sweepCollectNode
 
@@ -234,7 +244,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     store sweepNodeAlivePtr 0 (intConst 1 0)
     sweepNodeEdgesSizePtr <- gep sweepPage [intConst 32 0, intConst 32 1, sweepIndex, intConst 32 2]
     sweepNodeEdgesSize <- load sweepNodeEdgesSizePtr 0
-    sweepNodeEdgesSizeCheck <- icmp LLVM.AST.IntegerPredicate.EQ sweepNodeEdgesSize (intConst 32 0)
+    sweepNodeEdgesSizeCheck <- icmp eq sweepNodeEdgesSize (intConst 32 0)
     condBr sweepNodeEdgesSizeCheck sweepPageLoopNextIndex sweepCollectNodeClearEdges
 
     sweepCollectNodeClearEdges <- block
@@ -266,7 +276,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     sweepPageLoopNextPage <- block
     sweepNextPagePtr <- gep sweepPage [intConst 32 0, intConst 32 0]
     sweepNextPage <- load sweepNextPagePtr 0
-    sweepPageNullCheck <- icmp LLVM.AST.IntegerPredicate.EQ sweepNextPage (nullConst pPageType)
+    sweepPageNullCheck <- icmp eq sweepNextPage (nullConst pPageType)
     condBr newNodePageNullCheck checkForNewPage sweepPageLoop
 
     checkForNewPage <- block
@@ -353,7 +363,7 @@ gcMarkNodeImpl :: ModuleBuilder Operand
 gcMarkNodeImpl = do
     function gcMarkNodeName [(i8,NoParameterName),(pNodeType,NoParameterName)] void $ \ [gcMark,pNode] -> mdo
         -- if node is null, return
-        nullCheck <- icmp LLVM.AST.IntegerPredicate.EQ pNode (nullConst pNodeType)
+        nullCheck <- icmp eq pNode (nullConst pNodeType)
         condBr nullCheck done checkAlive
 
         -- if not node.alive, return
@@ -366,7 +376,7 @@ gcMarkNodeImpl = do
         checkGcMark <- block
         nodeGcMarkPtr <- gep pNode [intConst 32 0, intConst 32 0]
         nodeGcMark <- load nodeGcMarkPtr 0
-        nodeGcMarkCheck <- icmp LLVM.AST.IntegerPredicate.EQ gcMark nodeGcMark
+        nodeGcMarkCheck <- icmp eq gcMark nodeGcMark
         condBr nodeGcMarkCheck done checkEdgesInit
 
         checkEdgesInit <- block
