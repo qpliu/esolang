@@ -5,7 +5,7 @@ module CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
     memset,memcpy,malloc,free,
-    newNode
+    newNode,hasEdge,addEdge,removeEdge
 )
 where
 
@@ -16,30 +16,31 @@ import LLVM.AST.Name(Name)
 import LLVM.AST.Operand(Operand)
 import LLVM.AST.Type(Type(StructureType),void,i1,i8,i32,elementTypes,ptr)
 import qualified LLVM.AST.Type
-import LLVM.IRBuilder.Instruction(add,bitcast,br,call,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
+import LLVM.IRBuilder.Instruction(add,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function)
 import LLVM.IRBuilder.Monad(emitInstr,block)
 
 import CodeGen.Types(
     nodeTypeName,nodeType,pNodeType,ppNodeType,nodeTypedef,
-    pageSize,newPageThreshold,
+    edgeArrayIncrement,pageSize,newPageThreshold,
     pageTypeName,pageType,pPageType,pageTypedef,
     pFrameType,frameTypedef,
     doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef)
 import CodeGen.Util(
     eq,uge,
     intConst,nullConst,
-    functionRef,globalRef
+    functionRef,globalRef,
+    call
     )
 
 newNodeName :: Name
 newNodeName = "newNode"
 
-newNodeDecl :: ModuleBuilder Operand
-newNodeDecl = extern newNodeName [pFrameType] pNodeType
-
 newNode :: Operand
 newNode = functionRef newNodeName [pFrameType] pNodeType
+
+newNodeDecl :: ModuleBuilder Operand
+newNodeDecl = extern newNodeName [pFrameType] pNodeType
 
 newNodeImpl :: ModuleBuilder Operand
 newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [topFrame] -> mdo
@@ -142,7 +143,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     markVarLoopBody <- block
     markVarNodePtr <- gep markVarArray [markVarIndex]
     markVarNode <- load markVarNodePtr 0
-    call gcMarkNode [(newGcMark,[]),(markVarNode,[])]
+    call gcMarkNode [newGcMark,markVarNode]
     br markVarLoop
 
     -- iterate over doEdgeIterators in frame
@@ -184,7 +185,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     markIteratorEdgesLoopBody <- block
     iteratorEdgePtr <- gep markIteratorEdgesArray [markIteratorEdgesIndex]
     iteratorEdge <- load iteratorEdgePtr 0
-    call gcMarkNode [(newGcMark,[]),(iteratorEdge,[])]
+    call gcMarkNode [newGcMark,iteratorEdge]
     br markIteratorEdgesLoop
 
     -- sweep
@@ -244,13 +245,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     sweepNodeEdgesRawPtr <- bitcast sweepNodeEdgesArray (ptr i8)
     sweepNodeEdgesSizeofPtr <- gep (nullConst pNodeType) [sweepNodeEdgesSize]
     sweepNodeEdgesSizeof <- ptrtoint sweepNodeEdgesSizeofPtr i32
-    call memset [
-        (sweepNodeEdgesRawPtr,[]),
-        (intConst 8 0,[]),
-        (sweepNodeEdgesSizeof,[]),
-        (intConst 32 0,[]),
-        (intConst 1 0,[])
-        ]
+    call memset [sweepNodeEdgesRawPtr,intConst 8 0,sweepNodeEdgesSizeof,intConst 32 0,intConst 1 0]
     br sweepPageLoopNextIndex
 
     sweepPageLoopNextIndex <- block
@@ -277,14 +272,8 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     newPage <- block
     newPageSizeofPtr <- gep (nullConst pPageType) [intConst 32 1]
     newPageSizeof <- ptrtoint newPageSizeofPtr i32
-    newPageRawPtr <- call malloc [(newPageSizeof,[])]
-    call memset [
-        (newPageRawPtr,[]),
-        (intConst 8 0,[]),
-        (newPageSizeof,[]),
-        (intConst 32 0,[]),
-        (intConst 1 0,[])
-        ]
+    newPageRawPtr <- call malloc [newPageSizeof]
+    call memset [newPageRawPtr,intConst 8 0,newPageSizeof,intConst 32 0,intConst 1 0]
     newPagePtr <- bitcast newPageRawPtr pPageType
     store sweepNextPagePtr 0 newPagePtr
     br retryNewNode
@@ -346,8 +335,7 @@ gcMarkNode :: Operand
 gcMarkNode = functionRef gcMarkNodeName [i8,pNodeType] void
 
 gcMarkNodeImpl :: ModuleBuilder Operand
-gcMarkNodeImpl = do
-    function gcMarkNodeName [(i8,NoParameterName),(pNodeType,NoParameterName)] void $ \ [gcMark,pNode] -> mdo
+gcMarkNodeImpl = function gcMarkNodeName [(i8,NoParameterName),(pNodeType,NoParameterName)] void $ \ [gcMark,pNode] -> mdo
         -- if node is null, return
         nullCheck <- icmp eq pNode (nullConst pNodeType)
         condBr nullCheck done checkAlive
@@ -385,12 +373,169 @@ gcMarkNodeImpl = do
         checkEdgesLoopBody <- block
         edgeElementPtr <- gep nodeEdgesArray [edgeIndex]
         edgeElement <- load edgeElementPtr 0
-        call gcMarkNode [(gcMark,[]),(edgeElement,[])]
+        call gcMarkNode [gcMark,edgeElement]
         nextEdgeIndex <- add edgeIndex (intConst 32 1)
         br checkEdgesLoop
 
         done <- block
         retVoid
+
+hasEdgeName :: Name
+hasEdgeName = "hasEdge"
+
+hasEdge :: Operand
+hasEdge = functionRef hasEdgeName [pNodeType,pNodeType] i1
+
+hasEdgeDecl :: ModuleBuilder Operand
+hasEdgeDecl = extern hasEdgeName [pNodeType,pNodeType] i1
+
+hasEdgeImpl :: ModuleBuilder Operand
+hasEdgeImpl = function hasEdgeName [(pNodeType,NoParameterName),(pNodeType,NoParameterName)] i1 $ \ [node,edge] -> mdo
+    entry <- block
+    edgeArraySizePtr <- gep node [intConst 32 0,intConst 32 2]
+    edgeArraySize <- load edgeArraySizePtr 0
+    edgeArrayPtr <- gep node [intConst 32 0,intConst 32 3]
+    edgeArray <- load edgeArrayPtr 0
+    br edgeLoop
+
+    edgeLoop <- block
+    edgeIndex <- phi [
+        (intConst 32 0,entry),
+        (edgeNextIndex,checkCurrentEdge)
+        ]
+    edgeNextIndex <- add edgeIndex (intConst 32 1)
+    edgeIndexCheck <- icmp uge edgeIndex edgeArraySize
+    condBr edgeIndexCheck retFalse checkCurrentEdge
+
+    checkCurrentEdge <- block
+    currentEdgePtr <- gep edgeArray [edgeIndex]
+    currentEdge <- load currentEdgePtr 0
+    currentEdgeCheck <- icmp eq currentEdge edge
+    condBr currentEdgeCheck retTrue edgeLoop
+
+    retTrue <- block
+    ret (intConst 1 1)
+
+    retFalse <- block
+    ret (intConst 1 0)
+
+addEdgeName :: Name
+addEdgeName = "addEdge"
+
+addEdge :: Operand
+addEdge = functionRef addEdgeName [pNodeType,pNodeType] void
+
+addEdgeDecl :: ModuleBuilder Operand
+addEdgeDecl = extern addEdgeName [pNodeType,pNodeType] void
+
+addEdgeImpl :: ModuleBuilder Operand
+addEdgeImpl = function addEdgeName [(pNodeType,NoParameterName),(pNodeType,NoParameterName)] void $ \ [node,edge] -> mdo
+    alreadyHasEdge <- call hasEdge [node,edge]
+    condBr alreadyHasEdge done initLoop
+
+    initLoop <- block
+    edgeArraySizePtr <- gep node [intConst 32 0,intConst 32 2]
+    -- workaround for
+    -- *** Exception: gep: Can't index into a NamedTypeReference (Name "node")
+    initEdgeArraySize_workaround <- load edgeArraySizePtr 0
+    initEdgeArraySize <- bitcast initEdgeArraySize_workaround i32
+    edgeArrayPtr <- gep node [intConst 32 0,intConst 32 3]
+    -- workaround for
+    -- *** Exception: gep: Can't index into a NamedTypeReference (Name "node")
+    initEdgeArray_workaround <- load edgeArrayPtr 0
+    initEdgeArray <- bitcast initEdgeArray_workaround ppNodeType
+    br loop
+
+    loop <- block
+    edgeArraySize <- phi [
+        (initEdgeArraySize,initLoop),
+        (edgeArraySize,checkCurrentEdge),
+        (newEdgeArraySize,reallocEdgeArray)
+        ]
+    edgeArray <- phi [
+        (initEdgeArray,initLoop),
+        (edgeArray,checkCurrentEdge),
+        (newEdgeArray,reallocEdgeArray)
+        ]
+    edgeIndex <- phi [
+        (intConst 32 0,initLoop),
+        (edgeNextIndex,checkCurrentEdge),
+        (edgeArraySize,reallocEdgeArray)
+        ]
+    edgeNextIndex <- add edgeIndex (intConst 32 1)
+    edgeIndexCheck <- icmp uge edgeIndex edgeArraySize
+    condBr edgeIndexCheck reallocEdgeArray checkCurrentEdge
+
+    checkCurrentEdge <- block
+    currentEdgePtr <- gep edgeArray [edgeIndex]
+    currentEdge <- load currentEdgePtr 0
+    currentEdgeCheck <- icmp eq currentEdge (nullConst pNodeType)
+    condBr currentEdgeCheck foundFreeSlot loop
+
+    foundFreeSlot <- block
+    store currentEdgePtr 0 edge
+    br done
+
+    reallocEdgeArray <- block
+    newEdgeArraySize <- add edgeArraySize (intConst 32 edgeArrayIncrement)
+    newEdgeArrayAllocSizePtr <- gep (nullConst ppNodeType) [newEdgeArraySize]
+    newEdgeArrayAllocSize <- ptrtoint newEdgeArrayAllocSizePtr i32
+    newEdgeArrayRawPtr <- call malloc [newEdgeArrayAllocSize]
+    oldEdgeArrayRawPtr <- bitcast edgeArray (ptr i8)
+    oldEdgeArrayAllocSizePtr <- gep (nullConst ppNodeType) [edgeArraySize]
+    oldEdgeArrayAllocSize <- ptrtoint oldEdgeArrayAllocSizePtr i32
+    call memcpy [newEdgeArrayRawPtr,oldEdgeArrayRawPtr,oldEdgeArrayAllocSize,intConst 32 0,intConst 1 0]
+    edgeArrayIncrementSizePtr <- gep (nullConst ppNodeType) [intConst 32 edgeArrayIncrement]
+    edgeArrayIncrementSize <- ptrtoint edgeArrayIncrementSizePtr i32
+    edgeArrayIncrementArray <- gep newEdgeArrayRawPtr [oldEdgeArrayAllocSize]
+    call memset [edgeArrayIncrementArray,intConst 8 0,edgeArrayIncrementSize,intConst 32 0,intConst 1 0]
+    store edgeArraySizePtr 0 newEdgeArraySize
+    newEdgeArray <- bitcast newEdgeArrayRawPtr ppNodeType
+    store edgeArrayPtr 0 newEdgeArray
+    br loop
+
+    done <- block
+    retVoid
+
+removeEdgeName :: Name
+removeEdgeName = "removeEdge"
+
+removeEdge :: Operand
+removeEdge = functionRef removeEdgeName [pNodeType,pNodeType] void
+
+removeEdgeDecl :: ModuleBuilder Operand
+removeEdgeDecl = extern removeEdgeName [pNodeType,pNodeType] void
+
+removeEdgeImpl :: ModuleBuilder Operand
+removeEdgeImpl = function removeEdgeName [(pNodeType,NoParameterName),(pNodeType,NoParameterName)] void $ \ [node,edge] -> mdo
+    entry <- block
+    edgeArraySizePtr <- gep node [intConst 32 0,intConst 32 2]
+    edgeArraySize <- load edgeArraySizePtr 0
+    edgeArrayPtr <- gep node [intConst 32 0,intConst 32 3]
+    edgeArray <- load edgeArrayPtr 0
+    br edgeLoop
+
+    edgeLoop <- block
+    edgeIndex <- phi [
+        (intConst 32 0,entry),
+        (edgeNextIndex,checkCurrentEdge)
+        ]
+    edgeNextIndex <- add edgeIndex (intConst 32 1)
+    edgeIndexCheck <- icmp uge edgeIndex edgeArraySize
+    condBr edgeIndexCheck done checkCurrentEdge
+
+    checkCurrentEdge <- block
+    currentEdgePtr <- gep edgeArray [edgeIndex]
+    currentEdge <- load currentEdgePtr 0
+    currentEdgeCheck <- icmp eq currentEdge edge
+    condBr currentEdgeCheck remove edgeLoop
+
+    remove <- block
+    store currentEdgePtr 0 (nullConst pNodeType)
+    br done
+
+    done <- block
+    retVoid
 
 memsetName :: Name
 memsetName = "llvm.memset.p0i8.i32"
@@ -428,16 +573,8 @@ free = functionRef freeName [ptr i8] void
 freeDecl :: ModuleBuilder Operand
 freeDecl = extern freeName [ptr i8] void
 
-runtimeDefs :: ModuleBuilder ()
-runtimeDefs = do
-    runtimeDecls
-    globalStateDef
-    gcMarkNodeImpl
-    newNodeImpl
-    return ()
-
-runtimeDecls :: ModuleBuilder ()
-runtimeDecls = do
+commonDecls :: ModuleBuilder ()
+commonDecls = do
     memsetDecl
     memcpyDecl
     mallocDecl
@@ -446,5 +583,24 @@ runtimeDecls = do
     pageTypedef
     frameTypedef
     doEdgesIteratorTypedef
+    return ()
+
+runtimeDefs :: ModuleBuilder ()
+runtimeDefs = do
+    commonDecls
+    globalStateDef
+    gcMarkNodeImpl
+    newNodeImpl
+    hasEdgeImpl
+    addEdgeImpl
+    removeEdgeImpl
+    return ()
+
+runtimeDecls :: ModuleBuilder ()
+runtimeDecls = do
+    commonDecls
     newNodeDecl
+    hasEdgeDecl
+    addEdgeDecl
+    removeEdgeDecl
     return ()

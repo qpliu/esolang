@@ -1,6 +1,7 @@
 module CodeGen.Util(
     intConst,nullConst,eq,uge,
-    functionRef,globalRef
+    functionRef,globalRef,
+    call
 )
 where
 
@@ -11,6 +12,9 @@ import LLVM.AST.Name(Name)
 import LLVM.AST.Operand(Operand(ConstantOperand))
 import qualified LLVM.AST.IntegerPredicate
 import LLVM.AST.Type(Type(FunctionType),ptr,resultType,argumentTypes,isVarArg)
+import qualified LLVM.IRBuilder.Instruction
+import LLVM.IRBuilder.Module(ModuleBuilder)
+import LLVM.IRBuilder.Monad(MonadIRBuilder)
 
 eq :: LLVM.AST.IntegerPredicate.IntegerPredicate
 eq = LLVM.AST.IntegerPredicate.EQ
@@ -35,3 +39,6 @@ functionRef name argTypes resType =
 
 globalRef :: Name -> Type -> Operand
 globalRef name typ = ConstantOperand (GlobalReference (ptr typ) name)
+
+call :: MonadIRBuilder m => Operand -> [Operand] -> m Operand
+call f args = LLVM.IRBuilder.Instruction.call f (map (flip (,) []) args)
