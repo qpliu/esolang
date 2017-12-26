@@ -142,7 +142,7 @@ parseSubroutines lines = parseSubs Map.empty Set.empty lines
               then Left ("DUPLICATE SUBROUTINE NAME " ++ name)
               else return ()
             (routine,newExterns,lines) <- parseRoutineBody (tail lines) name args
-            parseSubs (Map.insert name routine subs) (Set.union externs newExterns) (tail lines)
+            parseSubs (Map.insert name routine subs) (Set.union externs newExterns) lines
 
 parseRoutineBody :: [String] -> String -> [String] -> Either String (Routine,Set.Set (String,String),[String])
 parseRoutineBody lines name args = runST $ do
@@ -189,7 +189,7 @@ parseRoutineBody lines name args = runST $ do
         getVar varName = do
             varMap <- readSTRef varMapRef
             case Map.lookup varName varMap of
-                Just var -> (return . return) var
+                Just var -> return $ return var
                 Nothing -> do
                     let var = Var varName (fromIntegral $ Map.size varMap)
                     writeSTRef varMapRef (Map.insert varName var varMap)
@@ -199,7 +199,7 @@ parseRoutineBody lines name args = runST $ do
 
         getVal valName
           | valName == "0" =
-                (return . return) NewVal
+                return $ return NewVal
           | otherwise = do
                 var <- getVar valName
                 return (fmap Val var)
@@ -211,21 +211,21 @@ parseRoutineBody lines name args = runST $ do
 
         -- parseMoreStmts :: (Maybe Statement,[String]) -> ST a (Either String ([Statement],[String]))
         parseMoreStmts (Nothing,lines) =
-            (return . return) ([],lines)
+            return $ return ([],lines)
         parseMoreStmts (Just stmt,lines) = do
             stmtsLines <- parseStmts lines
             either (return . Left) (consStmt stmt) stmtsLines
 
         consStmt :: Statement -> ([Statement],[String]) -> ST a (Either String ([Statement],[String]))
         consStmt stmt (stmts,lines) =
-            (return . return) (stmt:stmts,lines)
+            return $ return (stmt:stmts,lines)
 
         -- parseStmt :: [String] -> ST a (Either String (Maybe Statement,[String]))
         parseStmt lines
           | null lines =
-                (return . Left) "UNEXPECTED EOF"
+                return $ Left "UNEXPECTED EOF"
           | (take 3 . head) lines == "LET" = do
-                stmt <- parseLet ((tokenize . drop 3 . head) lines)
+                stmt <- parseLet (tokenize $ drop 3 $ head lines)
                 return $ do
                     stmt <- stmt
                     return (Just stmt,tail lines)
@@ -235,24 +235,24 @@ parseRoutineBody lines name args = runST $ do
                     (stmt,lines) <- stmtLines
                     return (Just stmt,lines)
           | (take 4 . head) lines == "CALL" = do
-                stmt <- parseCall ((tokenize . drop 4 . head) lines)
+                stmt <- parseCall (tokenize $ drop 4 $ head lines)
                 return $ do
                     stmt <- stmt
                     return (Just stmt,tail lines)
           | head lines == "RETURN" = do
-                (return . return) (Just Return,tail lines)
+                return $ return (Just Return,tail lines)
           | (take 2 . head) lines == "DO" = do
-                stmtLines <- parseDo (tail lines) ((tokenize . drop 2 . head) lines)
+                stmtLines <- parseDo (tail lines) (tokenize $ drop 2 $ head lines)
                 return $ do
                     (stmt,lines) <- stmtLines
                     return (Just stmt,lines)
           | (take 4 . head) lines == "EXIT" = do
-                stmt <- parseExit ((drop 4 . head) lines)
+                stmt <- parseExit (drop 4 $ head lines)
                 return $ do
                     stmt <- stmt
-                    return (Just stmt,lines)
+                    return (Just stmt,tail lines)
           | otherwise = do
-                (return . return) (Nothing,lines)
+                return $ return (Nothing,lines)
 
         -- parseLet :: [String] -> ST a (Either String Statement)
         parseLet [arg0,"=",arg1] = do
@@ -283,11 +283,11 @@ parseRoutineBody lines name args = runST $ do
                 var1 <- var1
                 return (LetRemoveEdge (var0,var1))
         parseLet _ =
-            (return . Left) "SYNTAX ERROR"
+            return $ Left "SYNTAX ERROR"
 
-        parseIf :: [String] -> String -> ST a (Either String (Statement,[String]))
+        -- parseIf :: [String] -> String -> ST a (Either String (Statement,[String]))
         parseIf lines line = do
-            ifBranchesLines <- parseIfBranches (("ELSE" ++ line):lines)
+            ifBranchesLines <- parseIfBranches lines (tokenize $ "ELSE" ++ line)
             return $ do
                 (ifBranches,lines) <- ifBranchesLines
                 return (If ifBranches,lines)
@@ -295,11 +295,12 @@ parseRoutineBody lines name args = runST $ do
         -- parseCall :: [String] -> ST a (Either String Statement)
         parseCall (mod:".":rout:tokens@("(":_)) = do
             modifySTRef externsRef (Set.insert (mod,rout))
-            args <- (return . parseCallArgs) tokens
-            vals <- either (return . Left) (fmap sequence . mapM getVal) args
+            args <- return $ parseCallArgs tokens
+            either (const $ return ()) (modifySTRef callArgsMaxCountRef . max . fromIntegral . length) args
             -- getVal :: String -> ST a (Either String Val)
             -- mapM getVal :: [String] -> ST a [Either String Val]
             -- fmap sequence :: ST a [Either String Val] -> ST a (Either String [Val])
+            vals <- either (return . Left) (fmap sequence . mapM getVal) args
             return $ do
                 isIdent mod
                 isIdent rout
@@ -308,7 +309,8 @@ parseRoutineBody lines name args = runST $ do
                 vals <- vals
                 return $ Call (Just mod,rout) vals
         parseCall (rout:tokens@("(":_)) = do
-            args <- (return . parseCallArgs) tokens
+            args <- return $ parseCallArgs tokens
+            either (const $ return ()) (modifySTRef callArgsMaxCountRef . max . fromIntegral . length) args
             vals <- either (return . Left) (fmap sequence . mapM getVal) args
             return $ do
                 isIdent rout
@@ -317,7 +319,7 @@ parseRoutineBody lines name args = runST $ do
                 vals <- vals
                 return $ Call (Nothing,rout) vals
         parseCall _ =
-            (return . Left) "SYNTAX ERROR"
+            return $ Left "SYNTAX ERROR"
 
         -- parseDo :: [String] -> [String] -> ST a (Either String (Statement,[String]))
         parseDo lines [arg] = do
@@ -325,7 +327,7 @@ parseRoutineBody lines name args = runST $ do
             modifySTRef doIndicesRef (+1)
             modifySTRef doStackRef ((arg,doIndex):)
             var <- getVar arg
-            stmtsLines <- parseStmts (tail lines)
+            stmtsLines <- parseStmts lines
             modifySTRef doStackRef tail
             return $ do
                 isIdent arg
@@ -341,7 +343,7 @@ parseRoutineBody lines name args = runST $ do
             modifySTRef doEdgesIndicesRef (+1)
             var0 <- getVar arg0
             var1 <- getVar arg1
-            stmtsLines <- parseStmts (tail lines)
+            stmtsLines <- parseStmts lines
             modifySTRef doStackRef tail
             return $ do
                 isIdent arg0
@@ -352,7 +354,7 @@ parseRoutineBody lines name args = runST $ do
                 lines <- nextLineIs lines "ENDDO"
                 return (DoEdges (var0,var1) doIndex doEdgesIndex stmts,lines)
         parseDo _ _ =
-            (return . Left) "SYNTAX ERROR"
+            return $ Left "SYNTAX ERROR"
 
         -- parseExit :: String -> ST a (Either String Statement)
         parseExit arg = do
@@ -362,8 +364,50 @@ parseRoutineBody lines name args = runST $ do
                 var <- var
                 maybe (Left "SYNTAX ERROR") (return . Exit var) (lookup arg doStack)
 
-        parseIfBranches :: [String] -> ST a (Either String ([IfBranch],[String]))
-        parseIfBranches lines = undefined
+        -- parseIfBranches :: [String] -> [String] -> ST a (Either String ([IfBranch],[String]))
+        parseIfBranches lines ["ENDIF"] =
+            return $ return ([],lines)
+        parseIfBranches lines ["ELSE"] = do
+            stmtsLines <- parseStmts lines
+            return $ do
+                (stmts,lines) <- stmtsLines
+                lines <- nextLineIs lines "ENDIF"
+                return ([IfElse stmts],lines)
+        parseIfBranches lines ['E':'L':'S':'E':'I':'F':arg0,"=",arg1] = do
+            var0 <- getVar arg0
+            var1 <- getVar arg1
+            stmtsLines <- parseStmts lines
+            ifBranchesLines <- either (return . Left) (parseMoreIfBranches . snd) stmtsLines
+            return $ do
+                isIdent arg0
+                isIdent arg1
+                var0 <- var0
+                var1 <- var1
+                (stmts,_) <- stmtsLines
+                (ifBranches,lines) <- ifBranchesLines
+                return (IfEq (var0,var1) stmts:ifBranches,lines)
+        parseIfBranches lines ['E':'L':'S':'E':'I':'F':arg0,">",arg1] = do
+            var0 <- getVar arg0
+            var1 <- getVar arg1
+            stmtsLines <- parseStmts lines
+            ifBranchesLines <- either (return . Left) (parseMoreIfBranches . snd) stmtsLines
+            return $ do
+                isIdent arg0
+                isIdent arg1
+                var0 <- var0
+                var1 <- var1
+                (stmts,_) <- stmtsLines
+                (ifBranches,lines) <- ifBranchesLines
+                return (IfEdge (var0,var1) stmts:ifBranches,lines)
+        parseIfBranches _ tokens =
+            return $ Left "SYNTAX ERROR"
+
+        -- parseMoreIfBranches :: [String] -> ST a (Either String ([IfBranch],[String]))
+        parseMoreIfBranches lines
+          | null lines =
+                return $ Left "UNEXPECTED EOF"
+          | otherwise =
+                parseIfBranches (tail lines) (tokenize $ head lines)
 
 parseCallArgs :: [String] -> Either String [String]
 parseCallArgs tokens
@@ -372,7 +416,7 @@ parseCallArgs tokens
   | tokens == ["(",")"] =
         return []
   | otherwise =
-        (fmap reverse . parseArgs [] . tail) tokens
+        fmap reverse $ parseArgs [] $ tail tokens
   where
     parseArgs revVars (name:[")"]) = return (name:revVars)
     parseArgs revVars (name:",":rest) = parseArgs (name:revVars) rest
@@ -385,7 +429,7 @@ nextLineIs lines str
   | head lines /= str =
         Left "SYNTAX ERROR"
   | otherwise =
-        (return . tail) lines
+        return $ tail lines
 
 isIdent :: String -> Either String ()
 isIdent str
@@ -403,10 +447,10 @@ isVal str
 
 unusedExtern :: Set.Set String -> Set.Set (String,String) -> Bool
 unusedExtern uses externs =
-    (not . all (flip Set.member uses . fst) . Set.toList) externs
+    not $ all (flip Set.member uses . fst) $ Set.toList externs
 
 hasReturn :: Routine -> Bool
-hasReturn routine = (any hasRet . routineStmts) routine
+hasReturn routine = any hasRet $ routineStmts routine
   where
     hasRet (If ifBranches) = any (any hasRet . ifBranchStmts) ifBranches
     hasRet Return = True
