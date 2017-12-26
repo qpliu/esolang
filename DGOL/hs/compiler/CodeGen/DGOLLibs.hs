@@ -1,9 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
 
-module CodeGen.DGOLLibs(
-    dgolLibDecls,dgolLibDefs
-)
+module CodeGen.DGOLLibs(dgolLibDefs)
 where
 
 import Prelude hiding(and,or)
@@ -22,21 +20,10 @@ import CodeGen.Util(
     functionRef,
     call)
 
-dgolLibDecls :: String -> Maybe (ModuleBuilder ())
-dgolLibDecls name
-  | name == "IO" = Just ioLibDecls
-  | otherwise = Nothing
-
 dgolLibDefs :: String -> Maybe (ModuleBuilder ())
 dgolLibDefs name
   | name == "IO" = Just ioLibDefs
   | otherwise = Nothing
-
-ioLibDecls :: ModuleBuilder ()
-ioLibDecls = do
-    ioLibReadbyteDecl
-    ioLibWritebyteDecl
-    return ()
 
 ioLibDefs :: ModuleBuilder ()
 ioLibDefs = do
@@ -64,14 +51,8 @@ writeFn = functionRef writeName [i32,ptr i8,i32] i32
 writeDecl :: ModuleBuilder Operand
 writeDecl = extern writeName [i32,ptr i8,i32] i32
 
-ioLibReadbyteName :: Name
-ioLibReadbyteName = "IO.READBYTE"
-
-ioLibReadbyteDecl :: ModuleBuilder Operand
-ioLibReadbyteDecl = extern ioLibReadbyteName [pFrameType] void
-
 ioLibReadbyteImpl :: ModuleBuilder Operand
-ioLibReadbyteImpl = function ioLibReadbyteName [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
+ioLibReadbyteImpl = function "IO.READBYTE" [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
     argCountPtr <- gep frame [intConst 32 0,intConst 32 5]
     argCount_workaround <- load argCountPtr 0
     argCount <- bitcast argCount_workaround i32
@@ -133,14 +114,8 @@ ioLibReadbyteImpl = function ioLibReadbyteName [(pFrameType,NoParameterName)] vo
     done <- block
     retVoid
 
-ioLibWritebyteName :: Name
-ioLibWritebyteName = "IO.WRITEBYTE"
-
-ioLibWritebyteDecl :: ModuleBuilder Operand
-ioLibWritebyteDecl = extern ioLibWritebyteName [pFrameType] void
-
 ioLibWritebyteImpl :: ModuleBuilder Operand
-ioLibWritebyteImpl = function ioLibWritebyteName [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
+ioLibWritebyteImpl = function "IO.WRITEBYTE" [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
     argCountPtr <- gep frame [intConst 32 0,intConst 32 5]
     argCount <- load argCountPtr 0
     argArrayPtr <- gep frame [intConst 32 0,intConst 32 6]
