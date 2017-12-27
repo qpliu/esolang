@@ -315,19 +315,19 @@ argsAddEdge frame argCount argArray argIndex0 argIndex1 label = mdo
 
     makeNode0 <- block
     node0New <- call newNode [frame]
-    store node0Ptr 0 node0
+    store node0Ptr 0 node0New
     br checkNode1
 
     checkNode1 <- block
     node0 <- phi [(node0Maybe,checkNode0),(node0New,makeNode0)]
     node1Ptr <- gep arg1 [intConst 32 0]
     node1Maybe <- load node1Ptr 0
-    node1Check <- icmp eq node1 (nullConst pNodeType)
+    node1Check <- icmp eq node1Maybe (nullConst pNodeType)
     condBr node1Check makeNode1 doAdd
 
     makeNode1 <- block
     node1New <- call newNode [frame]
-    store node1Ptr 0 node1
+    store node1Ptr 0 node1New
     br doAdd
 
     doAdd <- block

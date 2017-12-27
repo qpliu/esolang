@@ -131,7 +131,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     -- iterate over vars in frame
     markVarLoop <- block
     markVarIndex <- phi [
-        (intConst 32 0,markFrameLoop),
+        (intConst 32 0,markFrameLoopBody),
         (markVarNextIndex,markVarLoopBody)
         ]
     markVarNextIndex <- add markVarIndex (intConst 32 1)
@@ -250,7 +250,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     sweepPageLoopNextIndex <- block
     sweepNextPageLiveCount <- phi [
         (sweepPageLiveCount,sweepPageLoop),
-        (incrementedPageLiveCount,sweepPageLoop),
+        (incrementedPageLiveCount,sweepCheckNode),
         (sweepPageLiveCount,sweepCollectNode),
         (sweepPageLiveCount,sweepCollectNodeClearEdges)
         ]

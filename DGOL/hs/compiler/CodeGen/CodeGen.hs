@@ -5,7 +5,7 @@ module CodeGen.CodeGen(
 )
 where
 
-import Control.Monad(foldM)
+import Control.Monad(foldM,when,zipWithM_)
 import Control.Monad.Fix(MonadFix)
 import Data.String(fromString)
 
@@ -22,7 +22,7 @@ import AST.AST(
     Var(Var),
     Val(Val,NewVal),
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
-    IfBranch(IfEq,IfEdge,IfElse))
+    IfBranch(IfEq,IfEdge,IfElse),ifBranchStmts)
 import CodeGen.DGOLLibs(
     dgolLibDefs)
 import CodeGen.Runtime(
@@ -69,35 +69,39 @@ defineLibs libs lib =
 
 defineSubroutine :: String -> Routine -> ModuleBuilder Operand
 defineSubroutine moduleName routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount) = function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
-    (frame,varArray,doEdgesArray,callArgsArray,exitLabel) <- functionPrelude routine frame entryLabel
+    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine frame entryLabel
     entryLabel <- block
     callerCallArgsArrayPtr <- gep callerFrame [intConst 32 0,intConst 32 6]
     callerCallArgsArray <- load callerCallArgsArrayPtr 0
     callerCallArgsCountPtr <- gep callerFrame [intConst 32 0,intConst 32 5]
     callerCallArgsCount <- load callerCallArgsCountPtr 0
-    codeGenStmts frame varArray doEdgesArray callArgsArray callerCallArgsArray callerCallArgsCount exitLabel stmts
+    codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
 
 defineExportedSubroutine :: String -> Routine -> ModuleBuilder Operand
 defineExportedSubroutine moduleName (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount)
   | not exported =
         return $ nullConst void
   | otherwise = function (routineName True moduleName name) [(pFrameType,NoParameterName)] void $ \ [frame] -> do
-        call (functionRef (routineName False moduleName name) [pFrameType] void) [frame]
+        call (routineRef moduleName Nothing name) [frame]
         retVoid
 
 defineMain :: Routine -> ModuleBuilder Operand
 defineMain routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount) = function (fromString "main") [] void $ \ _ -> mdo
-    (frame,varArray,doEdgesArray,callArgsArray,exitLabel) <- functionPrelude routine (nullConst pFrameType) entryLabel
+    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine (nullConst pFrameType) entryLabel
     entryLabel <- block
     let callerCallArgsArray = nullConst pppNodeType
     let callerCallArgsCount = intConst 32 0
-    codeGenStmts frame varArray doEdgesArray callArgsArray callerCallArgsArray callerCallArgsCount exitLabel stmts
+    codeGenStmts name frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
 
 routineName :: Bool -> String -> String -> Name
 routineName exported mod rout =
   fromString $ (if exported then "" else ".") ++ mod ++ "." ++ rout
 
-functionPrelude :: (MonadIRBuilder m, MonadFix m) => Routine -> Operand -> Name -> m (Operand,Operand,Operand,Operand,Name)
+routineRef :: String -> Maybe String -> String -> Operand
+routineRef mod maybeMod rout =
+    functionRef (maybe (routineName False mod) (routineName True) maybeMod $ rout) [pFrameType] void
+
+functionPrelude :: (MonadIRBuilder m, MonadFix m) => Routine -> Operand -> Name -> m (Operand,Operand,Operand,Operand,Operand,Name)
 functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount) callerFrame entryLabel = do
     frame <- alloca frameType Nothing 0
 
@@ -136,16 +140,16 @@ functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgs
 
     callArgsMaxCountPtr <- gep frame [intConst 32 0,intConst 32 5]
     store callArgsMaxCountPtr 0 (intConst 32 callArgsMaxCount)
-    callArgsArray <- if callArgsMaxCount == 0
+    (callArgsArray,callArgsArraySizeof) <- if callArgsMaxCount == 0
       then do
-        return $ nullConst pppNodeType
+        return (nullConst pppNodeType,intConst 32 0)
       else do
         callArgsArray <- alloca ppNodeType (Just (intConst 32 callArgsMaxCount)) 0
         callArgsArraySizeofPtr <- gep (nullConst pppNodeType) [intConst 32 callArgsMaxCount]
         callArgsArraySizeof <- ptrtoint callArgsArraySizeofPtr i32
         callArgsArrayRawPtr <- bitcast callArgsArray (ptr i8)
         call memset [callArgsArrayRawPtr,intConst 8 0,callArgsArraySizeof,intConst 32 0,intConst 1 0]
-        return callArgsArray
+        return (callArgsArray,callArgsArraySizeof)
     callArgsArrayPtr <- gep frame [intConst 32 0,intConst 32 6]
     store callArgsArrayPtr 0 callArgsArray
 
@@ -168,9 +172,165 @@ functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgs
         ) [0 .. doEdgesCount - 1]
     retVoid
 
-    return (frame,varArray,doEdgesArray,callArgsArray,exitLabel)
+    return (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel)
 
-codeGenStmts :: MonadIRBuilder m => Operand -> Operand -> Operand -> Operand -> Operand -> Operand -> Name -> [Statement] -> m ()
-codeGenStmts frame varArray doEdgesArray callArgsArray callerCallArgsArray callerCallArgsCount exitLabel stmts = do
-    -- ...
-    br exitLabel
+codeGenStmts :: (MonadIRBuilder m, MonadFix m) => String -> Operand -> Operand -> Operand -> Operand -> Operand -> Operand -> Operand -> Name -> [Statement] -> m ()
+codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts = do
+    fellthru <- foldM (codeGenStmt []) True stmts
+    when fellthru $ br exitLabel
+  where
+    codeGenStmt :: (MonadIRBuilder m, MonadFix m) => [(Integer,Name)] -> Bool -> Statement -> m Bool
+    codeGenStmt _ False _ = do
+        -- unreachable statements
+        return False
+    codeGenStmt _ _ (LetEq var val) = do
+        varPtr <- getVarPtr var
+        node <- getVal val
+        store varPtr 0 node
+        return True
+    codeGenStmt _ _ (LetAddEdge var val) = do
+        varNode <- getVar var
+        node <- getVal val
+        call addEdge [varNode,node]
+        return True
+    codeGenStmt _ _ (LetRemoveEdge (var0,var1)) = do
+        node0 <- getVar var0
+        node1 <- getVar var1
+        call removeEdge [node0,node1]
+        return True
+    codeGenStmt doStack _ (If ifBranches) = mdo
+        mapM_ (codeGenIfBranch doStack exitIfLabel) ifBranches
+        br exitIfLabel
+        exitIfLabel <- block
+        return True
+    codeGenStmt _ _ (Call (maybeMod,rout) callArgs) = do
+        callArgsArrayRawPtr <- bitcast callArgsArray (ptr i8)
+        call memset [callArgsArrayRawPtr,intConst 8 0,callArgsArraySizeof,intConst 32 0,intConst 1 0]
+        zipWithM_ storeCallArg [0..] callArgs
+        call (routineRef moduleName maybeMod rout) [frame]
+        return True
+    codeGenStmt _ _ Return = do
+        br exitLabel
+        return False
+    codeGenStmt doStack _ (DoLoop _ doIndex stmts) = mdo
+        br loopLabel
+
+        loopLabel <- block
+        fellthru <- foldM (codeGenStmt ((doIndex,exitLoopLabel):doStack)) True stmts
+        when fellthru $ br loopLabel
+
+        exitLoopLabel <- block
+        return $ any (hasExit doIndex) stmts
+    codeGenStmt doStack _ (DoEdges (var0,var1) doIndex doEdgesIndex stmts) = mdo
+        var0Ptr <- getVarPtr var0
+        node1 <- getVar var1
+        node1EdgeCountPtr <- gep node1 [intConst 32 0,intConst 32 2]
+        node1EdgeCount <- load node1EdgeCountPtr 0
+        node1EdgeCountCheck <- icmp eq node1EdgeCount (intConst 32 0)
+        condBr node1EdgeCountCheck exitLoopLabel setupEdgesLabel
+
+        setupEdgesLabel <- block
+        -- ... set up edges
+        br loopLabel
+
+        loopLabel <- block
+        -- ... iterate to next edge or exit loop
+        br enterLoopBodyLabel
+
+        enterLoopBodyLabel <- block
+        fellthru <- foldM (codeGenStmt ((doIndex,exitLoopLabel):doStack)) True stmts
+        when fellthru $ br loopLabel
+
+        exitLoopLabel <- block
+        return True
+    codeGenStmt doStack _ (Exit _ doIndex) = do
+        maybe (error "INTERNAL ERROR: INVALID EXIT DOINDEX") br $ lookup doIndex doStack
+        return False
+
+    codeGenIfBranch :: (MonadIRBuilder m, MonadFix m) => [(Integer,Name)] -> Name -> IfBranch -> m ()
+    codeGenIfBranch doStack exitIfLabel (IfEq (var0,var1) stmts) = mdo
+        node0 <- getVar var0
+        node1 <- getVar var1
+        eqCheck <- icmp eq node0 node1
+        condBr eqCheck enterBranchLabel nextBranchLabel
+
+        enterBranchLabel <- block
+        fellThru <- foldM (codeGenStmt doStack) True stmts
+        when fellThru $ br exitIfLabel
+
+        nextBranchLabel <- block
+        return ()
+    codeGenIfBranch doStack exitIfLabel (IfEdge (var0,var1) stmts) = mdo
+        node0 <- getVar var0
+        node1 <- getVar var1
+        edgeCheck <- call hasEdge [node0,node1]
+        condBr edgeCheck enterBranchLabel nextBranchLabel
+
+        enterBranchLabel <- block
+        fellThru <- foldM (codeGenStmt doStack) True stmts
+        when fellThru $ br exitIfLabel
+
+        nextBranchLabel <- block
+        return ()
+    codeGenIfBranch doStack exitIfLabel (IfElse stmts) = mdo
+        fellThru <- foldM (codeGenStmt doStack) True stmts
+        return ()
+
+    storeCallArg :: (MonadIRBuilder m, MonadFix m) => Integer -> Val -> m ()
+    storeCallArg index NewVal = do
+        -- no action needed, already null
+        return ()
+    storeCallArg index (Val var) = mdo
+        varPtr <- getVarPtr var
+        argPtr <- gep callArgsArray [intConst 32 index]
+        store argPtr 0 varPtr
+
+    getVarPtr :: (MonadIRBuilder m, MonadFix m) => Var -> m Operand
+    getVarPtr (Var _ index isCallArg)
+      | not isCallArg =
+            gep varArray [intConst 32 index]
+      | otherwise = mdo
+            callerCallArgsCountCheck <- icmp uge callerCallArgsCount (intConst 32 index)
+            condBr callerCallArgsCountCheck localPtrLabel checkCallerArgLabel
+
+            checkCallerArgLabel <- block
+            callerArgPtrPtr <- gep callerCallArgsArray [intConst 32 index]
+            callerArgPtr <- load callerArgPtrPtr 0
+            callerArgPtrCheck <- icmp eq callerArgPtr (nullConst ppNodeType)
+            condBr callerArgPtrCheck localPtrLabel resultLabel
+
+            localPtrLabel <- block
+            localPtr <- gep varArray [intConst 32 index]
+            br resultLabel
+
+            resultLabel <- block
+            phi [(localPtr,localPtrLabel),(callerArgPtr,checkCallerArgLabel)]
+
+    getVar :: (MonadIRBuilder m, MonadFix m) => Var -> m Operand
+    getVar var = mdo
+        br getVarLabel
+
+        getVarLabel <- block
+        varPtr <- getVarPtr var
+        node <- load varPtr 0
+        nullCheck <- icmp eq node (nullConst pNodeType)
+        condBr nullCheck newNodeLabel doneLabel
+
+        newNodeLabel <- block
+        n <- call newNode [frame]
+        store varPtr 0 n
+        br doneLabel
+
+        doneLabel <- block
+        phi [(node,getVarLabel),(n,newNodeLabel)]
+
+    getVal :: (MonadIRBuilder m, MonadFix m) => Val -> m Operand
+    getVal NewVal = call newNode [frame]
+    getVal (Val var) = getVar var
+
+hasExit :: Integer -> Statement -> Bool
+hasExit doIndex (If ifBranches) = any (any (hasExit doIndex) . ifBranchStmts) ifBranches
+hasExit doIndex (Exit _ exitDoIndex) = doIndex == exitDoIndex
+hasExit doIndex (DoLoop _ _ stmts) = any (hasExit doIndex) stmts
+hasExit doIndex (DoEdges _ _ _ stmts) = any (hasExit doIndex) stmts
+hasExit _ _ = False
