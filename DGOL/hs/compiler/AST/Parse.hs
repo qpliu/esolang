@@ -19,9 +19,7 @@ import AST.AST(
     IfBranch(IfEq,IfEdge,IfElse),
     moduleName,moduleSubroutines,moduleProgram,moduleExterns,
     routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,
-    varName,varIndex,
-    stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,
-    ifBranchVars,ifBranchStmts)
+    ifBranchStmts)
 
 parse :: String -> Either String Module
 parse src = (parseModule . filter (/= "") . map stripSpaces . lines) src
@@ -178,7 +176,7 @@ parseRoutineBody lines name args = runST $ do
         if Map.member arg varMap
           then return (Left ("DUPLICATE ARGUMENT " ++ arg))
           else do
-            let var = Var arg (fromIntegral $ Map.size varMap)
+            let var = Var arg (fromIntegral $ Map.size varMap) True
             writeSTRef varMapRef (Map.insert arg var varMap)
             return $ do
                 isIdent arg
@@ -191,7 +189,7 @@ parseRoutineBody lines name args = runST $ do
             case Map.lookup varName varMap of
                 Just var -> return $ return var
                 Nothing -> do
-                    let var = Var varName (fromIntegral $ Map.size varMap)
+                    let var = Var varName (fromIntegral $ Map.size varMap) False
                     writeSTRef varMapRef (Map.insert varName var varMap)
                     return $ do
                         isIdent varName

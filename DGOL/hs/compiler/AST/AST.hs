@@ -7,7 +7,7 @@ module AST.AST(
     IfBranch(IfEq,IfEdge,IfElse),
     moduleName,moduleSubroutines,moduleProgram,moduleExterns,
     routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,
-    varName,varIndex,
+    varName,varIndex,varIsCallArg,
     stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,
     ifBranchVars,ifBranchStmts
 )
@@ -40,7 +40,8 @@ data Routine = Routine {
 
 data Var = Var {
     varName :: String,
-    varIndex :: Integer
+    varIndex :: Integer,
+    varIsCallArg :: Bool
     }
     deriving Show
 

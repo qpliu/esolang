@@ -30,8 +30,7 @@ import CodeGen.Util(
     eq,uge,
     intConst,nullConst,
     functionRef,globalRef,
-    call
-    )
+    call)
 
 newNodeName :: Name
 newNodeName = "newNode"
