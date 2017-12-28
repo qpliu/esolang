@@ -1,9 +1,13 @@
 import Control.Exception(Exception,catch,displayException,throwIO)
+import Control.Monad(foldM)
 import qualified Data.ByteString
-import Data.Either(lefts,rights)
 import Data.String(fromString)
+import System.Directory(removeFile,getTemporaryDirectory)
 import System.Environment(getArgs,getProgName)
 import System.Exit(exitFailure)
+import System.FilePath(combine,replaceExtension,takeExtension,takeFileName)
+import System.Posix(getProcessID)
+import System.Process(callProcess)
 
 import qualified LLVM.AST
 import LLVM.Context(Context,withContext)
@@ -20,21 +24,21 @@ newtype CompileException = CompileException String deriving Show
 instance Exception CompileException where
     displayException (CompileException msg) = msg
 
-dgolFileToModule :: [String] -> Context -> String -> IO Module
-dgolFileToModule libs context file = do
+dgolFileToModule :: [String] -> Context -> String -> (Module -> IO a) -> IO a
+dgolFileToModule libs context file process = do
     src <- readFile file
     ast <- either (throwIO . CompileException) return $ parse src
     let mbuilder = codeGen ast libs
-    let mod = buildModule (fromString $ basename file) mbuilder
-    withModuleFromAST context mod { LLVM.AST.moduleSourceFileName = fromString file } return
+    let mod = buildModule (fromString $ takeFileName file) mbuilder
+    withModuleFromAST context mod { LLVM.AST.moduleSourceFileName = fromString file } process
 
-llFileToModule :: Context -> String -> IO Module
-llFileToModule context file =
-    withModuleFromLLVMAssembly context (File (fromString file)) return
+llFileToModule :: Context -> String -> (Module -> IO a) -> IO a
+llFileToModule context file process =
+    withModuleFromLLVMAssembly context (File (fromString file)) process
 
-bcFileToModule :: Context -> String -> IO Module
-bcFileToModule context file =
-    withModuleFromBitcode context (File (fromString file)) return
+bcFileToModule :: Context -> String -> (Module -> IO a) -> IO a
+bcFileToModule context file process =
+    withModuleFromBitcode context (File (fromString file)) process
 
 
 moduleToLL :: String -> Module -> IO ()
@@ -47,34 +51,13 @@ moduleToBC file m =
 
 moduleToAsm :: String -> Module -> IO ()
 moduleToAsm file m = do
-    targetMachine <- withHostTargetMachine return
-    writeTargetAssemblyToFile targetMachine (File file) m
+    withHostTargetMachine (\ targetMachine ->
+        writeTargetAssemblyToFile targetMachine (File file) m)
 
 moduleToObj :: String -> Module -> IO ()
 moduleToObj file m = do
-    targetMachine <- withHostTargetMachine return
-    writeObjectToFile targetMachine (File file) m
-
-
-basename :: String -> String
-basename file = reverse $ takeWhile (/= '/') $ reverse file
-
-dirname :: String -> String
-dirname file = reverse $ dropWhile (/= '/') $ reverse file
-
-ext :: String -> String
-ext file
-  | '.' `elem` base = reverse $ takeWhile (/= '.') $ reverse base
-  | otherwise = ""
-  where base = basename file
-
-replaceExt :: String -> String -> String
-replaceExt file ext
-  | '.' `elem` base = (dir ++) $ (++ ext) $ reverse $ dropWhile (/= '.') $ reverse base
-  | otherwise = file ++ '.':ext
-  where base = basename file
-        dir = dirname file
-
+    withHostTargetMachine (\ targetMachine ->
+        writeObjectToFile targetMachine (File file) m)
 
 usage :: IO a
 usage = do
@@ -113,36 +96,66 @@ parseArgs = do
     p (Just out) libs files [] = Just (out,libs,files)
 
 processFiles :: OutputOption -> [String] -> [String] -> Context -> IO ()
-processFiles (BinFile f) libs files context = undefined
+processFiles (BinFile f) libs files context = do
+    pid <- getProcessID
+    tmpDir <- getTemporaryDirectory
+    (tmpObjFiles,objFiles,_) <- foldM (makeTmpObjFiles (combine tmpDir $ show pid) libs context) ([],[],1) files
+    callProcess "cc" (["-o",f] ++ tmpObjFiles ++ objFiles)
+    mapM_ removeFile tmpObjFiles
+
 processFiles outputOption libs files context = do
     mapM_ (processFile outputOption context libs) files
 
 processFile :: OutputOption -> Context -> [String] -> String -> IO ()
 processFile ObjFile context libs file
-  | ext file == "DGOL" = dgolFileToModule libs context file >>= moduleToObj (replaceExt file "o")
-  | ext file == "ll" = llFileToModule context file >>= moduleToObj (replaceExt file "o")
-  | ext file == "bc" = bcFileToModule context file >>= moduleToObj (replaceExt file "o")
+  | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToObj (replaceExtension file ".o")
+  | takeExtension file == ".ll" = llFileToModule context file $ moduleToObj (replaceExtension file ".o")
+  | takeExtension file == ".bc" = bcFileToModule context file $ moduleToObj (replaceExtension file ".o")
   | otherwise = return ()
 processFile AsmFile context libs file
-  | ext file == "DGOL" = dgolFileToModule libs context file >>= moduleToAsm (replaceExt file "s")
-  | ext file == "ll" = llFileToModule context file >>= moduleToAsm (replaceExt file "s")
-  | ext file == "bc" = bcFileToModule context file >>= moduleToAsm (replaceExt file "s")
+  | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToAsm (replaceExtension file ".s")
+  | takeExtension file == ".ll" = llFileToModule context file $ moduleToAsm (replaceExtension file ".s")
+  | takeExtension file == ".bc" = bcFileToModule context file $ moduleToAsm (replaceExtension file ".s")
   | otherwise = return ()
 processFile BCFile context libs file
-  | ext file == "DGOL" = dgolFileToModule libs context file >>= moduleToBC (replaceExt file "bc")
+  | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToBC (replaceExtension file ".bc")
   | otherwise = return ()
 processFile LLFile context libs file
-  | ext file == "DGOL" = dgolFileToModule libs context file >>= moduleToBC (replaceExt file "ll")
+  | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToLL (replaceExtension file ".ll")
   | otherwise = return ()
+
+makeTmpObjFiles :: String -> [String] -> Context -> ([String],[String],Int) -> String -> IO ([String],[String],Int)
+makeTmpObjFiles tmpFileBase libs context (tmpObjFiles,objFiles,index) file
+  | takeExtension file == ".DGOL" = do
+        let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
+        dgolFileToModule libs context file $ moduleToObj tmpObjFile
+        return (tmpObjFile:tmpObjFiles,objFiles,index+1)
+  | takeExtension file == ".ll" = do
+        let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
+        llFileToModule context file $ moduleToObj tmpObjFile
+        return (tmpObjFile:tmpObjFiles,objFiles,index+1)
+  | takeExtension file == ".bc" = do
+        let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
+        bcFileToModule context file $ moduleToObj tmpObjFile
+        return (tmpObjFile:tmpObjFiles,objFiles,index+1)
+  | takeExtension file `elem` [".s",".o",".a"] =
+        return (tmpObjFiles,file:objFiles,index+1)
+  | otherwise =
+        return (tmpObjFiles,objFiles,index+1)
+
+compileError :: CompileException -> IO a
+compileError e = do
+    putStrLn $ displayException e
+    exitFailure
 
 main :: IO ()
 main = do
     (outputOption,libs,files) <- parseArgs
-    withContext $ processFiles outputOption libs files
+    catch (withContext $ processFiles outputOption libs files) compileError
 
 ll :: [String] -> String -> IO ()
 ll libs file = do
     withContext (\ context -> do
-        m <- dgolFileToModule libs context file
-        llcode <- moduleLLVMAssembly m
-        Data.ByteString.putStr llcode)
+        dgolFileToModule libs context file (\ m -> do
+            llcode <- moduleLLVMAssembly m
+            Data.ByteString.putStr llcode))
