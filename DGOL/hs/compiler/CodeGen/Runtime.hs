@@ -157,23 +157,16 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
 
     -- set up current doEdgeIterator
     markDoEdgesIteratorLoopBody <- block
-    markIteratorEdgesInitialIndexPtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 0]
-    -- workaround for
-    -- *** Exception: gep: Can't index into a NamedTypeReference (Name "frame")
-    -- caused by
-    -- markIteratorEdgesInitialIndex <- load markIteratorEdgesInitialIndexPtr 0
-    markIteratorEdgesInitialIndex_workaround <- load markIteratorEdgesInitialIndexPtr 0
-    markIteratorEdgesInitialIndex <- bitcast markIteratorEdgesInitialIndex_workaround i32
-    markIteratorEdgesSizePtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 1]
+    markIteratorEdgesSizePtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 0]
     markIteratorEdgesSize <- load markIteratorEdgesSizePtr 0
-    markIteratorEdgesArrayPtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 2]
+    markIteratorEdgesArrayPtr <- gep markDoEdgesIteratorsArray [markDoEdgesIteratorsIndex, intConst 32 1]
     markIteratorEdgesArray <- load markIteratorEdgesArrayPtr 0
     br markIteratorEdgesLoop
 
     -- iterate over edges in current doEdgeIterator
     markIteratorEdgesLoop <- block
     markIteratorEdgesIndex <- phi [
-        (markIteratorEdgesInitialIndex,markDoEdgesIteratorLoopBody),
+        (intConst 32 0,markDoEdgesIteratorLoopBody),
         (markIteratorEdgesNextIndex,markIteratorEdgesLoopBody)
         ]
     markIteratorEdgesNextIndex <- add markIteratorEdgesIndex (intConst 32 1)

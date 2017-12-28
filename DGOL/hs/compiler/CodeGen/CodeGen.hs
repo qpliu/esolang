@@ -12,7 +12,7 @@ import Data.String(fromString)
 import LLVM.AST.Name(Name)
 import LLVM.AST.Operand(Operand)
 import LLVM.AST.Type(i8,i32,ptr,void)
-import LLVM.IRBuilder.Instruction(alloca,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,retVoid,store)
+import LLVM.IRBuilder.Instruction(add,alloca,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,retVoid,store)
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),extern,function)
 import LLVM.IRBuilder.Monad(MonadIRBuilder,block)
 
@@ -28,7 +28,7 @@ import CodeGen.DGOLLibs(
 import CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
-    memset,malloc,free,
+    memset,memcpy,malloc,free,
     newNode,hasEdge,addEdge,removeEdge)
 import CodeGen.Types(
     pNodeType,ppNodeType,pppNodeType,
@@ -157,7 +157,7 @@ functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgs
 
     exitLabel <- block
     mapM_ (\ doEdgesIndex -> mdo
-        edgesArrayPtr <- gep doEdgesArray [intConst 32 doEdgesIndex,intConst 32 2]
+        edgesArrayPtr <- gep doEdgesArray [intConst 32 doEdgesIndex,intConst 32 1]
         edgesArray <- load edgesArrayPtr 0
         edgesArrayCheck <- icmp eq edgesArray (nullConst ppNodeType)
         condBr edgesArrayCheck doneLabel freeLabel
@@ -222,24 +222,29 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         exitLoopLabel <- block
         return $ any (hasExit doIndex) stmts
     codeGenStmt doStack _ (DoEdges (var0,var1) doIndex doEdgesIndex stmts) = mdo
-        var0Ptr <- getVarPtr var0
-        node1 <- getVar var1
-        node1EdgeCountPtr <- gep node1 [intConst 32 0,intConst 32 2]
-        node1EdgeCount <- load node1EdgeCountPtr 0
-        node1EdgeCountCheck <- icmp eq node1EdgeCount (intConst 32 0)
-        condBr node1EdgeCountCheck exitLoopLabel setupEdgesLabel
+        (var0Ptr,var1EdgesSize,edgesArray) <- setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel
 
-        setupEdgesLabel <- block
-        -- ... set up edges
+        initLoopLabel <- block
         br loopLabel
 
         loopLabel <- block
-        -- ... iterate to next edge or exit loop
+        loopIndex <- phi [(intConst 32 0,initLoopLabel),(nextLoopIndex,loopIterateLabel)]
+        nextLoopIndex <- add loopIndex (intConst 32 1)
+        loopIndexCheck <- icmp uge loopIndex var1EdgesSize
+        condBr loopIndexCheck exitLoopLabel loopLabel2
+
+        loopLabel2 <- block
+        -- ... if edge[loopIndex] is null, br loopIterateLabel
+        -- ... else load edge[loopIndex], store var0Ptr, store null into edge[loopIndex], br enterLoopBodyLabel
+        undefined
         br enterLoopBodyLabel
 
         enterLoopBodyLabel <- block
         fellthru <- foldM (codeGenStmt ((doIndex,exitLoopLabel):doStack)) True stmts
-        when fellthru $ br loopLabel
+        when fellthru $ br loopIterateLabel
+
+        loopIterateLabel <- block
+        br loopLabel
 
         exitLoopLabel <- block
         return True
@@ -327,6 +332,63 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
     getVal :: (MonadIRBuilder m, MonadFix m) => Val -> m Operand
     getVal NewVal = call newNode [frame]
     getVal (Val var) = getVar var
+
+    setupDoEdges :: (MonadIRBuilder m, MonadFix m) => Var -> Var -> Integer -> Name -> Name -> m (Operand,Operand,Operand)
+    setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel = mdo
+        var0Ptr <- getVarPtr var0
+        node1 <- getVar var1
+        node1EdgesSizePtr <- gep node1 [intConst 32 0,intConst 32 2]
+        node1EdgesSize <- load node1EdgesSizePtr 0
+        node1EdgesSizeofPtr <- gep (nullConst ppNodeType) [node1EdgesSize]
+        node1EdgesSizeof <- bitcast node1EdgesSizeofPtr i32
+        node1EdgesSizeCheck <- icmp eq node1EdgesSize (intConst 32 0)
+        condBr node1EdgesSizeCheck exitLoopLabel setupEdgesLabel
+
+        setupEdgesLabel <- block
+        edgesArraySizePtr <- gep doEdgesArray [intConst 32 doEdgesIndex,intConst 32 0]
+        edgesArraySize <- load edgesArraySizePtr 0
+        edgesArrayPtr <- gep doEdgesArray [intConst 32 doEdgesIndex,intConst 32 1]
+        edgesArraySize0Check <- icmp eq edgesArraySize (intConst 32 0)
+        condBr edgesArraySize0Check allocEdgesArrayLabel checkEdgesArraySizeLabel
+
+        checkEdgesArraySizeLabel <- block
+        edgesArraySizeCheck <- icmp uge node1EdgesSize edgesArraySize
+        condBr edgesArraySizeCheck freeOldEdgesArrayLabel clearEdgesArrayLabel
+
+        clearEdgesArrayLabel <- block
+        reusedEdgesArray <- load edgesArrayPtr 0
+        reusedEdgesArrayRawPtr <- bitcast oldEdgesArray (ptr i8)
+        reusedEdgesArraySizeofPtr <- gep (nullConst ppNodeType) [edgesArraySize]
+        reusedEdgesArraySizeof <- ptrtoint reusedEdgesArraySizeofPtr i32
+        call memset [reusedEdgesArrayRawPtr,intConst 8 0,reusedEdgesArraySizeof,intConst 32 0,intConst 1 0]
+        br copyEdgesLabel
+
+        freeOldEdgesArrayLabel <- block
+        oldEdgesArray <- load edgesArrayPtr 0
+        oldEdgesArrayRawPtr <- bitcast oldEdgesArray (ptr i8)
+        call free [oldEdgesArrayRawPtr]
+        br allocEdgesArrayLabel
+
+        allocEdgesArrayLabel <- block
+        newEdgesArrayRawPtr <- call malloc [node1EdgesSizeof]
+        newEdgesArray <- bitcast newEdgesArrayRawPtr ppNodeType
+        store edgesArrayPtr 0 newEdgesArray
+        br copyEdgesLabel
+
+        copyEdgesLabel <- block
+        edgesArrayRawPtr <- phi [
+            (reusedEdgesArrayRawPtr,clearEdgesArrayLabel),
+            (newEdgesArrayRawPtr,allocEdgesArrayLabel)
+            ]
+        edgesArray <- phi [
+            (reusedEdgesArray,clearEdgesArrayLabel),
+            (newEdgesArray,allocEdgesArrayLabel)
+            ]
+        node1EdgesArrayPtr <- gep node1 [intConst 32 0,intConst 32 3]
+        node1EdgesArrayRawPtr <- bitcast node1EdgesArrayPtr (ptr i8)
+        call memcpy [edgesArrayRawPtr,node1EdgesArrayRawPtr,node1EdgesSizeof,intConst 32 0,intConst 1 0]
+        br initLoopLabel
+        return (var0Ptr,node1EdgesSize,edgesArray)
 
 hasExit :: Integer -> Statement -> Bool
 hasExit doIndex (If ifBranches) = any (any (hasExit doIndex) . ifBranchStmts) ifBranches

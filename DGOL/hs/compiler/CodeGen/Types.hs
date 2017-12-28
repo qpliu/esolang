@@ -105,7 +105,6 @@ doEdgesIteratorTypedef :: ModuleBuilder ()
 doEdgesIteratorTypedef = typedef doEdgesIteratorTypeName (Just (StructureType {
     isPacked = False,
     elementTypes = [
-        i32, -- iterator index
         i32, -- size of allocated array of edges
         ppNodeType -- array of edges
         ]
