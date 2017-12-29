@@ -408,7 +408,8 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
             (newEdgesArray,allocEdgesArrayLabel)
             ]
         node1EdgesArrayPtr <- gep node1 [intConst 32 0,intConst 32 3]
-        node1EdgesArrayRawPtr <- bitcast node1EdgesArrayPtr (ptr i8)
+        node1EdgesArray <- load node1EdgesArrayPtr 0
+        node1EdgesArrayRawPtr <- bitcast node1EdgesArray (ptr i8)
         call memcpy [edgesArrayRawPtr,node1EdgesArrayRawPtr,node1EdgesSizeof,intConst 32 0,intConst 1 0]
         br initLoopLabel
         return (var0Ptr,node1EdgesSize,edgesArray)

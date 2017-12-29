@@ -5,9 +5,11 @@ TODO List
   - ~~NODE~~
   - ~~FRAME~~
 
-* Debug compiler output for DO EDGES
+* ~~Debug compiler output for DO EDGES~~
 
 * Rework parser to include source locations
+
+* Debug compiler output for BRAINFUCK.DGOL
 
 * Add source code metadata
   - DIFile(filename)

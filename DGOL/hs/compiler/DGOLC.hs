@@ -95,53 +95,56 @@ parseArgs = do
     p (Just out) libs files (arg:args) = p (Just out) libs (files ++ [arg]) args
     p (Just out) libs files [] = Just (out,libs,files)
 
-processFiles :: OutputOption -> [String] -> [String] -> Context -> IO ()
-processFiles (BinFile f) libs files context = do
+processFiles :: OutputOption -> [String] -> [String] -> IO ()
+processFiles (BinFile f) libs files = do
     pid <- getProcessID
     tmpDir <- getTemporaryDirectory
-    (tmpObjFiles,objFiles,_) <- foldM (makeTmpObjFiles (combine tmpDir $ show pid) libs context) ([],[],1) files
+    (tmpObjFiles,objFiles,_) <- foldM (makeTmpObjFiles (combine tmpDir $ show pid) libs) ([],[],1) files
     callProcess "cc" (["-o",f] ++ tmpObjFiles ++ objFiles)
     mapM_ removeFile tmpObjFiles
 
-processFiles outputOption libs files context = do
-    mapM_ (processFile outputOption context libs) files
+processFiles outputOption libs files = do
+    mapM_ (withContext . processFile outputOption libs) files
 
-processFile :: OutputOption -> Context -> [String] -> String -> IO ()
-processFile ObjFile context libs file
+processFile :: OutputOption -> [String] -> String -> Context -> IO ()
+processFile ObjFile libs file context
   | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToObj (replaceExtension file ".o")
   | takeExtension file == ".ll" = llFileToModule context file $ moduleToObj (replaceExtension file ".o")
   | takeExtension file == ".bc" = bcFileToModule context file $ moduleToObj (replaceExtension file ".o")
   | otherwise = return ()
-processFile AsmFile context libs file
+processFile AsmFile libs file context
   | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToAsm (replaceExtension file ".s")
   | takeExtension file == ".ll" = llFileToModule context file $ moduleToAsm (replaceExtension file ".s")
   | takeExtension file == ".bc" = bcFileToModule context file $ moduleToAsm (replaceExtension file ".s")
   | otherwise = return ()
-processFile BCFile context libs file
+processFile BCFile libs file context
   | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToBC (replaceExtension file ".bc")
   | otherwise = return ()
-processFile LLFile context libs file
+processFile LLFile libs file context
   | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToLL (replaceExtension file ".ll")
   | otherwise = return ()
 
-makeTmpObjFiles :: String -> [String] -> Context -> ([String],[String],Int) -> String -> IO ([String],[String],Int)
-makeTmpObjFiles tmpFileBase libs context (tmpObjFiles,objFiles,index) file
-  | takeExtension file == ".DGOL" = do
-        let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
-        dgolFileToModule libs context file $ moduleToObj tmpObjFile
-        return (tmpObjFile:tmpObjFiles,objFiles,index+1)
-  | takeExtension file == ".ll" = do
-        let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
-        llFileToModule context file $ moduleToObj tmpObjFile
-        return (tmpObjFile:tmpObjFiles,objFiles,index+1)
-  | takeExtension file == ".bc" = do
-        let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
-        bcFileToModule context file $ moduleToObj tmpObjFile
-        return (tmpObjFile:tmpObjFiles,objFiles,index+1)
-  | takeExtension file `elem` [".s",".o",".a"] =
-        return (tmpObjFiles,file:objFiles,index+1)
-  | otherwise =
-        return (tmpObjFiles,objFiles,index+1)
+makeTmpObjFiles :: String -> [String] -> ([String],[String],Int) -> String -> IO ([String],[String],Int)
+makeTmpObjFiles tmpFileBase libs (tmpObjFiles,objFiles,index) file =
+    withContext mkTmpObj
+  where
+    mkTmpObj context
+      | takeExtension file == ".DGOL" = do
+            let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
+            dgolFileToModule libs context file $ moduleToObj tmpObjFile
+            return (tmpObjFile:tmpObjFiles,objFiles,index+1)
+      | takeExtension file == ".ll" = do
+            let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
+            llFileToModule context file $ moduleToObj tmpObjFile
+            return (tmpObjFile:tmpObjFiles,objFiles,index+1)
+      | takeExtension file == ".bc" = do
+            let tmpObjFile = tmpFileBase ++ "." ++ show index ++ ".o"
+            bcFileToModule context file $ moduleToObj tmpObjFile
+            return (tmpObjFile:tmpObjFiles,objFiles,index+1)
+      | takeExtension file `elem` [".s",".o",".a"] =
+            return (tmpObjFiles,file:objFiles,index+1)
+      | otherwise =
+            return (tmpObjFiles,objFiles,index+1)
 
 compileError :: CompileException -> IO a
 compileError e = do
@@ -151,7 +154,7 @@ compileError e = do
 main :: IO ()
 main = do
     (outputOption,libs,files) <- parseArgs
-    catch (withContext $ processFiles outputOption libs files) compileError
+    catch (processFiles outputOption libs files) compileError
 
 ll :: [String] -> String -> IO ()
 ll libs file = do
