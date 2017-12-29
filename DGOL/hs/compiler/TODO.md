@@ -1,5 +1,10 @@
 TODO List
 
+* ~~Add DEBUG TRACE to DGOLLibs, subroutines include~~
+  - ~~LABEL~~
+  - ~~NODE~~
+  - ~~FRAME~~
+
 * Debug compiler output for DO EDGES
 
 * Rework parser to include source locations
