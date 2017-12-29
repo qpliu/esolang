@@ -85,7 +85,7 @@ parseArgs = do
     p Nothing libs [] ("-s":args) = p (Just AsmFile) libs [] args
     p Nothing libs [] ("-ll":args) = p (Just LLFile) libs [] args
     p Nothing libs [] ("-bc":args) = p (Just BCFile) libs [] args
-    p out libs [] (('-':'L':'=':lib@_):args) = p out (libs ++ [lib]) [] args
+    p out libs files (('-':'L':'=':lib@_):args) = p out (libs ++ [lib]) files args
     p Nothing libs [] (file:args) = p (Just $ BinFile "a.out") libs [file] args
     p (Just _) _ _ ("-o":args) = Nothing
     p (Just _) _ _ ("-c":args) = Nothing
