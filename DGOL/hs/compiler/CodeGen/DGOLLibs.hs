@@ -354,6 +354,7 @@ debugTraceLibDefs = do
     debugTraceLibLabelImpl
     debugTraceLibNodeImpl
     debugTraceLibFrameImpl
+    debugTraceLibArgsImpl
     return ()
 
 printfName :: Name
@@ -381,8 +382,11 @@ debugTraceLibStrzTable = GlobalStrzTable "debugTraceLibStr" [
     "NODE NULL\n",
     "NODE %p EDGES[%d]",
     "FRAME %p\n CALLER FRAME %p\n LOCAL VARS[%d]",
+    " %p@%p",
     "\n ITERATORS[%d]",
-    "\n  ITERATOR[%d]"
+    "\n  ITERATOR[%d]",
+    "ARGS",
+    "[%d]"
     ]
 
 debugTraceLibLabelImpl :: ModuleBuilder Operand
@@ -485,7 +489,7 @@ debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterNam
     localVarLoopBodyLabel <- block
     localVarNodePtr <- gep localVarArray [localVarIndex]
     localVarNode <- load localVarNodePtr 0
-    callPrintf " %p" [localVarNode]
+    callPrintf " %p@%p" [localVarNode,localVarNodePtr]
     nextLocalVarIndex <- add localVarIndex (intConst 32 1)
     br localVarLoopLabel
 
@@ -524,5 +528,46 @@ debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterNam
     br edgeLoopLabel
 
     iteratorsArrayLoopDoneLabel <- block
+    callPrintf "\n" []
+    retVoid
+
+debugTraceLibArgsImpl :: ModuleBuilder Operand
+debugTraceLibArgsImpl = function "DEBUGTRACE.ARGS" [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
+    callPrintf "ARGS" []
+    callerFramePtr <- gep frame [intConst 32 0,intConst 32 0]
+    callerFrame <- load callerFramePtr 0
+    callerFrameCheck <- icmp eq callerFrame (nullConst pFrameType)
+    condBr callerFrameCheck doneLabel getArgCountLabel
+
+    getArgCountLabel <- block
+    argCountPtr <- gep callerFrame [intConst 32 0,intConst 32 5]
+    argCount <- load argCountPtr 0
+    callPrintf "[%d]" [argCount]
+    argArrayPtr <- gep callerFrame [intConst 32 0,intConst 32 6]
+    argArray <- load argArrayPtr 0
+    br argLoopLabel
+
+    argLoopLabel <- block
+    index <- phi [(intConst 32 0,getArgCountLabel),(nextIndex,printArgLabel)]
+    indexCheck <- icmp uge index argCount
+    condBr indexCheck doneLabel argLoopBodyLabel
+
+    argLoopBodyLabel <- block
+    nextIndex <- add index (intConst 32 1)
+    argPtr <- gep argArray [index]
+    arg <- load argPtr 0
+    argCheck <- icmp eq arg (nullConst ppNodeType)
+    condBr argCheck printArgLabel loadNodeLabel
+
+    loadNodeLabel <- block
+    node1 <- load arg 0
+    br printArgLabel
+
+    printArgLabel <- block
+    node <- phi [(nullConst pNodeType,argLoopBodyLabel),(node1,loadNodeLabel)]
+    callPrintf " %p@%p" [arg,node]
+    br argLoopLabel
+
+    doneLabel <- block
     callPrintf "\n" []
     retVoid

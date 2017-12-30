@@ -172,20 +172,20 @@ parseRoutineBody lines name args lineNumber = runST $ do
   where
     parseRoutineStmts :: Lines -> STRef a (Map.Map String Var) -> STRef a Integer -> STRef a Integer -> STRef a [(String,Integer)] -> STRef a Integer -> STRef a Externs -> [String] -> ST a (Either String ([Var],([Statement],Lines)))
     parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef args = do
-        args <- mapM (getVar lineNumber) args
+        args <- mapM (getVar lineNumber True) args
         stmts <- parseStmts lines
         return $ do
             args <- sequence args
             stmts <- stmts
             return (args,stmts)
       where
-        -- getVar :: Integer -> String -> ST a (Either String Var)
-        getVar lineNumber name = do
+        -- getVar :: Integer -> Bool -> String -> ST a (Either String Var)
+        getVar lineNumber isCallArg name = do
             varMap <- readSTRef varMapRef
             case Map.lookup name varMap of
                 Just var -> return $ return var
                 Nothing -> do
-                    let var = Var name (fromIntegral $ Map.size varMap) False
+                    let var = Var name (fromIntegral $ Map.size varMap) isCallArg
                     writeSTRef varMapRef (Map.insert name var varMap)
                     return $ do
                         isIdent lineNumber name
@@ -193,7 +193,7 @@ parseRoutineBody lines name args lineNumber = runST $ do
 
         -- getVal :: Integer -> String -> ST a (Either String Val)
         getVal lineNumber "0" = return $ return NewVal
-        getVal lineNumber name = fmap (fmap Val) $ getVar lineNumber name
+        getVal lineNumber name = fmap (fmap Val) $ getVar lineNumber False name
 
         -- parseStmts :: Lines -> ST a (Either String ([Statement],Lines))
         parseStmts [] = return eofError
@@ -212,22 +212,22 @@ parseRoutineBody lines name args lineNumber = runST $ do
         -- parseStmt :: Lines -> ST a (Either String (Maybe Statement,Lines))
         parseStmt [] = return eofError
         parseStmt ((lineNumber,['L':'E':'T':arg0,"=",arg1]):lines) = do
-            var <- getVar lineNumber arg0
+            var <- getVar lineNumber False arg0
             val <- getVal lineNumber arg1
             return $ do
                 var <- var
                 val <- val
                 return (Just $ LetEq var val lineNumber,lines)
         parseStmt ((lineNumber,['L':'E':'T':arg0,">",arg1]):lines) = do
-            var <- getVar lineNumber arg0
+            var <- getVar lineNumber False arg0
             val <- getVal lineNumber arg1
             return $ do
                 var <- var
                 val <- val
                 return (Just $ LetAddEdge var val lineNumber,lines)
         parseStmt ((lineNumber,['L':'E':'T':arg0,"<",arg1]):lines) = do
-            var0 <- getVar lineNumber arg0
-            var1 <- getVar lineNumber arg1
+            var0 <- getVar lineNumber False arg0
+            var1 <- getVar lineNumber False arg1
             return $ do
                 var0 <- var0
                 var1 <- var1
@@ -261,7 +261,7 @@ parseRoutineBody lines name args lineNumber = runST $ do
             doIndex <- readSTRef doIndicesRef
             modifySTRef doIndicesRef (+1)
             modifySTRef doStackRef ((arg,doIndex):)
-            arg <- getVar lineNumber arg
+            arg <- getVar lineNumber False arg
             stmtsLines <- parseStmts lines
             modifySTRef doStackRef tail
             return $ do
@@ -275,8 +275,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
             modifySTRef doStackRef ((arg0,doIndex):)
             doEdgesIndex <- readSTRef doEdgesIndicesRef
             modifySTRef doEdgesIndicesRef (+1)
-            arg0 <- getVar lineNumber arg0
-            arg1 <- getVar lineNumber arg1
+            arg0 <- getVar lineNumber False arg0
+            arg1 <- getVar lineNumber False arg1
             stmtsLines <- parseStmts lines
             modifySTRef doStackRef tail
             return $ do
@@ -287,7 +287,7 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 return $ (Just $ DoEdges (arg0,arg1) doIndex doEdgesIndex stmts lineNumber,lines)
         parseStmt ((lineNumber,['E':'X':'I':'T':arg]):lines) = do
             doStack <- readSTRef doStackRef
-            arg <- getVar lineNumber arg
+            arg <- getVar lineNumber False arg
             return $ do
                 arg <- arg
                 maybe exitError (exitStmt arg) $ lookup (varName arg) doStack
@@ -307,8 +307,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 lines <- nextLineIs lines "ENDIF"
                 return ([IfElse stmts lineNumber],lines)
         parseIfBranches ((lineNumber,['E':'L':'S':'E':'I':'F':arg0,"=",arg1]):lines) = do
-            arg0 <- getVar lineNumber arg0
-            arg1 <- getVar lineNumber arg1
+            arg0 <- getVar lineNumber False arg0
+            arg1 <- getVar lineNumber False arg1
             stmtsLines <- parseStmts lines
             lines <- return $ either (const []) snd stmtsLines
             ifBranchesLines <- parseIfBranches lines
@@ -319,8 +319,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 (ifBranches,lines) <- ifBranchesLines
                 return (IfEq (arg0,arg1) stmts lineNumber:ifBranches,lines)
         parseIfBranches ((lineNumber,['E':'L':'S':'E':'I':'F':arg0,">",arg1]):lines) = do
-            arg0 <- getVar lineNumber arg0
-            arg1 <- getVar lineNumber arg1
+            arg0 <- getVar lineNumber False arg0
+            arg1 <- getVar lineNumber False arg1
             stmtsLines <- parseStmts lines
             lines <- return $ either (const []) snd stmtsLines
             ifBranchesLines <- parseIfBranches lines
