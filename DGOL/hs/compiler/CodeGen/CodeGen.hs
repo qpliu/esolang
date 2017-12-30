@@ -29,7 +29,8 @@ import CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
     memset,memcpy,malloc,free,
-    newNode,hasEdge,addEdge,removeEdge)
+    newNode,hasEdge,addEdge,removeEdge,
+    trace)
 import CodeGen.Types(
     pNodeType,ppNodeType,pppNodeType,
     frameType,pFrameType,
@@ -69,7 +70,7 @@ defineLibs libs lib =
 
 defineSubroutine :: String -> Routine -> ModuleBuilder Operand
 defineSubroutine moduleName routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) = function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
-    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine frame entryLabel
+    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine callerFrame entryLabel
     entryLabel <- block
     (callerCallArgsCount,callerCallArgsArray) <- if null args
       then do
@@ -189,16 +190,19 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         -- unreachable statements
         return False
     codeGenStmt _ _ (LetEq var val lineNumber) = do
+        trace lineNumber "%d: LET=\n"
         varPtr <- getVarPtr var
         node <- getVal val
         store varPtr 0 node
         return True
     codeGenStmt _ _ (LetAddEdge var val lineNumber) = do
+        trace lineNumber "%d: LET>\n"
         varNode <- getVar var
         node <- getVal val
         call addEdge [varNode,node]
         return True
     codeGenStmt _ _ (LetRemoveEdge (var0,var1) lineNumber) = do
+        trace lineNumber "%d: LET<\n"
         node0 <- getVar var0
         node1 <- getVar var1
         call removeEdge [node0,node1]
@@ -209,15 +213,18 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         exitIfLabel <- block
         return True
     codeGenStmt _ _ (Call (maybeMod,rout) callArgs lineNumber) = do
+        trace lineNumber "%d: CALL\n"
         callArgsArrayRawPtr <- bitcast callArgsArray (ptr i8)
         call memset [callArgsArrayRawPtr,intConst 8 0,callArgsArraySizeof,intConst 32 0,intConst 1 0]
         zipWithM_ storeCallArg [0..] callArgs
         call (routineRef moduleName maybeMod rout) [frame]
         return True
     codeGenStmt _ _ (Return lineNumber) = do
+        trace lineNumber "%d: RETURN\n"
         br exitLabel
         return False
     codeGenStmt doStack _ (DoLoop _ doIndex stmts lineNumber) = mdo
+        trace lineNumber "%d: DO\n"
         br loopLabel
 
         loopLabel <- block
@@ -227,6 +234,7 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         exitLoopLabel <- block
         return $ any (hasExit doIndex) stmts
     codeGenStmt doStack _ (DoEdges (var0,var1) doIndex doEdgesIndex stmts lineNumber) = mdo
+        trace lineNumber "%d: DO<\n"
         (var0Ptr,var1EdgesSize,edgesArray) <- setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel
 
         initLoopLabel <- block
@@ -259,11 +267,13 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         exitLoopLabel <- block
         return True
     codeGenStmt doStack _ (Exit _ doIndex lineNumber) = do
+        trace lineNumber "%d: EXIT\n"
         maybe (error "INTERNAL ERROR: INVALID EXIT DOINDEX") br $ lookup doIndex doStack
         return False
 
     codeGenIfBranch :: (MonadIRBuilder m, MonadFix m) => [(Integer,Name)] -> Name -> IfBranch -> m ()
     codeGenIfBranch doStack exitIfLabel (IfEq (var0,var1) stmts lineNumber) = mdo
+        trace lineNumber "%d: IF=\n"
         node0 <- getVar var0
         node1 <- getVar var1
         eqCheck <- icmp eq node0 node1
@@ -276,6 +286,7 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         nextBranchLabel <- block
         return ()
     codeGenIfBranch doStack exitIfLabel (IfEdge (var0,var1) stmts lineNumber) = mdo
+        trace lineNumber "%d: IF>\n"
         node0 <- getVar var0
         node1 <- getVar var1
         edgeCheck <- call hasEdge [node0,node1]
@@ -288,6 +299,7 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         nextBranchLabel <- block
         return ()
     codeGenIfBranch doStack exitIfLabel (IfElse stmts lineNumber) = mdo
+        trace lineNumber "%d: ELSE\n"
         fellThru <- foldM (codeGenStmt doStack) True stmts
         return ()
 

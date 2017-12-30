@@ -13,7 +13,7 @@ import LLVM.IRBuilder.Instruction(add,alloca,and,bitcast,br,condBr,gep,icmp,load
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),extern,function)
 import LLVM.IRBuilder.Monad(IRBuilderT,block)
 
-import CodeGen.Runtime(newNode,hasEdge,removeEdge,addEdge)
+import CodeGen.Runtime(newNode,hasEdge,removeEdge,addEdge,traceEnabled)
 import CodeGen.Types(pFrameType,pNodeType,ppNodeType,pppNodeType)
 import CodeGen.Util(
     intConst,nullConst,eq,uge,
@@ -363,7 +363,9 @@ printf :: Operand
 printf = varArgsFunctionRef printfName [ptr i8] void
 
 printfDecl :: ModuleBuilder ()
-printfDecl = varArgsExtern printfName [ptr i8] void
+printfDecl
+  | traceEnabled = return ()
+  | otherwise = varArgsExtern printfName [ptr i8] void
 
 callPrintf :: String -> [Operand] -> IRBuilderT ModuleBuilder ()
 callPrintf fmt args = do

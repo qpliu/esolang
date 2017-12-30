@@ -10,6 +10,9 @@ TODO List
 * ~~Rework parser to include source locations~~
 
 * Debug compiler output for BRAINFUCK.DGOL
+  - ~~Fix infinite loop in garbage collector~~
+  - Fix infinite loop due to EXIT LOOP at line 392 branching to %2004
+    instead of %2010
 
 * Add source code metadata
   - DIFile(filename)

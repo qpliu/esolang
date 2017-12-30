@@ -5,9 +5,13 @@ module CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
     memset,memcpy,malloc,free,
-    newNode,hasEdge,addEdge,removeEdge
+    newNode,hasEdge,addEdge,removeEdge,
+    trace,tracef,traceEnabled
 )
 where
+
+import Control.Monad.Fix(MonadFix)
+import Data.String(fromString)
 
 import LLVM.AST(Definition(GlobalDefinition))
 import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,memberValues,integerBits,integerValue,isPacked,structName,memberType)
@@ -18,7 +22,7 @@ import LLVM.AST.Type(Type(StructureType),void,i1,i8,i32,elementTypes,ptr)
 import qualified LLVM.AST.Type
 import LLVM.IRBuilder.Instruction(add,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function)
-import LLVM.IRBuilder.Monad(emitInstr,block)
+import LLVM.IRBuilder.Monad(MonadIRBuilder,emitInstr,block)
 
 import CodeGen.Types(
     nodeTypeName,nodeType,pNodeType,ppNodeType,nodeTypedef,
@@ -29,7 +33,8 @@ import CodeGen.Types(
 import CodeGen.Util(
     eq,uge,
     intConst,nullConst,
-    functionRef,globalRef,
+    functionRef,globalRef,varArgsFunctionRef,varArgsExtern,
+    GlobalStrzTable(GlobalStrzTable),globalStrzAsI8Ptr,globalStrzDefs,
     call)
 
 newNodeName :: Name
@@ -586,6 +591,7 @@ runtimeDefs = do
     hasEdgeImpl
     addEdgeImpl
     removeEdgeImpl
+    traceDefs
     return ()
 
 runtimeDecls :: ModuleBuilder ()
@@ -595,4 +601,44 @@ runtimeDecls = do
     hasEdgeDecl
     addEdgeDecl
     removeEdgeDecl
+    traceDefs
     return ()
+
+traceEnabled :: Bool
+traceEnabled = False
+
+traceFmtTable :: GlobalStrzTable
+traceFmtTable = GlobalStrzTable "traceFmt" [
+    "%d: LET=\n",
+    "%d: LET>\n",
+    "%d: LET<\n",
+    "%d: CALL\n",
+    "%d: RETURN\n",
+    "%d: DO\n",
+    "%d: DO<\n",
+    "%d: EXIT\n",
+    "%d: IF=\n",
+    "%d: IF>\n",
+    "%d: ELSE\n"
+    ]
+
+traceDefs :: ModuleBuilder ()
+traceDefs
+ | traceEnabled = do
+        globalStrzDefs traceFmtTable
+        varArgsExtern (fromString "printf") [ptr i8] void
+        extern (fromString "fflush") [ptr i8] void
+        return ()
+ | otherwise = return ()
+
+trace :: (MonadIRBuilder m, MonadFix m) => Integer -> String -> m ()
+trace lineNumber fmt = tracef fmt [intConst 32 lineNumber]
+
+tracef :: (MonadIRBuilder m, MonadFix m) => String -> [Operand] -> m ()
+tracef fmt args
+ | traceEnabled = do
+        fmt <- globalStrzAsI8Ptr traceFmtTable fmt
+        call (varArgsFunctionRef (fromString "printf") [ptr i8] void) (fmt:args)
+        call (functionRef (fromString "fflush") [ptr i8] void) [nullConst (ptr i8)]
+        return ()
+ | otherwise = return ()

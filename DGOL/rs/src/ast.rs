@@ -165,10 +165,9 @@ pub fn err<T>(src_location: Option<&(usize,usize)>, msg: &str) -> Result<T> {
     }
 }
 
-fn trace(&(filename_index,line_number): &(usize,usize), msg: &str) {
+fn trace(&(_filename_index,line_number): &(usize,usize), msg: &str) {
     if false {
-        use std::env::args;
-        println!("{}:{} {}", args().nth(filename_index+1).unwrap(), line_number, msg);
+        println!("{}: {}", line_number, msg);
     }
 }
 
