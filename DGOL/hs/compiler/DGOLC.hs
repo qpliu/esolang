@@ -24,7 +24,7 @@ newtype CompileException = CompileException String deriving Show
 instance Exception CompileException where
     displayException (CompileException msg) = msg
 
-dgolFileToModule :: [String] -> Context -> String -> (Module -> IO a) -> IO a
+dgolFileToModule :: [String] -> Context -> FilePath -> (Module -> IO a) -> IO a
 dgolFileToModule libs context file process = do
     src <- readFile file
     ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file src
@@ -32,29 +32,29 @@ dgolFileToModule libs context file process = do
     let mod = buildModule (fromString $ takeFileName file) mbuilder
     withModuleFromAST context mod { LLVM.AST.moduleSourceFileName = fromString file } process
 
-llFileToModule :: Context -> String -> (Module -> IO a) -> IO a
+llFileToModule :: Context -> FilePath -> (Module -> IO a) -> IO a
 llFileToModule context file process =
     withModuleFromLLVMAssembly context (File (fromString file)) process
 
-bcFileToModule :: Context -> String -> (Module -> IO a) -> IO a
+bcFileToModule :: Context -> FilePath -> (Module -> IO a) -> IO a
 bcFileToModule context file process =
     withModuleFromBitcode context (File (fromString file)) process
 
 
-moduleToLL :: String -> Module -> IO ()
+moduleToLL :: FilePath -> Module -> IO ()
 moduleToLL file m =
     writeLLVMAssemblyToFile (File file) m
 
-moduleToBC :: String -> Module -> IO ()
+moduleToBC :: FilePath -> Module -> IO ()
 moduleToBC file m =
     writeBitcodeToFile (File file) m
 
-moduleToAsm :: String -> Module -> IO ()
+moduleToAsm :: FilePath -> Module -> IO ()
 moduleToAsm file m = do
     withHostTargetMachine (\ targetMachine ->
         writeTargetAssemblyToFile targetMachine (File file) m)
 
-moduleToObj :: String -> Module -> IO ()
+moduleToObj :: FilePath -> Module -> IO ()
 moduleToObj file m = do
     withHostTargetMachine (\ targetMachine ->
         writeObjectToFile targetMachine (File file) m)
@@ -73,7 +73,7 @@ usage = do
 
 data OutputOption = BinFile String | ObjFile | AsmFile | LLFile | BCFile
 
-parseArgs :: IO (OutputOption,[String],[String])
+parseArgs :: IO (OutputOption,[String],[FilePath])
 parseArgs = do
     args <- getArgs
     maybe usage return $ p Nothing [] [] args
@@ -95,7 +95,7 @@ parseArgs = do
     p (Just out) libs files (arg:args) = p (Just out) libs (files ++ [arg]) args
     p (Just out) libs files [] = Just (out,libs,files)
 
-processFiles :: OutputOption -> [String] -> [String] -> IO ()
+processFiles :: OutputOption -> [String] -> [FilePath] -> IO ()
 processFiles (BinFile f) libs files = do
     pid <- getProcessID
     tmpDir <- getTemporaryDirectory
@@ -106,7 +106,7 @@ processFiles (BinFile f) libs files = do
 processFiles outputOption libs files = do
     mapM_ (withContext . processFile outputOption libs) files
 
-processFile :: OutputOption -> [String] -> String -> Context -> IO ()
+processFile :: OutputOption -> [String] -> FilePath -> Context -> IO ()
 processFile ObjFile libs file context
   | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToObj (replaceExtension file ".o")
   | takeExtension file == ".ll" = llFileToModule context file $ moduleToObj (replaceExtension file ".o")
@@ -124,7 +124,7 @@ processFile LLFile libs file context
   | takeExtension file == ".DGOL" = dgolFileToModule libs context file $ moduleToLL (replaceExtension file ".ll")
   | otherwise = return ()
 
-makeTmpObjFiles :: String -> [String] -> ([String],[String],Int) -> String -> IO ([String],[String],Int)
+makeTmpObjFiles :: FilePath -> [String] -> ([FilePath],[FilePath],Int) -> FilePath -> IO ([FilePath],[FilePath],Int)
 makeTmpObjFiles tmpFileBase libs (tmpObjFiles,objFiles,index) file =
     withContext mkTmpObj
   where
@@ -156,9 +156,14 @@ main = do
     (outputOption,libs,files) <- parseArgs
     catch (processFiles outputOption libs files) compileError
 
-ll :: [String] -> String -> IO ()
+ll :: [String] -> FilePath -> IO ()
 ll libs file = do
     withContext (\ context -> do
         dgolFileToModule libs context file (\ m -> do
             llcode <- moduleLLVMAssembly m
             Data.ByteString.putStr llcode))
+
+p :: FilePath -> IO ()
+p file = do
+    src <- readFile file
+    print $ parse file src

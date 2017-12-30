@@ -1,11 +1,12 @@
 module CodeGen.Util(
     intConst,nullConst,eq,uge,
     functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
-    globalStrzType,globalStrz,globalStrzDef,
-    call
+    GlobalStrzTable(GlobalStrzTable),globalStrz,globalStrzAsI8Ptr,globalStrzDefs,
+    call,
 )
 where
 
+import Control.Monad(zipWithM_)
 import Data.Char(ord)
 import Data.String(fromString)
 import Data.Word(Word32)
@@ -61,25 +62,38 @@ varArgsExtern externName argTypes resType = do
 globalRef :: Name -> Type -> Operand
 globalRef name typ = ConstantOperand (GlobalReference (ptr typ) name)
 
+data GlobalStrzTable = GlobalStrzTable String [String]
+
+globalStrzDefs :: MonadModuleBuilder m => GlobalStrzTable -> m ()
+globalStrzDefs (GlobalStrzTable globalName strs) = zipWithM_ strzDef strs [1..]
+  where
+    strzDef str index =
+        emitDefn $ GlobalDefinition globalVariableDefaults {
+            name = fromString $ globalName ++ show index,
+            type' = globalStrzType str,
+            initializer = Just $ Array {
+                memberType = i8,
+                memberValues = map (Int 8 . fromIntegral . ord) str ++ [Int 8 0]
+                }
+            }
+
+globalStrz :: GlobalStrzTable -> String -> Operand
+globalStrz (GlobalStrzTable globalName strs) str =
+    case lookup str (zip strs [1..]) of
+      Just index ->
+        ConstantOperand (GlobalReference (ptr $ globalStrzType str) (fromString $ globalName ++ show index))
+      Nothing ->
+        error $ "No " ++ show str ++ " in GlobalStrzTable " ++ globalName
+
+globalStrzAsI8Ptr :: MonadIRBuilder m => GlobalStrzTable -> String -> m Operand
+globalStrzAsI8Ptr table str =
+    LLVM.IRBuilder.Instruction.gep (globalStrz table str) [intConst 32 0,intConst 32 0]
+
 globalStrzType :: String -> Type
 globalStrzType str = ArrayType {
     nArrayElements = fromIntegral $ 1 + length str,
     elementType = i8
     }
-
-globalStrz :: Name -> String -> Operand
-globalStrz name str = ConstantOperand (GlobalReference (ptr $ globalStrzType str) name)
-
-globalStrzDef :: MonadModuleBuilder m => Name -> String -> m ()
-globalStrzDef strzName str = do
-    emitDefn $ GlobalDefinition globalVariableDefaults {
-        name = strzName,
-        type' = globalStrzType str,
-        initializer = Just $ Array {
-            memberType = i8,
-            memberValues = map (Int 8 . fromIntegral . ord) str ++ [Int 8 0]
-            }
-        }
 
 call :: MonadIRBuilder m => Operand -> [Operand] -> m Operand
 call f args = LLVM.IRBuilder.Instruction.call f (map (flip (,) []) args)

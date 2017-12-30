@@ -18,7 +18,7 @@ import CodeGen.Types(pFrameType,pNodeType,ppNodeType,pppNodeType)
 import CodeGen.Util(
     intConst,nullConst,eq,uge,
     functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
-    globalStrzType,globalStrz,globalStrzDef,
+    GlobalStrzTable(GlobalStrzTable),globalStrzDefs,globalStrzAsI8Ptr,
     call)
 
 dgolLibDefs :: String -> Maybe (ModuleBuilder ())
@@ -350,16 +350,9 @@ setReadbyteResult frame argCount argArray result index label = mdo
 debugTraceLibDefs :: ModuleBuilder ()
 debugTraceLibDefs = do
     printfDecl
-    debugTraceLibPtrFmtDef
-    debugTraceLibNewlineFmtDef
-    debugTraceLibLabelFmtDef
+    globalStrzDefs debugTraceLibStrzTable
     debugTraceLibLabelImpl
-    debugTraceLibNodeNullNodeFmtDef
-    debugTraceLibNodeNodeFmtDef
     debugTraceLibNodeImpl
-    debugTraceLibFrameFrameFmtDef
-    debugTraceLibFrameIteratorsFmtDef
-    debugTraceLibFrameIterFmtDef
     debugTraceLibFrameImpl
     return ()
 
@@ -372,47 +365,23 @@ printf = varArgsFunctionRef printfName [ptr i8] void
 printfDecl :: ModuleBuilder ()
 printfDecl = varArgsExtern printfName [ptr i8] void
 
-callPrintf :: Operand -> [Operand] -> IRBuilderT ModuleBuilder ()
+callPrintf :: String -> [Operand] -> IRBuilderT ModuleBuilder ()
 callPrintf fmt args = do
-    fmt <- gep fmt [intConst 32 0,intConst 32 0]
+    fmt <- globalStrzAsI8Ptr debugTraceLibStrzTable fmt
     call printf (fmt:args)
     return ()
 
-debugTraceLibPtrFmtName :: Name
-debugTraceLibPtrFmtName = "debugTraceLibPtrFmt"
-
-debugTraceLibPtrFmtString :: String
-debugTraceLibPtrFmtString = " %p"
-
-debugTraceLibPtrFmt :: Operand
-debugTraceLibPtrFmt = globalStrz debugTraceLibPtrFmtName debugTraceLibPtrFmtString
-
-debugTraceLibPtrFmtDef :: ModuleBuilder ()
-debugTraceLibPtrFmtDef = globalStrzDef debugTraceLibPtrFmtName debugTraceLibPtrFmtString
-
-debugTraceLibNewlineFmtName :: Name
-debugTraceLibNewlineFmtName = "debugTraceLibNewlineFmt"
-
-debugTraceLibNewlineFmtString :: String
-debugTraceLibNewlineFmtString = "\n"
-
-debugTraceLibNewlineFmt :: Operand
-debugTraceLibNewlineFmt = globalStrz debugTraceLibNewlineFmtName debugTraceLibNewlineFmtString
-
-debugTraceLibNewlineFmtDef :: ModuleBuilder ()
-debugTraceLibNewlineFmtDef = globalStrzDef debugTraceLibNewlineFmtName debugTraceLibNewlineFmtString
-
-debugTraceLibLabelFmtName :: Name
-debugTraceLibLabelFmtName = "debugTraceLibLabelFmt"
-
-debugTraceLibLabelFmtString :: String
-debugTraceLibLabelFmtString = "LABEL %d\n"
-
-debugTraceLibLabelFmt :: Operand
-debugTraceLibLabelFmt = globalStrz debugTraceLibLabelFmtName debugTraceLibLabelFmtString
-
-debugTraceLibLabelFmtDef :: ModuleBuilder ()
-debugTraceLibLabelFmtDef = globalStrzDef debugTraceLibLabelFmtName debugTraceLibLabelFmtString
+debugTraceLibStrzTable :: GlobalStrzTable
+debugTraceLibStrzTable = GlobalStrzTable "debugTraceLibStr" [
+    " %p",
+    "\n",
+    "LABEL %d\n",
+    "NODE NULL\n",
+    "NODE %p EDGES[%d]",
+    "FRAME %p\n CALLER FRAME %p\n LOCAL VARS[%d]",
+    "\n ITERATORS[%d]",
+    "\n  ITERATOR[%d]"
+    ]
 
 debugTraceLibLabelImpl :: ModuleBuilder Operand
 debugTraceLibLabelImpl = function "DEBUGTRACE.LABEL" [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
@@ -443,33 +412,8 @@ debugTraceLibLabelImpl = function "DEBUGTRACE.LABEL" [(pFrameType,NoParameterNam
     br loop
 
     done <- block
-    callPrintf debugTraceLibLabelFmt [label]
+    callPrintf "LABEL %d\n" [label]
     retVoid
-
-
-debugTraceLibNodeNullNodeFmtName :: Name
-debugTraceLibNodeNullNodeFmtName = "debugTraceLibNodeNullNodeFmt"
-
-debugTraceLibNodeNullNodeFmtString :: String
-debugTraceLibNodeNullNodeFmtString = "NODE NULL\n"
-
-debugTraceLibNodeNullNodeFmt :: Operand
-debugTraceLibNodeNullNodeFmt = globalStrz debugTraceLibNodeNullNodeFmtName debugTraceLibNodeNullNodeFmtString
-
-debugTraceLibNodeNullNodeFmtDef :: ModuleBuilder ()
-debugTraceLibNodeNullNodeFmtDef = globalStrzDef debugTraceLibNodeNullNodeFmtName debugTraceLibNodeNullNodeFmtString
-
-debugTraceLibNodeNodeFmtName :: Name
-debugTraceLibNodeNodeFmtName = "debugTraceLibNodeNodeFmt"
-
-debugTraceLibNodeNodeFmtString :: String
-debugTraceLibNodeNodeFmtString = "NODE %p EDGES[%d]"
-
-debugTraceLibNodeNodeFmt :: Operand
-debugTraceLibNodeNodeFmt = globalStrz debugTraceLibNodeNodeFmtName debugTraceLibNodeNodeFmtString
-
-debugTraceLibNodeNodeFmtDef :: ModuleBuilder ()
-debugTraceLibNodeNodeFmtDef = globalStrzDef debugTraceLibNodeNodeFmtName debugTraceLibNodeNodeFmtString
 
 debugTraceLibNodeImpl :: ModuleBuilder Operand
 debugTraceLibNodeImpl = function "DEBUGTRACE.NODE" [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
@@ -479,7 +423,7 @@ debugTraceLibNodeImpl = function "DEBUGTRACE.NODE" [(pFrameType,NoParameterName)
     condBr argCountCheck argCountPassLabel printNullLabel
 
     printNullLabel <- block
-    callPrintf debugTraceLibNodeNullNodeFmt []
+    callPrintf "NODE NULL\n" []
     retVoid
 
     argCountPassLabel <- block
@@ -500,7 +444,7 @@ debugTraceLibNodeImpl = function "DEBUGTRACE.NODE" [(pFrameType,NoParameterName)
     edgeArraySize <- load edgeArraySizePtr 0
     edgeArrayPtr <- gep node [intConst 32 0,intConst 32 3]
     edgeArray <- load edgeArrayPtr 0
-    callPrintf debugTraceLibNodeNodeFmt [node,edgeArraySize]
+    callPrintf "NODE %p EDGES[%d]" [node,edgeArraySize]
     br loop
 
     loop <- block
@@ -511,50 +455,13 @@ debugTraceLibNodeImpl = function "DEBUGTRACE.NODE" [(pFrameType,NoParameterName)
     loopBody <- block
     edgePtr <- gep edgeArray [index]
     edge <- load edgePtr 0
-    callPrintf debugTraceLibPtrFmt [edge]
+    callPrintf " %p" [edge]
     nextIndex <- add index (intConst 32 1)
     br loop
 
     loopDone <- block
-    callPrintf debugTraceLibNewlineFmt []
+    callPrintf "\n" []
     retVoid
-
-
-debugTraceLibFrameFrameFmtName :: Name
-debugTraceLibFrameFrameFmtName = "debugTraceLibFrameFrameFmt"
-
-debugTraceLibFrameFrameFmtString :: String
-debugTraceLibFrameFrameFmtString = "FRAME %p\n CALLER FRAME %p\n LOCAL VARS[%d]"
-
-debugTraceLibFrameFrameFmt :: Operand
-debugTraceLibFrameFrameFmt = globalStrz debugTraceLibFrameFrameFmtName debugTraceLibFrameFrameFmtString
-
-debugTraceLibFrameFrameFmtDef :: ModuleBuilder ()
-debugTraceLibFrameFrameFmtDef = globalStrzDef debugTraceLibFrameFrameFmtName debugTraceLibFrameFrameFmtString
-
-debugTraceLibFrameIteratorsFmtName :: Name
-debugTraceLibFrameIteratorsFmtName = "debugTraceLibFrameIteratorsFmt"
-
-debugTraceLibFrameIteratorsFmtString :: String
-debugTraceLibFrameIteratorsFmtString = "\n ITERATORS[%d]"
-
-debugTraceLibFrameIteratorsFmt :: Operand
-debugTraceLibFrameIteratorsFmt = globalStrz debugTraceLibFrameIteratorsFmtName debugTraceLibFrameIteratorsFmtString
-
-debugTraceLibFrameIteratorsFmtDef :: ModuleBuilder ()
-debugTraceLibFrameIteratorsFmtDef = globalStrzDef debugTraceLibFrameIteratorsFmtName debugTraceLibFrameIteratorsFmtString
-
-debugTraceLibFrameIterFmtName :: Name
-debugTraceLibFrameIterFmtName = "debugTraceLibFrameIterFmt"
-
-debugTraceLibFrameIterFmtString :: String
-debugTraceLibFrameIterFmtString = "\n   ITERATOR[%d]"
-
-debugTraceLibFrameIterFmt :: Operand
-debugTraceLibFrameIterFmt = globalStrz debugTraceLibFrameIterFmtName debugTraceLibFrameIterFmtString
-
-debugTraceLibFrameIterFmtDef :: ModuleBuilder ()
-debugTraceLibFrameIterFmtDef = globalStrzDef debugTraceLibFrameIterFmtName debugTraceLibFrameIterFmtString
 
 debugTraceLibFrameImpl :: ModuleBuilder Operand
 debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
@@ -563,7 +470,7 @@ debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterNam
     callerFrame <- load callerFramePtr 0
     localVarCountPtr <- gep frame [intConst 32 0,intConst 32 1]
     localVarCount <- load localVarCountPtr 0
-    callPrintf debugTraceLibFrameFrameFmt [frame,callerFrame,localVarCount]
+    callPrintf "FRAME %p\n CALLER FRAME %p\n LOCAL VARS[%d]" [frame,callerFrame,localVarCount]
     localVarArrayPtr <- gep frame [intConst 32 0,intConst 32 2]
     localVarArray <- load localVarArrayPtr 0
     br localVarLoopLabel
@@ -576,14 +483,14 @@ debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterNam
     localVarLoopBodyLabel <- block
     localVarNodePtr <- gep localVarArray [localVarIndex]
     localVarNode <- load localVarNodePtr 0
-    callPrintf debugTraceLibPtrFmt [localVarNode]
+    callPrintf " %p" [localVarNode]
     nextLocalVarIndex <- add localVarIndex (intConst 32 1)
     br localVarLoopLabel
 
     localVarLoopDoneLabel <- block
     iteratorsCountPtr <- gep frame [intConst 32 0,intConst 32 3]
     iteratorsCount <- load iteratorsCountPtr 0
-    callPrintf debugTraceLibFrameIteratorsFmt [iteratorsCount]
+    callPrintf "\n ITERATORS[%d]" [iteratorsCount]
     iteratorsArrayPtr <- gep frame [intConst 32 0,intConst 32 4]
     iteratorsArray <- load iteratorsArrayPtr 0
     br iteratorsArrayLoopLabel
@@ -597,7 +504,7 @@ debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterNam
     nextIteratorsArrayIndex <- add iteratorsArrayIndex (intConst 32 1)
     edgeCountPtr <- gep iteratorsArray [iteratorsArrayIndex,intConst 32 0]
     edgeCount <- load edgeCountPtr 0
-    callPrintf debugTraceLibFrameIterFmt [edgeCount]
+    callPrintf "\n  ITERATOR[%d]" [edgeCount]
     edgeArrayPtr <- gep iteratorsArray [iteratorsArrayIndex,intConst 32 1]
     edgeArray <- load edgeArrayPtr 0
     br edgeLoopLabel
@@ -610,10 +517,10 @@ debugTraceLibFrameImpl = function "DEBUGTRACE.FRAME" [(pFrameType,NoParameterNam
     edgeLoopBodyLabel <- block
     edgePtr <- gep edgeArray [edgeIndex]
     edge <- load edgePtr 0
-    callPrintf debugTraceLibPtrFmt [edge]
+    callPrintf " %p" [edge]
     nextEdgeIndex <- add edgeIndex (intConst 32 1)
     br edgeLoopLabel
 
     iteratorsArrayLoopDoneLabel <- block
-    callPrintf debugTraceLibNewlineFmt []
+    callPrintf "\n" []
     retVoid
