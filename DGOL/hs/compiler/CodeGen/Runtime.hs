@@ -6,7 +6,7 @@ module CodeGen.Runtime(
     runtimeDefs,
     memset,memcpy,malloc,free,
     newNode,hasEdge,addEdge,removeEdge,
-    trace,tracef,traceEnabled
+    trace,traceLabel,tracef,traceEnabled
 )
 where
 
@@ -16,7 +16,7 @@ import Data.String(fromString)
 import LLVM.AST(Definition(GlobalDefinition))
 import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,memberValues,integerBits,integerValue,isPacked,structName,memberType)
 import LLVM.AST.Global(initializer,name,type',globalVariableDefaults)
-import LLVM.AST.Name(Name)
+import LLVM.AST.Name(Name(UnName))
 import LLVM.AST.Operand(Operand)
 import LLVM.AST.Type(Type(StructureType),void,i1,i8,i32,elementTypes,ptr)
 import qualified LLVM.AST.Type
@@ -619,7 +619,8 @@ traceFmtTable = GlobalStrzTable "traceFmt" [
     "%d: EXIT\n",
     "%d: IF=\n",
     "%d: IF>\n",
-    "%d: ELSE\n"
+    "%d: ELSE\n",
+    "%d: LABEL %d\n"
     ]
 
 traceDefs :: ModuleBuilder ()
@@ -633,6 +634,10 @@ traceDefs
 
 trace :: (MonadIRBuilder m, MonadFix m) => Integer -> String -> m ()
 trace lineNumber fmt = tracef fmt [intConst 32 lineNumber]
+
+traceLabel :: (MonadIRBuilder m, MonadFix m) => Integer -> Name -> String -> m ()
+traceLabel lineNumber (UnName n) fmt = tracef fmt [intConst 32 lineNumber,intConst 32 $ fromIntegral n]
+traceLabel lineNumber _ fmt = return ()
 
 tracef :: (MonadIRBuilder m, MonadFix m) => String -> [Operand] -> m ()
 tracef fmt args

@@ -30,7 +30,7 @@ import CodeGen.Runtime(
     runtimeDefs,
     memset,memcpy,malloc,free,
     newNode,hasEdge,addEdge,removeEdge,
-    trace)
+    trace,traceLabel)
 import CodeGen.Types(
     pNodeType,ppNodeType,pppNodeType,
     frameType,pFrameType,
@@ -222,6 +222,9 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
     codeGenStmt _ _ (Return lineNumber) = do
         trace lineNumber "%d: RETURN\n"
         br exitLabel
+        -- workaround for br exitLabel not getting emitted for some reason
+        bogusLabel <- block
+        retVoid
         return False
     codeGenStmt doStack _ (DoLoop _ doIndex stmts lineNumber) = mdo
         trace lineNumber "%d: DO\n"
@@ -268,7 +271,11 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         return True
     codeGenStmt doStack _ (Exit _ doIndex lineNumber) = do
         trace lineNumber "%d: EXIT\n"
-        maybe (error "INTERNAL ERROR: INVALID EXIT DOINDEX") br $ lookup doIndex doStack
+        let exitDoLabel = maybe (error "INTERNAL ERROR: INVALID EXIT DOINDEX") id $ lookup doIndex doStack
+        br exitDoLabel
+        -- workaround for br exitDoLabel not getting emitted for some reason
+        bogusLabel <- block
+        retVoid
         return False
 
     codeGenIfBranch :: (MonadIRBuilder m, MonadFix m) => [(Integer,Name)] -> Name -> IfBranch -> m ()
