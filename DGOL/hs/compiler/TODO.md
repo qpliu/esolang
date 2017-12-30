@@ -7,7 +7,7 @@ TODO List
 
 * ~~Debug compiler output for DO EDGES~~
 
-* Rework parser to include source locations
+* ~~Rework parser to include source locations~~
 
 * Debug compiler output for BRAINFUCK.DGOL
 

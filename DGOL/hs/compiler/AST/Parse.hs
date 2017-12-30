@@ -3,6 +3,7 @@ module AST.Parse(
 )
 where
 
+import Control.Monad(foldM,foldM_)
 import Control.Monad.ST(ST,runST)
 import Data.Char(isAlphaNum,isSpace)
 import Data.List(groupBy)
@@ -17,404 +18,344 @@ import AST.AST(
     Val(Val,NewVal),
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
     IfBranch(IfEq,IfEdge,IfElse),
-    moduleName,moduleSubroutines,moduleProgram,moduleExterns,
-    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,
+    moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,
+    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,
+    varName,varIsCallArg,
     ifBranchStmts)
 
-parse :: String -> Either String Module
-parse src = (parseModule . filter (/= "") . map stripSpaces . lines) src
-  where stripSpaces line = filter (not . isSpace) $ takeWhile (/= '*') line
+parse :: FilePath -> String -> Either String Module
+parse filename src = parseModule filename $ filter (not . null . snd) $ map (fmap (tokenize . stripSpaces)) $ zip [1..] $ lines src
+  where
+    stripSpaces line = filter (not . isSpace) $ takeWhile (/= '*') line
+    tokenize str = groupBy areAlphaNum str
+    areAlphaNum c1 c2 = isAlphaNum c1 && isAlphaNum c2
 
-parseModule :: [String] -> Either String Module
-parseModule lines = do
+type Lines = [(Integer,[String])]
+
+parseModule :: FilePath -> Lines -> Either String Module
+parseModule filename lines = do
     (uses,lines) <- parseUses lines
     (subroutines,externs,lines) <- parseSubroutines lines
     (maybeExports,lines) <- parseLibrary lines
-    maybe (parseProgram lines uses subroutines externs)
-          (makeLibrary lines uses subroutines externs) maybeExports
+    maybe (parseProgram filename lines uses subroutines externs)
+          (makeLibrary filename lines uses subroutines externs) maybeExports
 
-makeLibrary :: [String] -> Set.Set String -> Map.Map String Routine -> Set.Set (String,String) -> (String,Set.Set String) -> Either String Module
-makeLibrary lines uses subroutines externs (name,exports)
-  | (not . null) lines =
-        Left "TRAILING JUNK"
-  | (not . all validExport . Set.toList) exports =
-        Left "UNDEFINED LIBRARY SUBROUTINE"
-  | unusedExtern uses externs =
-        Left "CALL INTO UNUSED MODULE"
-  | otherwise =
-        return Library {
-            moduleName = name,
-            moduleSubroutines = (map markExport . Map.elems) subroutines,
-            moduleExterns = Set.toList externs
-            }
+type Externs = [(Integer,(String,String))]
+
+makeLibrary :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> (String,Map.Map String Integer) -> Either String Module
+makeLibrary filename ((lineNumber,_):_) uses subroutines externs (name,exports) = do
+    parseError lineNumber "TRAILING JUNK"
+makeLibrary filename [] uses subroutines externs (name,exports) = do
+    mapM_ checkExport $ Map.toList exports
+    externs <- foldM checkExtern Set.empty externs
+    return Library {
+        moduleName = name,
+        moduleSubroutines = (map markExport . Map.elems) subroutines,
+        moduleExterns = Set.toList externs,
+        moduleSourceFileName = filename
+        }
   where
-    validExport export = Map.member export subroutines
+    checkExport (export,lineNumber)
+      | Map.member export subroutines = return ()
+      | otherwise = parseError lineNumber ("UNDEFINED SUBROUTINE: " ++ export)
+    checkExtern externs (lineNumber,extern@(externMod,_))
+      | Set.member externMod uses = return $ Set.insert extern externs
+      | otherwise = parseError lineNumber ("LIBRARY NOT DECLARED USED: " ++ externMod)
     markExport routine =
-        routine { routineExported = Set.member (routineName routine) exports }
+        routine { routineExported = Map.member (routineName routine) exports }
 
-makeProgram :: [String] -> Set.Set String -> Map.Map String Routine -> Routine -> Set.Set (String,String) -> Either String Module
-makeProgram lines uses subroutines program externs
-  | (not . null) lines =
-        Left "TRAILING JUNK"
-  | unusedExtern uses externs =
-        Left "CALL INTO UNUSED MODULE"
-  | hasReturn program =
-        Left "INVALID RETURN"
-  | otherwise =
-        return Program {
-            moduleName = routineName program,
-            moduleSubroutines = Map.elems subroutines,
-            moduleProgram = program,
-            moduleExterns = Set.toList externs
-            }
-
-parseUses :: [String] -> Either String (Set.Set String,[String])
-parseUses lines = parseUse Set.empty lines
+makeProgram :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Routine -> Externs -> Either String Module
+makeProgram filename ((lineNumber,_):_) uses subroutines program externs = do
+    parseError lineNumber "TRAILING JUNK"
+makeProgram filename [] uses subroutines program externs = do
+    externs <- foldM checkExtern Set.empty externs
+    mapM_ checkReturn $ routineStmts program
+    return Program {
+        moduleName = routineName program,
+        moduleSubroutines = Map.elems subroutines,
+        moduleProgram = program,
+        moduleExterns = Set.toList externs,
+        moduleSourceFileName = filename
+        }
   where
-    parseUse uses lines
-      | null lines =
-            Left "UNEXPECTED EOF"
-      | take 3 (head lines) /= "USE" =
-            return (uses,lines)
-      | Set.member use uses =
-            Left ("DUPLICATE USE " ++ use)
-      | otherwise = do
-            isIdent use
-            parseUse (Set.insert use uses) (tail lines)
-      where
-        use = (drop 3 . head) lines
+    checkExtern externs (lineNumber,extern@(externMod,_))
+      | Set.member externMod uses = return $ Set.insert extern externs
+      | otherwise = parseError lineNumber ("LIBRARY NOT DECLARED USED: " ++ externMod)
+    checkReturn (If ifBranches _) = mapM_ checkReturn $ concatMap ifBranchStmts ifBranches
+    checkReturn (Return lineNumber) = parseError lineNumber "INVALID RETURN"
+    checkReturn (DoLoop _ _ stmts _) = mapM_ checkReturn stmts
+    checkReturn (DoEdges _ _ _ stmts _) = mapM_ checkReturn stmts
+    checkReturn _ = return ()
 
-parseLibrary :: [String] -> Either String (Maybe (String,Set.Set String),[String])
-parseLibrary lines
-  | null lines =
-        Left "UNEXPECTED EOF"
-  | take 7 (head lines) /= "LIBRARY" =
-        return (Nothing,lines)
-  | otherwise = do
-        isIdent library
-        parseLibraryExports Set.empty (tail lines)
+parseUses :: Lines -> Either String (Set.Set String,Lines)
+parseUses lines = parseUse lines Set.empty
   where
-    library = (drop 7 . head) lines
-    parseLibraryExports exports lines
-      | null lines =
-            Left "UNEXPECTED EOF"
-      | "END" ++ library == head lines =
-            return (Just (library,exports),tail lines)
-      | take 10 (head lines) /= "SUBROUTINE" =
-            Left "SYNTAX ERROR"
-      | Set.member export exports =
-            Left ("DUPLICATE SUBROUTINE " ++ export)
-      | otherwise = do
-            isIdent export
-            parseLibraryExports (Set.insert export exports) (tail lines)
-      where
-        export = (drop 10 . head) lines
+    parseUse [] _ = eofError
+    parseUse ((lineNumber,['U':'S':'E':use]):lines) uses = do
+        isIdent lineNumber use
+        parseUse lines (Set.insert use uses)
+    parseUse lines uses = return (uses,lines)
+
+parseLibrary :: Lines -> Either String (Maybe (String,Map.Map String Integer),Lines)
+parseLibrary [] = eofError
+parseLibrary ((lineNumber,['L':'I':'B':'R':'A':'R':'Y':library]):lines) = do
+    isIdent lineNumber library
+    exports <- parseLibraryExports lines Map.empty
+    lines <- nextLineIs lines $ "END" ++ library
+    return (Just (library,exports),lines)
+  where
+    parseLibraryExports [] _ = eofError
+    parseLibraryExports ((lineNumber,['S':'U':'B':'R':'O':'U':'T':'I':'N':'E':export]):lines) exports
+      | Map.member export exports = parseError lineNumber $ "DUPLICATE SUBROUTINE: " ++ export
+      | otherwise = do        
+        isIdent lineNumber export
+        parseLibraryExports lines (Map.insert export lineNumber exports)
+    parseLibraryExports lines exports = return exports
+parseLibrary lines = return (Nothing,lines)
     
-parseProgram :: [String] -> Set.Set String -> Map.Map String Routine -> Set.Set (String,String) -> Either String Module
-parseProgram lines uses subroutines externs
-  | null lines =
-        Left "UNEXPECTED EOF"
-  | take 7 (head lines) /= "PROGRAM" =
-        Left "SYNTAX ERROR"
-  | otherwise = do
-        isIdent programName
-        (program,newExterns,lines) <- parseRoutineBody (tail lines) programName []
-        makeProgram lines uses subroutines program (Set.union newExterns externs)
-  where
-    programName = (drop 7 . head) lines
+parseProgram :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> Either String Module
+parseProgram filename [] uses subroutines externs = eofError
+parseProgram filename ((lineNumber,['P':'R':'O':'G':'R':'A':'M':name]):lines) uses subroutines externs = do
+    isIdent lineNumber name
+    (program,newExterns,lines) <- parseRoutineBody lines name [] lineNumber
+    makeProgram filename lines uses subroutines program (externs ++ newExterns)
+parseProgram filename ((lineNumber,line):_) uses subroutines externs = syntaxError lineNumber
 
-parseSubroutines :: [String] -> Either String (Map.Map String Routine,Set.Set (String,String),[String])
-parseSubroutines lines = parseSubs Map.empty Set.empty lines
+parseSubroutines :: Lines -> Either String (Map.Map String Routine,Externs,Lines)
+parseSubroutines lines = parseSubs lines Map.empty []
   where
-    parseSubs subs externs lines
-      | null lines =
-            Left "UNEXPECTED EOF"
-      | take 10 (head lines) /= "SUBROUTINE" =
-            return (subs,externs,lines)
+    parseSubs :: Lines -> Map.Map String Routine -> Externs -> Either String (Map.Map String Routine,Externs,Lines)
+    parseSubs [] _ _ = eofError
+    parseSubs ((lineNumber,('S':'U':'B':'R':'O':'U':'T':'I':'N':'E':name):"(":args):lines) subs externs
+      | Map.member name subs =
+            parseError lineNumber $ "DUPLCATE SUBROUTINE: " ++ name
       | otherwise = do
-            let tokens = (tokenize . drop 10 . head) lines
-            args <- parseCallArgs (drop 1 tokens)
-            let name = head tokens
-            isIdent name
-            if Map.member name subs
-              then Left ("DUPLICATE SUBROUTINE NAME " ++ name)
-              else return ()
-            (routine,newExterns,lines) <- parseRoutineBody (tail lines) name args
-            parseSubs (Map.insert name routine subs) (Set.union externs newExterns) lines
+            isIdent lineNumber name
+            args <- parseCallArgs lineNumber args
+            foldM_ checkArg Set.empty args
+            (routine,newExterns,lines) <- parseRoutineBody lines name args lineNumber
+            parseSubs lines (Map.insert name routine subs) (newExterns ++ externs)
+      where
+        checkArg args arg
+          | Set.member arg args = parseError lineNumber $ "DUPLICATE PARAMETER: " ++ arg
+          | otherwise = do
+                isIdent lineNumber arg
+                return $ Set.insert arg args
+    parseSubs lines subs externs = return (subs,externs,lines)
 
-parseRoutineBody :: [String] -> String -> [String] -> Either String (Routine,Set.Set (String,String),[String])
-parseRoutineBody lines name args = runST $ do
+parseRoutineBody :: Lines -> String -> [String] -> Integer -> Either String (Routine,Externs,Lines)
+parseRoutineBody lines name args lineNumber = runST $ do
     varMapRef <- newSTRef Map.empty
     doIndicesRef <- newSTRef 0
     doEdgesIndicesRef <- newSTRef 0
     doStackRef <- newSTRef []
     callArgsMaxCountRef <- newSTRef 0
-    externsRef <- newSTRef Set.empty
-    addedArgs <- mapM (addArg varMapRef) args
-    stmtsLines <- parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef
+    externsRef <- newSTRef []
+    argsStmtsLines <- parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef args
     finalVarMap <- readSTRef varMapRef
     finalDoEdgesCount <- readSTRef doEdgesIndicesRef
     finalCallArgsMaxCount <- readSTRef callArgsMaxCountRef
     finalExterns <- readSTRef externsRef
     return $ do
-        argVars <- sequence addedArgs
-        (stmts,lines) <- stmtsLines
+        (args,(stmts,lines)) <- argsStmtsLines
         lines <- nextLineIs lines ("END" ++ name)
         return (Routine {
             routineName = name,
-            routineArgs = argVars,
+            routineArgs = map (\ arg -> arg { varIsCallArg = True }) args,
             routineStmts = stmts,
             routineExported = False,
             routineVarCount = (fromIntegral . Map.size) finalVarMap,
             routineDoEdgesCount = finalDoEdgesCount,
-            routineCallArgsMaxCount = finalCallArgsMaxCount
+            routineCallArgsMaxCount = finalCallArgsMaxCount,
+            routineSourceLineNumber = lineNumber
             },finalExterns,lines)
   where
-    addArg :: STRef a (Map.Map String Var) -> String -> ST a (Either String Var)
-    addArg varMapRef arg = do
-        varMap <- readSTRef varMapRef
-        if Map.member arg varMap
-          then return (Left ("DUPLICATE ARGUMENT " ++ arg))
-          else do
-            let var = Var arg (fromIntegral $ Map.size varMap) True
-            writeSTRef varMapRef (Map.insert arg var varMap)
-            return $ do
-                isIdent arg
-                return var
-    parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef = 
-        parseStmts lines
+    parseRoutineStmts :: Lines -> STRef a (Map.Map String Var) -> STRef a Integer -> STRef a Integer -> STRef a [(String,Integer)] -> STRef a Integer -> STRef a Externs -> [String] -> ST a (Either String ([Var],([Statement],Lines)))
+    parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef args = do
+        args <- mapM (getVar lineNumber) args
+        stmts <- parseStmts lines
+        return $ do
+            args <- sequence args
+            stmts <- stmts
+            return (args,stmts)
       where
-        getVar varName = do
+        -- getVar :: Integer -> String -> ST a (Either String Var)
+        getVar lineNumber name = do
             varMap <- readSTRef varMapRef
-            case Map.lookup varName varMap of
+            case Map.lookup name varMap of
                 Just var -> return $ return var
                 Nothing -> do
-                    let var = Var varName (fromIntegral $ Map.size varMap) False
-                    writeSTRef varMapRef (Map.insert varName var varMap)
+                    let var = Var name (fromIntegral $ Map.size varMap) False
+                    writeSTRef varMapRef (Map.insert name var varMap)
                     return $ do
-                        isIdent varName
+                        isIdent lineNumber name
                         return var
 
-        getVal valName
-          | valName == "0" =
-                return $ return NewVal
-          | otherwise = do
-                var <- getVar valName
-                return (fmap Val var)
+        -- getVal :: Integer -> String -> ST a (Either String Val)
+        getVal lineNumber "0" = return $ return NewVal
+        getVal lineNumber name = fmap (fmap Val) $ getVar lineNumber name
 
-        -- parseStmts :: [String] -> ST a (Either String ([Statement],[String]))
-        parseStmts lines
-          | null lines =
-                return $ Left "UNEXPECTED EOF"
-          | otherwise = do
-                maybeStmtLines <- parseStmt (tail lines) (tokenize $ head lines)
-                either (return . Left) parseMoreStmts maybeStmtLines
-
-        -- parseMoreStmts :: (Maybe Statement,[String]) -> ST a (Either String ([Statement],[String]))
-        parseMoreStmts (Nothing,lines) =
-            return $ return ([],lines)
-        parseMoreStmts (Just stmt,lines) = do
-            stmtsLines <- parseStmts lines
+        -- parseStmts :: Lines -> ST a (Either String ([Statement],Lines))
+        parseStmts [] = return eofError
+        parseStmts lines = do
+            maybeStmtLines <- parseStmt lines
+            let (maybeStmt,lines) = either (const (Nothing,[])) id maybeStmtLines
+            stmtsLines <- maybe (return $ return ([],[])) (const $ parseStmts lines) maybeStmt
             return $ do
+                (maybeStmt,lines) <- maybeStmtLines
+                maybe (return ([],lines)) (addStmt stmtsLines) maybeStmt
+          where
+            addStmt stmtsLines stmt = do
                 (stmts,lines) <- stmtsLines
                 return (stmt:stmts,lines)
 
-        -- parseStmt :: [String] -> [String] -> ST a (Either String (Maybe Statement,[String]))
-        parseStmt lines ['L':'E':'T':arg0,"=",arg1] = do
-            var <- getVar arg0
-            val <- getVal arg1
+        -- parseStmt :: Lines -> ST a (Either String (Maybe Statement,Lines))
+        parseStmt [] = return eofError
+        parseStmt ((lineNumber,['L':'E':'T':arg0,"=",arg1]):lines) = do
+            var <- getVar lineNumber arg0
+            val <- getVal lineNumber arg1
             return $ do
-                isIdent arg0
-                isVal arg1
                 var <- var
                 val <- val
-                return (Just $ LetEq var val,lines)
-        parseStmt lines ['L':'E':'T':arg0,">",arg1] = do
-            var <- getVar arg0
-            val <- getVal arg1
+                return (Just $ LetEq var val lineNumber,lines)
+        parseStmt ((lineNumber,['L':'E':'T':arg0,">",arg1]):lines) = do
+            var <- getVar lineNumber arg0
+            val <- getVal lineNumber arg1
             return $ do
-                isIdent arg0
-                isVal arg1
                 var <- var
                 val <- val
-                return (Just $ LetAddEdge var val,lines)
-        parseStmt lines ['L':'E':'T':arg0,"<",arg1] = do
-            var0 <- getVar arg0
-            var1 <- getVar arg1
+                return (Just $ LetAddEdge var val lineNumber,lines)
+        parseStmt ((lineNumber,['L':'E':'T':arg0,"<",arg1]):lines) = do
+            var0 <- getVar lineNumber arg0
+            var1 <- getVar lineNumber arg1
             return $ do
-                isIdent arg0
-                isIdent arg1
                 var0 <- var0
                 var1 <- var1
-                return (Just $ LetRemoveEdge (var0,var1),lines)
-        parseStmt lines (token@('I':'F':_):tokens@[_,_]) = do
-            ifBranchesLines <- parseIfBranches lines (("ELSE" ++ token):tokens)
+                return (Just $ LetRemoveEdge (var0,var1) lineNumber,lines)
+        parseStmt ((lineNumber,token@('I':'F':_):tokens):lines) = do
+            ifBranchesLines <- parseIfBranches ((lineNumber,("ELSE"++token):tokens):lines)
             return $ do
                 (ifBranches,lines) <- ifBranchesLines
-                return (Just $ If ifBranches,lines)
-        parseStmt lines (('C':'A':'L':'L':mod):".":rout:tokens@("(":_)) = do
-            modifySTRef externsRef (Set.insert (mod,rout))
-            args <- return $ parseCallArgs tokens
-            either (const $ return ()) (modifySTRef callArgsMaxCountRef . max . fromIntegral . length) args
-            -- getVal :: String -> ST a (Either String Val)
-            -- mapM getVal :: [String] -> ST a [Either String Val]
-            -- fmap sequence :: ST a [Either String Val] -> ST a (Either String [Val])
-            vals <- either (return . Left) (fmap sequence . mapM getVal) args
+                return (Just $ If ifBranches lineNumber,lines)
+        parseStmt ((lineNumber,('C':'A':'L':'L':mod):".":rout:"(":args):lines) = do
+            modifySTRef externsRef ((lineNumber,(mod,rout)):)
+            args <- return $ parseCallArgs lineNumber args
+            modifySTRef callArgsMaxCountRef $ max (either (const 0) (fromIntegral . length) args)
+            args <- mapM (getVal lineNumber) $ either (const []) id args
             return $ do
-                isIdent mod
-                isIdent rout
-                args <- args
-                mapM_ isVal args
-                vals <- vals
-                return $ (Just $ Call (Just mod,rout) vals,lines)
-        parseStmt lines (('C':'A':'L':'L':rout):tokens@("(":_)) = do
-            args <- return $ parseCallArgs tokens
-            either (const $ return ()) (modifySTRef callArgsMaxCountRef . max . fromIntegral . length) args
-            vals <- either (return . Left) (fmap sequence . mapM getVal) args
+                isIdent lineNumber mod
+                isIdent lineNumber rout
+                args <- sequence args
+                return $ (Just $ Call (Just mod,rout) args lineNumber,lines)
+        parseStmt ((lineNumber,('C':'A':'L':'L':rout):"(":args):lines) = do
+            args <- return $ parseCallArgs lineNumber args
+            modifySTRef callArgsMaxCountRef $ max (either (const 0) (fromIntegral . length) args)
+            args <- mapM (getVal lineNumber) $ either (const []) id args
             return $ do
-                isIdent rout
-                args <- args
-                mapM_ isVal args
-                vals <- vals
-                return $ (Just $ Call (Nothing,rout) vals,lines)
-        parseStmt lines ["RETURN"] = do
-            return $ return (Just Return,lines)
-        parseStmt lines ['D':'O':arg] = do
+                isIdent lineNumber rout
+                args <- sequence args
+                return $ (Just $ Call (Nothing,rout) args lineNumber,lines)
+        parseStmt ((lineNumber,["RETURN"]):lines) = do
+            return $ return (Just $ Return lineNumber,lines)
+        parseStmt ((lineNumber,['D':'O':arg]):lines) = do
             doIndex <- readSTRef doIndicesRef
             modifySTRef doIndicesRef (+1)
             modifySTRef doStackRef ((arg,doIndex):)
-            var <- getVar arg
+            arg <- getVar lineNumber arg
             stmtsLines <- parseStmts lines
             modifySTRef doStackRef tail
             return $ do
-                isIdent arg
-                var <- var
+                arg <- arg
                 (stmts,lines) <- stmtsLines
                 lines <- nextLineIs lines "ENDDO"
-                return $ (Just $ DoLoop var doIndex stmts,lines)
-        parseStmt lines ['D':'O':arg0,"<",arg1] = do
+                return $ (Just $ DoLoop arg doIndex stmts lineNumber,lines)
+        parseStmt ((lineNumber,['D':'O':arg0,"<",arg1]):lines) = do
             doIndex <- readSTRef doIndicesRef
             modifySTRef doIndicesRef (+1)
             modifySTRef doStackRef ((arg0,doIndex):)
             doEdgesIndex <- readSTRef doEdgesIndicesRef
             modifySTRef doEdgesIndicesRef (+1)
-            var0 <- getVar arg0
-            var1 <- getVar arg1
+            arg0 <- getVar lineNumber arg0
+            arg1 <- getVar lineNumber arg1
             stmtsLines <- parseStmts lines
             modifySTRef doStackRef tail
             return $ do
-                isIdent arg0
-                isIdent arg1
-                var0 <- var0
-                var1 <- var1
+                arg0 <- arg0
+                arg1 <- arg1
                 (stmts,lines) <- stmtsLines
                 lines <- nextLineIs lines "ENDDO"
-                return $ (Just $ DoEdges (var0,var1) doIndex doEdgesIndex stmts,lines)
-        parseStmt lines ['E':'X':'I':'T':arg] = do
+                return $ (Just $ DoEdges (arg0,arg1) doIndex doEdgesIndex stmts lineNumber,lines)
+        parseStmt ((lineNumber,['E':'X':'I':'T':arg]):lines) = do
             doStack <- readSTRef doStackRef
-            var <- getVar arg
+            arg <- getVar lineNumber arg
             return $ do
-                isIdent arg
-                var <- var
-                maybe (Left "INVALID EXIT") (return . (flip (,) lines) . Just . Exit var) (lookup arg doStack)
-        parseStmt lines tokens =
-            return $ return (Nothing,concat tokens:lines)
+                arg <- arg
+                maybe exitError (exitStmt arg) $ lookup (varName arg) doStack
+          where
+            exitError = parseError lineNumber $ "INVALID EXIT LABEL: " ++ arg
+            exitStmt arg doIndex = return (Just $ Exit arg doIndex lineNumber,lines)
+        parseStmt lines = return $ return (Nothing,lines)
 
-        -- parseIfBranches :: [String] -> [String] -> ST a (Either String ([IfBranch],[String]))
-        parseIfBranches lines ["ENDIF"] =
+        -- parseIfBranches :: Lines -> ST a (Either String ([IfBranch],Lines))
+        parseIfBranches [] = return eofError
+        parseIfBranches ((_,["ENDIF"]):lines) =
             return $ return ([],lines)
-        parseIfBranches lines ["ELSE"] = do
+        parseIfBranches ((lineNumber,["ELSE"]):lines) = do
             stmtsLines <- parseStmts lines
             return $ do
                 (stmts,lines) <- stmtsLines
                 lines <- nextLineIs lines "ENDIF"
-                return ([IfElse stmts],lines)
-        parseIfBranches lines ['E':'L':'S':'E':'I':'F':arg0,"=",arg1] = do
-            var0 <- getVar arg0
-            var1 <- getVar arg1
+                return ([IfElse stmts lineNumber],lines)
+        parseIfBranches ((lineNumber,['E':'L':'S':'E':'I':'F':arg0,"=",arg1]):lines) = do
+            arg0 <- getVar lineNumber arg0
+            arg1 <- getVar lineNumber arg1
             stmtsLines <- parseStmts lines
-            ifBranchesLines <- either (return . Left) (parseMoreIfBranches . snd) stmtsLines
+            lines <- return $ either (const []) snd stmtsLines
+            ifBranchesLines <- parseIfBranches lines
             return $ do
-                isIdent arg0
-                isIdent arg1
-                var0 <- var0
-                var1 <- var1
+                arg0 <- arg0
+                arg1 <- arg1
                 (stmts,_) <- stmtsLines
                 (ifBranches,lines) <- ifBranchesLines
-                return (IfEq (var0,var1) stmts:ifBranches,lines)
-        parseIfBranches lines ['E':'L':'S':'E':'I':'F':arg0,">",arg1] = do
-            var0 <- getVar arg0
-            var1 <- getVar arg1
+                return (IfEq (arg0,arg1) stmts lineNumber:ifBranches,lines)
+        parseIfBranches ((lineNumber,['E':'L':'S':'E':'I':'F':arg0,">",arg1]):lines) = do
+            arg0 <- getVar lineNumber arg0
+            arg1 <- getVar lineNumber arg1
             stmtsLines <- parseStmts lines
-            ifBranchesLines <- either (return . Left) (parseMoreIfBranches . snd) stmtsLines
+            lines <- return $ either (const []) snd stmtsLines
+            ifBranchesLines <- parseIfBranches lines
             return $ do
-                isIdent arg0
-                isIdent arg1
-                var0 <- var0
-                var1 <- var1
+                arg0 <- arg0
+                arg1 <- arg1
                 (stmts,_) <- stmtsLines
                 (ifBranches,lines) <- ifBranchesLines
-                return (IfEdge (var0,var1) stmts:ifBranches,lines)
-        parseIfBranches _ tokens =
-            return $ Left "SYNTAX ERROR"
+                return (IfEdge (arg0,arg1) stmts lineNumber:ifBranches,lines)
+        parseIfBranches ((lineNumber,_):_) = return $ syntaxError lineNumber
 
-        -- parseMoreIfBranches :: [String] -> ST a (Either String ([IfBranch],[String]))
-        parseMoreIfBranches lines
-          | null lines =
-                return $ Left "UNEXPECTED EOF"
-          | otherwise =
-                parseIfBranches (tail lines) (tokenize $ head lines)
+parseCallArgs :: Integer -> [String] -> Either String [String]
+parseCallArgs lineNumber [")"] = return []
+parseCallArgs lineNumber [arg,")"] = return [arg]
+parseCallArgs lineNumber (arg:",":args) = do
+    args <- parseCallArgs lineNumber args
+    return $ arg:args
+parseCallArgs lineNumber _ = syntaxError lineNumber
 
-parseCallArgs :: [String] -> Either String [String]
-parseCallArgs tokens
-  | null tokens || head tokens /= "(" =
-        Left "SYNTAX ERROR"
-  | tokens == ["(",")"] =
-        return []
-  | otherwise =
-        fmap reverse $ parseArgs [] $ tail tokens
-  where
-    parseArgs revVars (name:[")"]) = return (name:revVars)
-    parseArgs revVars (name:",":rest) = parseArgs (name:revVars) rest
-    parseArgs _ _ = Left "SYNTAX ERROR"
+nextLineIs :: Lines -> String -> Either String Lines
+nextLineIs [] str = eofError
+nextLineIs ((lineNumber,line):lines) str
+  | line == [str] = return lines
+  | otherwise = syntaxError lineNumber
 
-nextLineIs :: [String] -> String -> Either String [String]
-nextLineIs lines str
-  | null lines =
-        Left "UNEXPECTED EOF"
-  | head lines /= str =
-        Left "SYNTAX ERROR"
-  | otherwise =
-        return $ tail lines
+isIdent :: Integer -> String -> Either String ()
+isIdent lineNumber str
+  | str /= "0" && str /= "" && all isAlphaNum str = return ()
+  | otherwise = syntaxError lineNumber
 
-isIdent :: String -> Either String ()
-isIdent str
-  | str /= "0" && str /= "" && all isAlphaNum str =
-        return ()
-  | otherwise =
-        Left "SYNTAX ERROR"
+eofError :: Either String a
+eofError = Left "UNEXPECTED EOF"
 
-isVal :: String -> Either String ()
-isVal str
-  | str /= "" && all isAlphaNum str =
-        return ()
-  | otherwise =
-        Left "SYNTAX ERROR"
+parseError :: Integer -> String -> Either String a
+parseError lineNumber message = Left (show lineNumber ++ ": " ++ message)
 
-unusedExtern :: Set.Set String -> Set.Set (String,String) -> Bool
-unusedExtern uses externs =
-    not $ all (flip Set.member uses . fst) $ Set.toList externs
-
-hasReturn :: Routine -> Bool
-hasReturn routine = any hasRet $ routineStmts routine
-  where
-    hasRet (If ifBranches) = any (any hasRet . ifBranchStmts) ifBranches
-    hasRet Return = True
-    hasRet (DoLoop _ _ stmts) = any hasRet stmts
-    hasRet (DoEdges _ _ _ stmts) = any hasRet stmts
-    hasRet _ = False
-
-tokenize :: String -> [String]
-tokenize str = groupBy areAlphaNum str
-  where
-    areAlphaNum c1 c2 = isAlphaNum c1 && isAlphaNum c2
+syntaxError :: Integer -> Either String a
+syntaxError lineNumber = parseError lineNumber "SYNTAX ERROR"

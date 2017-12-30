@@ -27,7 +27,7 @@ instance Exception CompileException where
 dgolFileToModule :: [String] -> Context -> String -> (Module -> IO a) -> IO a
 dgolFileToModule libs context file process = do
     src <- readFile file
-    ast <- either (throwIO . CompileException) return $ parse src
+    ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file src
     let mbuilder = codeGen ast libs
     let mod = buildModule (fromString $ takeFileName file) mbuilder
     withModuleFromAST context mod { LLVM.AST.moduleSourceFileName = fromString file } process

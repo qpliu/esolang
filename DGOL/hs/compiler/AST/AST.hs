@@ -5,11 +5,11 @@ module AST.AST(
     Val(Val,NewVal),
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
     IfBranch(IfEq,IfEdge,IfElse),
-    moduleName,moduleSubroutines,moduleProgram,moduleExterns,
-    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,
+    moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,
+    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,
     varName,varIndex,varIsCallArg,
-    stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,
-    ifBranchVars,ifBranchStmts
+    stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,stmtSourceLineNumber,
+    ifBranchVars,ifBranchStmts,ifBranchSourceLineNumber
 )
 where
 
@@ -17,13 +17,15 @@ data Module =
     Library {
         moduleName :: String,
         moduleSubroutines :: [Routine],
-        moduleExterns :: [(String,String)]
+        moduleExterns :: [(String,String)],
+        moduleSourceFileName :: FilePath
         }
   | Program {
         moduleName :: String,
         moduleSubroutines :: [Routine],
         moduleProgram :: Routine,
-        moduleExterns :: [(String,String)]
+        moduleExterns :: [(String,String)],
+        moduleSourceFileName :: FilePath
         }
     deriving Show
 
@@ -34,7 +36,8 @@ data Routine = Routine {
     routineExported :: Bool,
     routineVarCount :: Integer,
     routineDoEdgesCount :: Integer,
-    routineCallArgsMaxCount :: Integer
+    routineCallArgsMaxCount :: Integer,
+    routineSourceLineNumber :: Integer
     }
     deriving Show
 
@@ -51,50 +54,63 @@ data Val = Val Var | NewVal
 data Statement =
     LetEq {
         stmtVar :: Var,
-        stmtVal :: Val
+        stmtVal :: Val,
+        stmtSourceLineNumber :: Integer
         }
   | LetAddEdge {
         stmtVar :: Var,
-        stmtVal :: Val
+        stmtVal :: Val,
+        stmtSourceLineNumber :: Integer
         }
   | LetRemoveEdge {
-        stmtVars :: (Var,Var)
+        stmtVars :: (Var,Var),
+        stmtSourceLineNumber :: Integer
         }
   | If {
-        stmtIfBranches :: [IfBranch]
+        stmtIfBranches :: [IfBranch],
+        stmtSourceLineNumber :: Integer
         }
   | Call {
         stmtCallTarget :: (Maybe String,String),
-        stmtCallArgs :: [Val]
+        stmtCallArgs :: [Val],
+        stmtSourceLineNumber :: Integer
         }
-  | Return
+  | Return {
+        stmtSourceLineNumber :: Integer
+        }
   | DoLoop {
         stmtVar :: Var,
         stmtDoIndex :: Integer,
-        stmtStmts :: [Statement]
+        stmtStmts :: [Statement],
+        stmtSourceLineNumber :: Integer
         }
   | DoEdges {
         stmtVars :: (Var,Var),
         stmtDoIndex :: Integer,
         stmtDoEdgesIndex :: Integer,
-        stmtStmts :: [Statement]
+        stmtStmts :: [Statement],
+        stmtSourceLineNumber :: Integer
         }
   | Exit {
         stmtVar :: Var,
-        stmtDoIndex :: Integer
+        stmtDoIndex :: Integer,
+        stmtSourceLineNumber :: Integer
         }
     deriving Show
 
 data IfBranch =
     IfEq {
         ifBranchVars :: (Var,Var),
-        ifBranchStmts :: [Statement]
+        ifBranchStmts :: [Statement],
+        ifBranchSourceLineNumber :: Integer
         }
   | IfEdge {
         ifBranchVars :: (Var,Var),
-        ifBranchStmts :: [Statement]
+        ifBranchStmts :: [Statement],
+        ifBranchSourceLineNumber :: Integer
         }
   | IfElse {
-        ifBranchStmts :: [Statement]
+        ifBranchStmts :: [Statement],
+        ifBranchSourceLineNumber :: Integer
         }
     deriving Show

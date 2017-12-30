@@ -42,13 +42,13 @@ import CodeGen.Util(
 
 
 codeGen :: Module -> [String] -> ModuleBuilder ()
-codeGen (Library name subroutines externs) _ = do
+codeGen (Library name subroutines externs lineNumber) _ = do
     runtimeDecls
     mapM_ (declareExtern []) externs
     mapM_ (defineSubroutine name) subroutines
     mapM_ (defineExportedSubroutine name) subroutines
     return ()
-codeGen (Program name subroutines program externs) libs = do
+codeGen (Program name subroutines program externs lineNumber) libs = do
     runtimeDefs
     libs <- foldM defineLibs [] libs
     mapM_ (declareExtern libs) externs
@@ -68,7 +68,7 @@ defineLibs libs lib =
     maybe (return libs) (>> return (lib:libs)) (dgolLibDefs lib)
 
 defineSubroutine :: String -> Routine -> ModuleBuilder Operand
-defineSubroutine moduleName routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount) = function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
+defineSubroutine moduleName routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) = function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
     (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine frame entryLabel
     entryLabel <- block
     (callerCallArgsCount,callerCallArgsArray) <- if null args
@@ -83,7 +83,7 @@ defineSubroutine moduleName routine@(Routine name args stmts exported varCount d
     codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
 
 defineExportedSubroutine :: String -> Routine -> ModuleBuilder Operand
-defineExportedSubroutine moduleName (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount)
+defineExportedSubroutine moduleName (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber)
   | not exported =
         return $ nullConst void
   | otherwise = function (routineName True moduleName name) [(pFrameType,NoParameterName)] void $ \ [frame] -> do
@@ -91,7 +91,7 @@ defineExportedSubroutine moduleName (Routine name args stmts exported varCount d
         retVoid
 
 defineMain :: Routine -> ModuleBuilder Operand
-defineMain routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount) = function (fromString "main") [] void $ \ _ -> mdo
+defineMain routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) = function (fromString "main") [] void $ \ _ -> mdo
     (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine (nullConst pFrameType) entryLabel
     entryLabel <- block
     let callerCallArgsArray = nullConst pppNodeType
@@ -107,7 +107,7 @@ routineRef mod maybeMod rout =
     functionRef (maybe (routineName False mod) (routineName True) maybeMod $ rout) [pFrameType] void
 
 functionPrelude :: (MonadIRBuilder m, MonadFix m) => Routine -> Operand -> Name -> m (Operand,Operand,Operand,Operand,Operand,Name)
-functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount) callerFrame entryLabel = do
+functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) callerFrame entryLabel = do
     frame <- alloca frameType Nothing 0
 
     callerFramePtr <- gep frame [intConst 32 0,intConst 32 0]
@@ -188,36 +188,36 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
     codeGenStmt _ False _ = do
         -- unreachable statements
         return False
-    codeGenStmt _ _ (LetEq var val) = do
+    codeGenStmt _ _ (LetEq var val lineNumber) = do
         varPtr <- getVarPtr var
         node <- getVal val
         store varPtr 0 node
         return True
-    codeGenStmt _ _ (LetAddEdge var val) = do
+    codeGenStmt _ _ (LetAddEdge var val lineNumber) = do
         varNode <- getVar var
         node <- getVal val
         call addEdge [varNode,node]
         return True
-    codeGenStmt _ _ (LetRemoveEdge (var0,var1)) = do
+    codeGenStmt _ _ (LetRemoveEdge (var0,var1) lineNumber) = do
         node0 <- getVar var0
         node1 <- getVar var1
         call removeEdge [node0,node1]
         return True
-    codeGenStmt doStack _ (If ifBranches) = mdo
+    codeGenStmt doStack _ (If ifBranches lineNumber) = mdo
         mapM_ (codeGenIfBranch doStack exitIfLabel) ifBranches
         br exitIfLabel
         exitIfLabel <- block
         return True
-    codeGenStmt _ _ (Call (maybeMod,rout) callArgs) = do
+    codeGenStmt _ _ (Call (maybeMod,rout) callArgs lineNumber) = do
         callArgsArrayRawPtr <- bitcast callArgsArray (ptr i8)
         call memset [callArgsArrayRawPtr,intConst 8 0,callArgsArraySizeof,intConst 32 0,intConst 1 0]
         zipWithM_ storeCallArg [0..] callArgs
         call (routineRef moduleName maybeMod rout) [frame]
         return True
-    codeGenStmt _ _ Return = do
+    codeGenStmt _ _ (Return lineNumber) = do
         br exitLabel
         return False
-    codeGenStmt doStack _ (DoLoop _ doIndex stmts) = mdo
+    codeGenStmt doStack _ (DoLoop _ doIndex stmts lineNumber) = mdo
         br loopLabel
 
         loopLabel <- block
@@ -226,7 +226,7 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
 
         exitLoopLabel <- block
         return $ any (hasExit doIndex) stmts
-    codeGenStmt doStack _ (DoEdges (var0,var1) doIndex doEdgesIndex stmts) = mdo
+    codeGenStmt doStack _ (DoEdges (var0,var1) doIndex doEdgesIndex stmts lineNumber) = mdo
         (var0Ptr,var1EdgesSize,edgesArray) <- setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel
 
         initLoopLabel <- block
@@ -258,12 +258,12 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
 
         exitLoopLabel <- block
         return True
-    codeGenStmt doStack _ (Exit _ doIndex) = do
+    codeGenStmt doStack _ (Exit _ doIndex lineNumber) = do
         maybe (error "INTERNAL ERROR: INVALID EXIT DOINDEX") br $ lookup doIndex doStack
         return False
 
     codeGenIfBranch :: (MonadIRBuilder m, MonadFix m) => [(Integer,Name)] -> Name -> IfBranch -> m ()
-    codeGenIfBranch doStack exitIfLabel (IfEq (var0,var1) stmts) = mdo
+    codeGenIfBranch doStack exitIfLabel (IfEq (var0,var1) stmts lineNumber) = mdo
         node0 <- getVar var0
         node1 <- getVar var1
         eqCheck <- icmp eq node0 node1
@@ -275,7 +275,7 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
 
         nextBranchLabel <- block
         return ()
-    codeGenIfBranch doStack exitIfLabel (IfEdge (var0,var1) stmts) = mdo
+    codeGenIfBranch doStack exitIfLabel (IfEdge (var0,var1) stmts lineNumber) = mdo
         node0 <- getVar var0
         node1 <- getVar var1
         edgeCheck <- call hasEdge [node0,node1]
@@ -287,7 +287,7 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
 
         nextBranchLabel <- block
         return ()
-    codeGenIfBranch doStack exitIfLabel (IfElse stmts) = mdo
+    codeGenIfBranch doStack exitIfLabel (IfElse stmts lineNumber) = mdo
         fellThru <- foldM (codeGenStmt doStack) True stmts
         return ()
 
@@ -415,8 +415,8 @@ codeGenStmts moduleName frame varArray doEdgesArray callArgsArray callArgsArrayS
         return (var0Ptr,node1EdgesSize,edgesArray)
 
 hasExit :: Integer -> Statement -> Bool
-hasExit doIndex (If ifBranches) = any (any (hasExit doIndex) . ifBranchStmts) ifBranches
-hasExit doIndex (Exit _ exitDoIndex) = doIndex == exitDoIndex
-hasExit doIndex (DoLoop _ _ stmts) = any (hasExit doIndex) stmts
-hasExit doIndex (DoEdges _ _ _ stmts) = any (hasExit doIndex) stmts
+hasExit doIndex (If ifBranches _) = any (any (hasExit doIndex) . ifBranchStmts) ifBranches
+hasExit doIndex (Exit _ exitDoIndex _) = doIndex == exitDoIndex
+hasExit doIndex (DoLoop _ _ stmts _) = any (hasExit doIndex) stmts
+hasExit doIndex (DoEdges _ _ _ stmts _) = any (hasExit doIndex) stmts
 hasExit _ _ = False
