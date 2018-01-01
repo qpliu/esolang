@@ -17,14 +17,14 @@ TODO List
 * Track down why some br instructions aren't emitted, causing the
   weird infinite loops in BRAINFUCK.DGOL
 
-* Write up on implementation
-  - Call frame data structure
-    + Notes on call by reference
-    + Notes on DO EDGES
-  - Allocation page data structure
-    + Notes on garbage collection strategy
+* ~~Write up on implementation~~
+  - ~~Call frame data structure~~
+    + ~~Notes on call by reference~~
+    + ~~Notes on DO EDGES~~
+  - ~~Allocation page data structure~~
+    + ~~Notes on garbage collection strategy~~
 
-* Write up on compacting garbage collector
+* ~~Write up on compacting garbage collector~~
 
 * Add source code metadata
   - DIFile(filename)
