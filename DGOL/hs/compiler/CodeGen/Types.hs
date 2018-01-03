@@ -2,7 +2,7 @@
 
 module CodeGen.Types(
     nodeTypeName,nodeType,pNodeType,ppNodeType,pppNodeType,nodeTypedef,
-    edgeArrayIncrement,pageSize,newPageThreshold,
+    edgeArrayIncrement,pageSize,newPageThreshold,pageCompactionThreshold,
     pageTypeName,pageType,pPageType,pageTypedef,
     frameTypeName,frameType,pFrameType,frameTypedef,
     doEdgesIteratorTypeName,doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef
@@ -47,6 +47,9 @@ pageSize = 256
 
 newPageThreshold :: Num a => a
 newPageThreshold = 240
+
+pageCompactionThreshold :: Num a => a
+pageCompactionThreshold = 16
 
 pageTypeName :: Name
 pageTypeName = "page"

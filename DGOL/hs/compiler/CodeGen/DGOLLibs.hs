@@ -388,7 +388,7 @@ debugTraceLibStrzTable = GlobalStrzTable "debugTraceLibStr" [
     "\n  ITERATOR[%d]",
     "ARGS",
     "[%d]",
-    "PAGES\n",
+    "PAGES %d\n",
     " PAGE %p NEXT %p LIVE NODES %d\n"
     ]
 
@@ -578,7 +578,9 @@ debugTraceLibArgsImpl = function "DEBUGTRACE.ARGS" [(pFrameType,NoParameterName)
 debugTraceLibPagesImpl :: ModuleBuilder Operand
 debugTraceLibPagesImpl = function "DEBUGTRACE.PAGES" [(pFrameType,NoParameterName)] void $ \ [_] -> mdo
     entry <- block
-    callPrintf "PAGES\n" []
+    compactionEligibleCountPtr <- gep globalState [intConst 32 0, intConst 32 2]
+    compactionEligibleCount <- load compactionEligibleCountPtr 0
+    callPrintf "PAGES %d\n" [compactionEligibleCount]
     initialPage <- gep globalState [intConst 32 0,intConst 32 1]
     br pageLoopLabel
 

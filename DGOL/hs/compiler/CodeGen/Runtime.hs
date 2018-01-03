@@ -5,7 +5,7 @@ module CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
     memset,memcpy,malloc,free,
-    newNode,hasEdge,addEdge,removeEdge,
+    newNode,hasEdge,addEdge,removeEdge,compact,
     trace,traceLabel,tracef,traceEnabled,
     globalState
 )
@@ -27,7 +27,7 @@ import LLVM.IRBuilder.Monad(MonadIRBuilder,emitInstr,block)
 
 import CodeGen.Types(
     nodeTypeName,nodeType,pNodeType,ppNodeType,nodeTypedef,
-    edgeArrayIncrement,pageSize,newPageThreshold,
+    edgeArrayIncrement,pageSize,newPageThreshold,pageCompactionThreshold,
     pageTypeName,pageType,pPageType,pageTypedef,
     pFrameType,frameTypedef,
     doEdgesIteratorType,pDoEdgesIteratorType,doEdgesIteratorTypedef)
@@ -219,6 +219,11 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         (sweepNextPageLiveCount,sweepPageLoopNextIndex),
         (intConst 32 0,sweepPageLoopNextPage)
         ]
+    compactionEligibleCount <- phi [
+        (intConst 32 0,startGCSweep),
+        (compactionEligibleCount,sweepPageLoopNextIndex),
+        (nextCompactionEligibleCount,sweepPageLoopNextPage)
+        ]
     sweepNodeAlivePtr <- gep sweepPage [intConst 32 0, intConst 32 1, sweepIndex, intConst 32 1]
     sweepNodeAlive <- load sweepNodeAlivePtr 0
     condBr sweepNodeAlive sweepCheckNode sweepPageLoopNextIndex
@@ -255,15 +260,26 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
         ]
     sweepNextIndex <- add sweepIndex (intConst 32 1)
     sweepIndexRangeCheck <- icmp uge sweepNextIndex (intConst 32 pageSize)
-    condBr sweepIndexRangeCheck sweepPageLoopNextPage sweepPageLoop
+    condBr sweepIndexRangeCheck checkCompactEligible sweepPageLoop
+
+    checkCompactEligible <- block
+    compactEligibleCheck <- icmp uge (intConst 32 pageCompactionThreshold) sweepNextPageLiveCount
+    condBr compactEligibleCheck isCompactEligible sweepPageLoopNextPage
+
+    isCompactEligible <- block
+    incrementedCompactionEligibleCount <- add compactionEligibleCount (intConst 32 1)
+    br sweepPageLoopNextPage
 
     sweepPageLoopNextPage <- block
+    nextCompactionEligibleCount <- phi [(compactionEligibleCount,checkCompactEligible),(incrementedCompactionEligibleCount,isCompactEligible)]
     sweepNextPagePtr <- gep sweepPage [intConst 32 0, intConst 32 0]
     sweepNextPage <- load sweepNextPagePtr 0
     sweepPageNullCheck <- icmp eq sweepNextPage (nullConst pPageType)
     condBr sweepPageNullCheck checkForNewPage sweepPageLoop
 
     checkForNewPage <- block
+    compactionEligibleCountPtr <- gep globalState [intConst 32 0, intConst 32 2]
+    store compactionEligibleCountPtr 0 nextCompactionEligibleCount
     newPageCheck <- icmp uge sweepNextPageLiveCount (intConst 32 newPageThreshold)
     condBr newPageCheck newPage retryNewNode
 
@@ -285,7 +301,8 @@ globalStateType = StructureType {
     LLVM.AST.Type.isPacked = False,
     elementTypes = [
         i8, -- gc mark
-        pageType -- root page
+        pageType, -- root page
+        i32 -- number of pages eligible for compaction
         ]
     }
 
@@ -321,7 +338,8 @@ globalStateDef = do
                                 }
                             }
                         ]
-                    }
+                    },
+                Int { integerBits = 32, integerValue = 0 }
                 ]
             })
         })
@@ -764,6 +782,29 @@ freePageImpl = function freePageName [(pPageType,NoParameterName),(pPageType,NoP
     call free [pageRawPtr]
     retVoid
 
+compactName :: Name
+compactName = "compact"
+
+compact :: Operand
+compact = functionRef compactName [pFrameType] void
+
+compactDecl :: ModuleBuilder Operand
+compactDecl = extern compactName [pFrameType] void
+
+compactImpl :: ModuleBuilder Operand
+compactImpl = function compactName [(pFrameType,NoParameterName)] void $ \ [frame] -> mdo
+    compactionEligibleCountPtr <- gep globalState [intConst 32 0, intConst 32 2]
+    compactionEligibleCount <- load compactionEligibleCountPtr 0
+    compactionEligibleCountCheck <- icmp uge compactionEligibleCount (intConst 32 2)
+    condBr compactionEligibleCountCheck startCompactionCheckLabel doneLabel
+
+    startCompactionCheckLabel <- block
+    -- ....
+    br doneLabel
+
+    doneLabel <- block
+    retVoid
+
 memsetName :: Name
 memsetName = "llvm.memset.p0i8.i32"
 
@@ -826,6 +867,7 @@ runtimeDefs = do
     moveNodeReferenceImpl
     moveNodeReferencesInEdgeArrayImpl
     freePageImpl
+    compactImpl
     traceDefs
     return ()
 
@@ -836,6 +878,7 @@ runtimeDecls = do
     hasEdgeDecl
     addEdgeDecl
     removeEdgeDecl
+    compactDecl
     traceDefs
     return ()
 

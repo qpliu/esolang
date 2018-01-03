@@ -29,7 +29,7 @@ import CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
     memset,memcpy,malloc,free,
-    newNode,hasEdge,addEdge,removeEdge,
+    newNode,hasEdge,addEdge,removeEdge,compact,
     trace,traceLabel)
 import CodeGen.Types(
     pNodeType,ppNodeType,pppNodeType,
@@ -70,7 +70,7 @@ defineLibs libs lib =
 
 defineSubroutine :: String -> Routine -> ModuleBuilder Operand
 defineSubroutine moduleName routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) = function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
-    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine callerFrame entryLabel
+    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine callerFrame entryLabel (varCount > 1)
     entryLabel <- block
     (callerCallArgsCount,callerCallArgsArray) <- if null args
       then do
@@ -93,7 +93,7 @@ defineExportedSubroutine moduleName (Routine name args stmts exported varCount d
 
 defineMain :: Routine -> ModuleBuilder Operand
 defineMain routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) = function (fromString "main") [] void $ \ _ -> mdo
-    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine (nullConst pFrameType) entryLabel
+    (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrelude routine (nullConst pFrameType) entryLabel False
     entryLabel <- block
     let callerCallArgsArray = nullConst pppNodeType
     let callerCallArgsCount = intConst 32 0
@@ -107,8 +107,8 @@ routineRef :: String -> Maybe String -> String -> Operand
 routineRef mod maybeMod rout =
     functionRef (maybe (routineName False mod) (routineName True) maybeMod $ rout) [pFrameType] void
 
-functionPrelude :: (MonadIRBuilder m, MonadFix m) => Routine -> Operand -> Name -> m (Operand,Operand,Operand,Operand,Operand,Name)
-functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) callerFrame entryLabel = do
+functionPrelude :: (MonadIRBuilder m, MonadFix m) => Routine -> Operand -> Name -> Bool -> m (Operand,Operand,Operand,Operand,Operand,Name)
+functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber) callerFrame entryLabel doCompactCall = do
     frame <- alloca frameType Nothing 0
 
     callerFramePtr <- gep frame [intConst 32 0,intConst 32 0]
@@ -176,6 +176,12 @@ functionPrelude (Routine name args stmts exported varCount doEdgesCount callArgs
         doneLabel <- block
         return ()
         ) [0 .. doEdgesCount - 1]
+    if doCompactCall
+      then do
+        call compact [callerFrame]
+        return ()
+      else do
+        return ()
     retVoid
 
     return (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel)
