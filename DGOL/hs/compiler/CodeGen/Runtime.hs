@@ -6,7 +6,8 @@ module CodeGen.Runtime(
     runtimeDefs,
     memset,memcpy,malloc,free,
     newNode,hasEdge,addEdge,removeEdge,
-    trace,traceLabel,tracef,traceEnabled
+    trace,traceLabel,tracef,traceEnabled,
+    globalState
 )
 where
 
@@ -260,7 +261,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     sweepNextPagePtr <- gep sweepPage [intConst 32 0, intConst 32 0]
     sweepNextPage <- load sweepNextPagePtr 0
     sweepPageNullCheck <- icmp eq sweepNextPage (nullConst pPageType)
-    condBr newNodePageNullCheck checkForNewPage sweepPageLoop
+    condBr sweepPageNullCheck checkForNewPage sweepPageLoop
 
     checkForNewPage <- block
     newPageCheck <- icmp uge sweepNextPageLiveCount (intConst 32 newPageThreshold)
@@ -578,7 +579,7 @@ moveNodesImpl = function moveNodesName [(pFrameType,NoParameterName),(i32,NoPara
     br pageNodeLoopLabel
 
     pageNodeLoopLabel <- block
-    pageNodeIndex <- phi [(intConst 32 0,pageLoopLabel),(pageNodeNextIndex,pageNodeLoopBodyLabel),(pageNodeNextIndex,pageNodeMoveEdgesLabel)]
+    pageNodeIndex <- phi [(intConst 32 0,pageLoopBodyLabel),(pageNodeNextIndex,pageNodeLoopBodyLabel),(pageNodeNextIndex,pageNodeMoveEdgesLabel)]
     pageNodeNextIndex <- add pageNodeIndex (intConst 32 1)
     pageNodeIndexCheck <- icmp uge pageNodeIndex (intConst 32 pageSize)
     condBr pageNodeIndexCheck pageLoopLabel pageNodeLoopBodyLabel

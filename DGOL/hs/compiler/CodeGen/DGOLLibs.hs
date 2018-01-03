@@ -13,8 +13,8 @@ import LLVM.IRBuilder.Instruction(add,alloca,and,bitcast,br,condBr,gep,icmp,load
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),extern,function)
 import LLVM.IRBuilder.Monad(IRBuilderT,block)
 
-import CodeGen.Runtime(newNode,hasEdge,removeEdge,addEdge,traceEnabled)
-import CodeGen.Types(pFrameType,pNodeType,ppNodeType,pppNodeType)
+import CodeGen.Runtime(newNode,hasEdge,removeEdge,addEdge,traceEnabled,globalState)
+import CodeGen.Types(pFrameType,pNodeType,ppNodeType,pppNodeType,pPageType,pageSize)
 import CodeGen.Util(
     intConst,nullConst,eq,uge,
     functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
@@ -355,6 +355,7 @@ debugTraceLibDefs = do
     debugTraceLibNodeImpl
     debugTraceLibFrameImpl
     debugTraceLibArgsImpl
+    debugTraceLibPagesImpl
     return ()
 
 printfName :: Name
@@ -386,7 +387,9 @@ debugTraceLibStrzTable = GlobalStrzTable "debugTraceLibStr" [
     "\n ITERATORS[%d]",
     "\n  ITERATOR[%d]",
     "ARGS",
-    "[%d]"
+    "[%d]",
+    "PAGES\n",
+    " PAGE %p NEXT %p LIVE NODES %d\n"
     ]
 
 debugTraceLibLabelImpl :: ModuleBuilder Operand
@@ -570,4 +573,44 @@ debugTraceLibArgsImpl = function "DEBUGTRACE.ARGS" [(pFrameType,NoParameterName)
 
     doneLabel <- block
     callPrintf "\n" []
+    retVoid
+
+debugTraceLibPagesImpl :: ModuleBuilder Operand
+debugTraceLibPagesImpl = function "DEBUGTRACE.PAGES" [(pFrameType,NoParameterName)] void $ \ [_] -> mdo
+    entry <- block
+    callPrintf "PAGES\n" []
+    initialPage <- gep globalState [intConst 32 0,intConst 32 1]
+    br pageLoopLabel
+
+    pageLoopLabel <- block
+    page <- phi [(initialPage,entry),(nextPage,printPageLabel)]
+    pageCheck <- icmp eq page (nullConst pPageType)
+    condBr pageCheck doneLabel pageLoopBodyLabel
+
+    pageLoopBodyLabel <- block
+    nextPagePtr <- gep page [intConst 32 0,intConst 32 0]
+    nextPage <- load nextPagePtr 0
+    br countLiveNodesLoopLabel
+
+    countLiveNodesLoopLabel <- block
+    index <- phi [(intConst 32 0,pageLoopBodyLabel),(nextIndex,countLiveNodeLabel),(nextIndex,incrementLiveNodeCountLabel)]
+    count <- phi [(intConst 32 0,pageLoopBodyLabel),(count,countLiveNodeLabel),(nextCount,incrementLiveNodeCountLabel)]
+    indexCheck <- icmp uge index (intConst 32 pageSize)
+    condBr indexCheck printPageLabel countLiveNodeLabel
+
+    countLiveNodeLabel <- block
+    nextIndex <- add index (intConst 32 1)
+    livePtr <- gep page [intConst 32 0,intConst 32 1,index,intConst 32 1]
+    live <- load livePtr 0
+    condBr live incrementLiveNodeCountLabel countLiveNodesLoopLabel
+
+    incrementLiveNodeCountLabel <- block
+    nextCount <- add count (intConst 32 1)
+    br countLiveNodesLoopLabel
+
+    printPageLabel <- block
+    callPrintf " PAGE %p NEXT %p LIVE NODES %d\n" [page,nextPage,count]
+    br pageLoopLabel
+
+    doneLabel <- block
     retVoid
