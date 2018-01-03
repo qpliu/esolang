@@ -23,7 +23,7 @@ will be stored in the `local_variable_array`.
 statements in the routine, and `call_args_count`, the maximum number of
 arguments of a CALL statement in the routine are all determined at
 compile time.  `local_variable_count`, `do_edges_iterator_count`, their
-corresponding array pointers, as wellas `caller_call_frame`, are stored in
+corresponding array pointers, as well as `caller_call_frame`, are stored in
 the `call_frame` data structure for the mark phase of the garbage collector.
 `call_args_count` is stored in the `call_frame` data structure for
 callees of this subroutine to access the call arguments.
@@ -164,15 +164,15 @@ to compacting, the first has to be reloaded.
 So instead of compacting after garbage collection, set a new flag
 in `allocator_and_garbage_collector_state` if compaction is
 warranted.  Then, check the flag at a safe point, say, when returning
-from a subroutine, and run the compactor is the flag is set.
+from a subroutine, and run the compactor if the flag is set.
 
-## Compactor algorithm
+### Compactor algorithm
 If there are at least 2 pages with less than 16 live nodes, move all
 the nodes from the second page (which will never be the root page) into
 the first page, then remove the second page from the linked list of
 pages, then free the second page.
 
-## Moving a node
+### Moving a node
 When moving a node, iterate over all the edges of all the live nodes
 in all the pages and move the matching edges.  And iterate over all
 the local variables in all the call frames and move the matching nodes.

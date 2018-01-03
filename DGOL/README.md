@@ -21,7 +21,7 @@ A value token is a token of 1 or more alphanumeric characters.
 
 An identifier token a value token that is not `0`.
 
-## Grammar
+### Grammar
 ```ebnf
 module = [ uses ] , [ subroutines ] , ( library | program ) ;
 
@@ -86,7 +86,7 @@ A library module must have at least one `SUBROUTINE` definition.
 The names of the subroutines in the `SUBROUTINE` definitions must be
 unique within the module.
 
-## Library Modules
+### Library Modules
 A library module defines one or more subroutines and exports one or more
 subroutines.
 
@@ -97,7 +97,7 @@ more `SUBROUTINE` declarations.  The `LIBRARY` definition ends with an
 A `SUBROUTINE` declaration consists of the name of the subroutine to be
 exported, which must be defined in the module.
 
-## Program Modules
+### Program Modules
 A program module defines zero or more subroutines and the main program
 routine that is initially called when the program is executed.
 
@@ -112,7 +112,7 @@ The names of the parameters must be unique within the routine.
 When a routine is called, the statements are executed sequentially.  If
 the end of statements is reached, the routine returns.
 
-## Subroutines
+### Subroutines
 A `SUBROUTINE` definition is a routine definition.
 
 A subroutine may be called with any number of arguments.  If there are more
@@ -120,7 +120,7 @@ arguments than parameters, the excess arguments are discared.  If there are
 fewer arguments than parameters, the excess parameters are assigned with
 new nodes.
 
-## Program routines
+### Program routines
 A `PROGRAM` definition is a routine definition with no parameters and
 may not contain any `RETURN` statements.
 
@@ -144,7 +144,7 @@ should be garbage collected.
 
 Statements
 ----------
-## `LET` statements
+### `LET` statements
 There are three types of `LET` statements.
 1. `LET` *var* `=` *val*
 
@@ -159,7 +159,7 @@ There are three types of `LET` statements.
    to the node referenced by the variable, *var2*.  If there is no
    such edge, nothing is done.
 
-## `IF` statements
+### `IF` statements
 1. `IF` *condition*  
    *statements*  
    *else-branches*  
@@ -180,7 +180,7 @@ There are three types of `LET` statements.
    If the condition is not true, the next branch of *else-branches*,
    if any, is executed.
 
-## `CALL` statements
+### `CALL` statements
 There are two types of `CALL` statements.
 1. `CALL` *routine* `(` *arguments* `)`
 
@@ -194,14 +194,14 @@ Any number of arguments may be passed to the routine.  An argument can
 be a variable or `0`.  A variable is passed by reference.  A `0` argument
 is a new node.
 
-## `RETURN` statements
+### `RETURN` statements
 1. `RETURN`
 
    A `RETURN` statement returns execution to the subroutine's caller.
 
    `RETURN` statements are not allowed in a program routine.
 
-## `DO` statements
+### `DO` statements
 There are two types of `DO` statements.
 1. `DO` *var*  
    *statements*  
@@ -224,7 +224,7 @@ There are two types of `DO` statements.
    node referenced by *var2* nor by any assignements to *var2* in the
    body of the `DO` statement.
 
-## `EXIT` statements
+### `EXIT` statements
 1. `EXIT` *var*
 
    An `EXIT` statement exits the enclosing `DO` statement with the *var*,
