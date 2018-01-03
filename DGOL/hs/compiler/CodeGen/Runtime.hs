@@ -246,7 +246,7 @@ newNodeImpl = function newNodeName [(pFrameType,NoParameterName)] pNodeType (\ [
     sweepNodeEdgesArrayPtr <- gep sweepPage [intConst 32 0, intConst 32 1, sweepIndex, intConst 32 3]
     sweepNodeEdgesArray <- load sweepNodeEdgesArrayPtr 0
     sweepNodeEdgesRawPtr <- bitcast sweepNodeEdgesArray (ptr i8)
-    sweepNodeEdgesSizeofPtr <- gep (nullConst pNodeType) [sweepNodeEdgesSize]
+    sweepNodeEdgesSizeofPtr <- gep (nullConst ppNodeType) [sweepNodeEdgesSize]
     sweepNodeEdgesSizeof <- ptrtoint sweepNodeEdgesSizeofPtr i32
     call memset [sweepNodeEdgesRawPtr,intConst 8 0,sweepNodeEdgesSizeof,intConst 32 0,intConst 1 0]
     br sweepPageLoopNextIndex
