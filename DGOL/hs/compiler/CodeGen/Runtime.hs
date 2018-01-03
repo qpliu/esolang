@@ -534,6 +534,235 @@ removeEdgeImpl = function removeEdgeName [(pNodeType,NoParameterName),(pNodeType
     done <- block
     retVoid
 
+moveNodesName :: Name
+moveNodesName = "moveNodes"
+
+moveNodes :: Operand
+moveNodes = functionRef moveNodesName [pFrameType,i32,ppNodeType] void
+
+moveNodesImpl :: ModuleBuilder Operand
+moveNodesImpl = function moveNodesName [(pFrameType,NoParameterName),(i32,NoParameterName),(ppNodeType,NoParameterName)] void $ \ [frame,nodeCount,nodeArray] -> mdo
+    -- nodeCount is size of nodeArray
+    -- every other element of nodeArray is the node to be moved
+    -- interspersed with the node destination
+
+    -- first, move the actual nodes in the pages
+    entry <- block
+    initialPage <- gep globalState [intConst 32 0, intConst 32 1]
+    br moveActualNodesLoopLabel
+
+    moveActualNodesLoopLabel <- block
+    moveActualNodesIndex <- phi [(intConst 32 0,entry),(moveActualNodesNextIndex,moveActualNodesLoopBodyLabel)]
+    moveActualNodesIndexP1 <- add moveActualNodesIndex (intConst 32 1)
+    moveActualNodesNextIndex <- add moveActualNodesIndex (intConst 32 2)
+    moveActualNodesIndexCheck <- icmp uge moveActualNodesIndex nodeCount
+    condBr moveActualNodesIndexCheck pageLoopLabel moveActualNodesLoopBodyLabel
+
+    moveActualNodesLoopBodyLabel <- block
+    srcNodePtr <- gep nodeArray [moveActualNodesIndex]
+    srcNode <- load srcNodePtr 0
+    destNodePtr <- gep nodeArray [moveActualNodesIndexP1]
+    destNode <- load destNodePtr 0
+    call moveActualNode [srcNode,destNode]
+    br moveActualNodesLoopLabel
+
+    -- move the edges for all the nodes in all the pages
+    pageLoopLabel <- block
+    page <- phi [(initialPage,moveActualNodesLoopLabel),(nextPage,pageNodeLoopLabel)]
+    pageCheck <- icmp eq page (nullConst pPageType)
+    condBr pageCheck frameLoopLabel pageLoopBodyLabel
+
+    pageLoopBodyLabel <- block
+    nextPagePtr <- gep page [intConst 32 0,intConst 32 0]
+    nextPage <- load nextPagePtr 0
+    br pageNodeLoopLabel
+
+    pageNodeLoopLabel <- block
+    pageNodeIndex <- phi [(intConst 32 0,pageLoopLabel),(pageNodeNextIndex,pageNodeLoopBodyLabel),(pageNodeNextIndex,pageNodeMoveEdgesLabel)]
+    pageNodeNextIndex <- add pageNodeIndex (intConst 32 1)
+    pageNodeIndexCheck <- icmp uge pageNodeIndex (intConst 32 pageSize)
+    condBr pageNodeIndexCheck pageLoopLabel pageNodeLoopBodyLabel
+
+    pageNodeLoopBodyLabel <- block
+    pageNodeLivePtr <- gep page [intConst 32 0,intConst 32 1,pageNodeIndex,intConst 32 1]
+    pageNodeLive <- load pageNodeLivePtr 0
+    condBr pageNodeLive pageNodeMoveEdgesLabel pageNodeLoopLabel
+
+    pageNodeMoveEdgesLabel <- block
+    pageNodeEdgesArraySizePtr <- gep page [intConst 32 0,intConst 32 1,pageNodeIndex,intConst 32 2]
+    pageNodeEdgesArraySize <- load pageNodeEdgesArraySizePtr 0
+    pageNodeEdgesArrayPtr <- gep page [intConst 32 0,intConst 32 1,pageNodeIndex,intConst 32 3]
+    pageNodeEdgesArray <- load pageNodeEdgesArrayPtr 0
+    call moveNodeReferencesInEdgeArray [pageNodeEdgesArraySize,pageNodeEdgesArray,nodeCount,nodeArray]
+    br pageNodeLoopLabel
+
+    -- for each frame, move all the local variables, then all the edges
+    -- in all the doEdgesIterators
+    frameLoopLabel <- block
+    currentFrame <- phi [(frame,pageLoopLabel),(nextFrame,doEdgesLoopLabel)]
+    currentFrameCheck <- icmp eq currentFrame (nullConst pFrameType)
+    condBr currentFrameCheck doneLabel frameLoopBodyLabel
+
+    frameLoopBodyLabel <- block
+    nextFramePtr <- gep currentFrame [intConst 32 0,intConst 32 0]
+    nextFrame <- load nextFramePtr 0
+    varArraySizePtr <- gep currentFrame [intConst 32 0,intConst 32 1]
+    varArraySize <- load varArraySizePtr 0
+    varArrayPtr <- gep currentFrame [intConst 32 0,intConst 32 2]
+    varArray <- load varArrayPtr 0
+    call moveNodeReferencesInEdgeArray [varArraySize,varArray,nodeCount,nodeArray]
+    doEdgesArraySizePtr <- gep currentFrame [intConst 32 0,intConst 32 3]
+    doEdgesArraySize <- load doEdgesArraySizePtr 0
+    doEdgesArrayPtr <- gep currentFrame [intConst 32 0,intConst 32 4]
+    doEdgesArray <- load doEdgesArrayPtr 0
+    br doEdgesLoopLabel
+
+    doEdgesLoopLabel <- block
+    doEdgesIndex <- phi [(intConst 32 0,frameLoopBodyLabel),(doEdgesNextIndex,doEdgesLoopBodyLabel)]
+    doEdgesNextIndex <- add doEdgesIndex (intConst 32 1)
+    doEdgesIndexCheck <- icmp uge doEdgesIndex doEdgesArraySize
+    condBr doEdgesIndexCheck frameLoopLabel doEdgesLoopBodyLabel
+
+    doEdgesLoopBodyLabel <- block
+    doEdgesEdgesArraySizePtr <- gep doEdgesArray [doEdgesIndex,intConst 32 0]
+    doEdgesEdgesArraySize <- load doEdgesEdgesArraySizePtr 0
+    doEdgesEdgesArrayPtr <- gep doEdgesArray [doEdgesIndex,intConst 32 1]
+    doEdgesEdgesArray <- load doEdgesEdgesArrayPtr 0
+    call moveNodeReferencesInEdgeArray [doEdgesEdgesArraySize,doEdgesEdgesArray,nodeCount,nodeArray]
+    br doEdgesLoopLabel
+
+    doneLabel <- block
+    retVoid
+
+moveActualNodeName :: Name
+moveActualNodeName = "moveActualNode"
+
+moveActualNode :: Operand
+moveActualNode = functionRef moveActualNodeName [pNodeType,pNodeType] void
+
+moveActualNodeImpl :: ModuleBuilder Operand
+moveActualNodeImpl = function moveActualNodeName [(pNodeType,NoParameterName),(pNodeType,NoParameterName)] void $ \ [srcNode,destNode] -> mdo
+    srcLivePtr <- gep srcNode [intConst 32 0,intConst 32 1]
+    srcEdgeArraySizePtr <- gep srcNode [intConst 32 0,intConst 32 2]
+    srcEdgeArrayPtr <- gep srcNode [intConst 32 0,intConst 32 3]
+    destLivePtr <- gep srcNode [intConst 32 0,intConst 32 1]
+    destEdgeArraySizePtr <- gep srcNode [intConst 32 0,intConst 32 2]
+    destEdgeArrayPtr <- gep srcNode [intConst 32 0,intConst 32 3]
+    srcEdgeArraySize <- load srcEdgeArraySizePtr 0
+    srcEdgeArray <- load srcEdgeArrayPtr 0
+    destEdgeArraySize <- load destEdgeArraySizePtr 0
+    destEdgeArray <- load destEdgeArrayPtr 0
+    store srcLivePtr 0 (intConst 1 0)
+    store srcEdgeArraySizePtr 0 destEdgeArraySize
+    store srcEdgeArrayPtr 0 destEdgeArray
+    store destLivePtr 0 (intConst 1 1)
+    store destEdgeArraySizePtr 0 srcEdgeArraySize
+    store destEdgeArrayPtr 0 srcEdgeArray
+    retVoid
+
+moveNodeReferenceName :: Name
+moveNodeReferenceName = "moveNodeReference"
+
+moveNodeReference :: Operand
+moveNodeReference = functionRef moveNodeReferenceName [ppNodeType,i32,ppNodeType] void
+
+moveNodeReferenceImpl :: ModuleBuilder Operand
+moveNodeReferenceImpl = function moveNodeReferenceName [(ppNodeType,NoParameterName),(i32,NoParameterName),(ppNodeType,NoParameterName)] void $ \ [nodeReference,nodeCount,nodeArray] -> mdo
+    -- nodeCount is size of nodeArray
+    -- every other element of nodeArray is the node to be moved
+    -- interspersed with the node destination
+    entry <- block
+    node <- load nodeReference 0
+    nodeCheck <- icmp eq node (nullConst pNodeType)
+    condBr nodeCheck doneLabel nodeArrayLoopLabel
+
+    nodeArrayLoopLabel <- block
+    index <- phi [(intConst 32 0,entry),(nextIndex,nodeArrayLoopBodyLabel)]
+    nextIndex <- add index (intConst 32 2)
+    indexCheck <- icmp uge index nodeCount
+    condBr indexCheck doneLabel nodeArrayLoopBodyLabel
+
+    nodeArrayLoopBodyLabel <- block
+    srcNodePtr <- gep nodeArray [index]
+    srcNode <- load srcNodePtr 0
+    srcNodeCheck <- icmp eq srcNode node
+    condBr srcNodeCheck moveNodeLabel nodeArrayLoopLabel
+
+    moveNodeLabel <- block
+    indexP1 <- add index (intConst 32 1)
+    destNodePtr <- gep nodeArray [indexP1]
+    destNode <- load destNodePtr 0
+    store nodeReference 0 destNode
+    br doneLabel
+
+    doneLabel <- block
+    retVoid
+
+moveNodeReferencesInEdgeArrayName :: Name
+moveNodeReferencesInEdgeArrayName = "moveNodeReferencesInEdgeArrayName"
+
+moveNodeReferencesInEdgeArray :: Operand
+moveNodeReferencesInEdgeArray = functionRef moveNodeReferencesInEdgeArrayName [i32,ppNodeType,i32,ppNodeType] void
+
+moveNodeReferencesInEdgeArrayImpl :: ModuleBuilder Operand
+moveNodeReferencesInEdgeArrayImpl = function moveNodeReferencesInEdgeArrayName [(i32,NoParameterName),(ppNodeType,NoParameterName),(i32,NoParameterName),(ppNodeType,NoParameterName)] void $ \ [edgeCount,edgeArray,nodeCount,nodeArray] -> mdo
+    -- nodeCount is size of nodeArray
+    -- every other element of nodeArray is the node to be moved
+    -- interspersed with the node destination
+    entry <- block
+    br edgeLoopLabel
+
+    edgeLoopLabel <- block
+    index <- phi [(intConst 32 0,entry),(nextIndex,edgeLoopBodyLabel)]
+    indexCheck <- icmp uge index edgeCount
+    condBr indexCheck doneLabel edgeLoopBodyLabel
+
+    edgeLoopBodyLabel <- block
+    edgeReference <- gep edgeArray [index]
+    call moveNodeReference [edgeReference,nodeCount,nodeArray]
+    nextIndex <- add index (intConst 32 1)
+    br edgeLoopLabel
+
+    doneLabel <- block
+    retVoid
+
+freePageName :: Name
+freePageName = "freePage"
+
+freePage :: Operand
+freePage = functionRef freePageName [pFrameType,pFrameType] void
+
+freePageImpl :: ModuleBuilder Operand
+freePageImpl = function freePageName [(pPageType,NoParameterName),(pPageType,NoParameterName)] void $ \ [page,previousPage] -> mdo
+    entry <- block
+    nextPagePtr <- gep page [intConst 32 0,intConst 32 0]
+    nextPage <- load nextPagePtr 0
+    previousNextPagePtr <- gep previousPage [intConst 32 0,intConst 32 0]
+    store previousNextPagePtr 0 nextPage
+    br nodeLoopLabel
+
+    nodeLoopLabel <- block
+    index <- phi [(intConst 32 0,entry),(nextIndex,nodeLoopBodyLabel),(nextIndex,freeEdgesLabel)]
+    nextIndex <- add index (intConst 32 1)
+    indexCheck <- icmp uge index (intConst 32 pageSize)
+    condBr indexCheck doneLabel nodeLoopBodyLabel
+
+    nodeLoopBodyLabel <- block
+    edgesArrayPtr <- gep page [intConst 32 0,intConst 32 1,index,intConst 32 3]
+    edgesArray <- load edgesArrayPtr 0
+    edgesArrayCheck <- icmp eq edgesArray (nullConst ppNodeType)
+    condBr edgesArrayCheck nodeLoopLabel freeEdgesLabel
+
+    freeEdgesLabel <- block
+    edgesArrayRawPtr <- bitcast edgesArray (ptr i8)
+    call free [edgesArrayRawPtr]
+    br nodeLoopLabel
+
+    doneLabel <- block
+    pageRawPtr <- bitcast page (ptr i8)
+    call free [pageRawPtr]
+    retVoid
+
 memsetName :: Name
 memsetName = "llvm.memset.p0i8.i32"
 
@@ -591,6 +820,11 @@ runtimeDefs = do
     hasEdgeImpl
     addEdgeImpl
     removeEdgeImpl
+    moveNodesImpl
+    moveActualNodeImpl
+    moveNodeReferenceImpl
+    moveNodeReferencesInEdgeArrayImpl
+    freePageImpl
     traceDefs
     return ()
 
