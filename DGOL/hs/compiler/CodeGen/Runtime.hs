@@ -21,7 +21,7 @@ import LLVM.AST.Name(Name(UnName))
 import LLVM.AST.Operand(Operand)
 import LLVM.AST.Type(Type(StructureType),void,i1,i8,i32,elementTypes,ptr)
 import qualified LLVM.AST.Type
-import LLVM.IRBuilder.Instruction(add,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
+import LLVM.IRBuilder.Instruction(add,alloca,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function)
 import LLVM.IRBuilder.Monad(MonadIRBuilder,emitInstr,block)
 
@@ -799,7 +799,117 @@ compactImpl = function compactName [(pFrameType,NoParameterName)] void $ \ [fram
     condBr compactionEligibleCountCheck startCompactionCheckLabel doneLabel
 
     startCompactionCheckLabel <- block
+    initialPage <- gep globalState [intConst 32 0,intConst 32 1]
+    br compactionCheckLoopLabel
+
+    compactionCheckLoopLabel <- block
+    page <- phi [
+        (initialPage,startCompactionCheckLabel),
+        (nextPage,checkPageLabel),
+        (nextPage,pageEligibleLabel)
+        ]
+    previousPage <- phi [
+        (nullConst pPageType,startCompactionCheckLabel),
+        (page,checkPageLabel),
+        (page,pageEligibleLabel)
+        ]
+    targetPage <- phi [
+        (nullConst pPageType,startCompactionCheckLabel),
+        (targetPage,checkPageLabel),
+        (srcPage,pageEligibleLabel)
+        ]
+    targetLiveCount <- phi [
+        (intConst 32 0,startCompactionCheckLabel),
+        (targetLiveCount,checkPageLabel),
+        (srcLiveCount,pageEligibleLabel)
+        ]
+    srcPreviousPage <- phi [
+        (nullConst pPageType,startCompactionCheckLabel),
+        (srcPreviousPage,checkPageLabel),
+        (previousPage,pageEligibleLabel)
+        ]
+    srcPage <- phi [
+        (nullConst pPageType,startCompactionCheckLabel),
+        (srcPage,checkPageLabel),
+        (page,pageEligibleLabel)
+        ]
+    srcLiveCount <- phi [
+        (intConst 32 0,startCompactionCheckLabel),
+        (srcLiveCount,checkPageLabel),
+        (liveCount,pageEligibleLabel)
+        ]
+    stillEligibleCount <- phi [
+        (intConst 32 0,startCompactionCheckLabel),
+        (stillEligibleCount,checkPageLabel),
+        (incrementedStillEligibleCount,pageEligibleLabel)
+        ]
+    pageCheck <- icmp eq page (nullConst pPageType)
+    condBr pageCheck moveNodesCheckLabel countLiveLoopLabel
+
+    countLiveLoopLabel <- block
+    index <- phi [
+        (intConst 32 0,compactionCheckLoopLabel),
+        (nextIndex,checkNodeLabel),
+        (nextIndex,incrementLiveCountLabel)
+        ]
+    liveCount <- phi [
+        (intConst 32 0,compactionCheckLoopLabel),
+        (liveCount,checkNodeLabel),
+        (incrementedLiveCount,incrementLiveCountLabel)
+        ]
+    indexCheck <- icmp uge index (intConst 32 pageSize)
+    condBr indexCheck checkPageLabel checkNodeLabel
+
+    checkNodeLabel <- block
+    nextIndex <- add index (intConst 32 1)
+    livePtr <- gep page [intConst 32 0,intConst 32 1,index,intConst 32 1]
+    live <- load livePtr 0
+    condBr live incrementLiveCountLabel countLiveLoopLabel
+
+    incrementLiveCountLabel <- block
+    incrementedLiveCount <- add liveCount (intConst 32 1)
+    br countLiveLoopLabel
+
+    checkPageLabel <- block
+    nextPagePtr <- gep page [intConst 32 0,intConst 32 0]
+    nextPage <- load nextPagePtr 0
+    liveCountCheck <- icmp uge liveCount (intConst 32 pageCompactionThreshold)
+    condBr liveCountCheck compactionCheckLoopLabel pageEligibleLabel
+
+    pageEligibleLabel <- block
+    incrementedStillEligibleCount <- add stillEligibleCount (intConst 32 1)
+    br compactionCheckLoopLabel
+    
+    moveNodesCheckLabel <- block
+    targetPageCheck <- icmp eq targetPage (nullConst pPageType)
+    condBr targetPageCheck doneLabel initMoveNodesLabel
+
+    initMoveNodesLabel <- block
+    moveNodeCount <- add srcLiveCount srcLiveCount
+    moveNodeArray <- alloca pNodeType (Just moveNodeCount) 0
+    br collectMoveNodesLabel
+
+    collectMoveNodesLabel <- block
+    moveNodeIndex <- phi [
+        (intConst 32 0,initMoveNodesLabel)
+        ]
+    srcPageIndex <- phi [
+        (intConst 32 0,initMoveNodesLabel)
+        ]
+    targetPageIndex <- phi [
+        (intConst 32 0,initMoveNodesLabel)
+        ]
+    moveNodeIndexCheck <- icmp uge moveNodeIndex srcLiveCount
+    condBr moveNodeIndexCheck callMoveNodesLabel findLiveSrcPageIndexLabel
+
+    findLiveSrcPageIndexLabel <- block
+    -- ...
+    br callMoveNodesLabel
+
+    callMoveNodesLabel <- block
     -- ....
+    newStillEligibleCount <- sub stillEligibleCount (intConst 32 2) -- add one if srcLiveCount + targetLiveCount < pageCompactionThreshold
+    store compactionEligibleCountPtr 0 newStillEligibleCount
     br doneLabel
 
     doneLabel <- block
