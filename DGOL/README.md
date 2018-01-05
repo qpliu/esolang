@@ -294,8 +294,24 @@ See also
 
 * [Compiler to LLVM 5](hs/compiler)
 
-  Garbage collection scheme is the same as with the interpreter in Rust.
+  Garbage collection scheme is the same as with the interpreter in Rust,
+  except compacting is done when there are at least 2 sparsely populated
+  pages by moving all the live nodes from one to the other, then freeing
+  the empty page.
 
-  _TODO_: Implement a compacting garbage collector that moves nodes and
-  frees empty pages if there are multiple pages with 240 or more free
-  nodes.
+### Performance of implemenations
+The Haskell interpreter is very slow and was omitted.
+```
+bash$ ./hs/compiler/DGOLC -o /tmp/BF ./example/BRAINFUCK.DGOL -L=IO
+bash$ echo '--<-<<+[+[<+>--->->->-<<<]>]<<--.<++++++.<<-..<<.<+.>>.>>.<<<.+++.>>.>>-.<<<+.' | time /tmp/BF
+Hello, World!        0.31 real         0.31 user         0.00 sys
+bash$ echo '--<-<<+[+[<+>--->->->-<<<]>]<<--.<++++++.<<-..<<.<+.>>.>>.<<<.+++.>>.>>-.<<<+.' | time ./go/dgol ./example/BRAINFUCK.DGOL 
+Hello, World!        1.79 real         1.81 user         0.02 sys
+bash$ echo '--<-<<+[+[<+>--->->->-<<<]>]<<--.<++++++.<<-..<<.<+.>>.>>.<<<.+++.>>.>>-.<<<+.' | time ./c/dgol ./example/BRAINFUCK.DGOL 
+Hello, World!       69.51 real        69.46 user         0.03 sys
+bash$ echo '--<-<<+[+[<+>--->->->-<<<]>]<<--.<++++++.<<-..<<.<+.>>.>>.<<<.+++.>>.>>-.<<<+.' | time ./rs/target/debug/dgol ./example/BRAINFUCK.DGOL 
+Hello, World!       11.59 real        11.57 user         0.01 sys
+bash$ echo '--<-<<+[+[<+>--->->->-<<<]>]<<--.<++++++.<<-..<<.<+.>>.>>.<<<.+++.>>.>>-.<<<+.' | time ./rs/target/release/dgol ./example/BRAINFUCK.DGOL 
+Hello, World!        0.46 real         0.45 user         0.00 sys
+bash$ 
+```

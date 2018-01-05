@@ -36,4 +36,4 @@ TODO List
   - call llvm.dbg.addr (in prelude for each local variable)
   - call llvm.dbg.value (when doing LET assign)
 
-* Implement compacting garbage collector
+* ~~Implement compacting garbage collector~~

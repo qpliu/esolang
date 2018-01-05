@@ -122,6 +122,7 @@ The allocator and garbage collector state data structure is
 static struct {
     char gc_mark;
     struct page root_page;
+    int sparse_page_count;
 } allocator_and_garbage_collector_state;
 ```
 When allocating a new node, iterate over all the nodes in all the pages
@@ -145,10 +146,10 @@ Finally, if, after the sweep phase, there are less than 16 (of 256)
 nodes in the last page for which `live` is false, allocate a new
 page and add it to the end of the page list.
 
-Thoughts on a compacting collector
-----------------------------------
-Currently, the garbage collector runs when obtaining a new node.
-If compacting is done as part of that, then nodes can be moved, so
+Memory compaction
+-----------------
+The garbage collector runs when obtaining a new node.  If compacting
+were done as part of that, then nodes can be moved, so
 references to nodes that were loaded before the call to obtain the
 new node can become invalid.
 
@@ -161,10 +162,12 @@ cause allocator to run, which could cause the garbage collector to
 run.  If the one loaded second causes the first to be moved due
 to compacting, the first has to be reloaded.
 
-So instead of compacting after garbage collection, set a new flag
-in `allocator_and_garbage_collector_state` if compaction is
-warranted.  Then, check the flag at a safe point, say, when returning
-from a subroutine, and run the compactor if the flag is set.
+So instead of compacting after garbage collection, the garbage
+collector counts the number of sparse pages and stores it in
+`allocator_and_garbage_collector_state`, where a page is sparse if
+it has less than 16 live nodes.  Then, at a safe point, when
+returning from a subroutine, run the compactor if there are at
+least 2 sparse pages.
 
 ### Compactor algorithm
 If there are at least 2 pages with less than 16 live nodes, move all
