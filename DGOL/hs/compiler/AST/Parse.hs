@@ -19,7 +19,7 @@ import AST.AST(
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
     IfBranch(IfEq,IfEdge,IfElse),
     moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,
-    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,
+    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,routineEndSourceLineNumber,
     varName,varIsCallArg,
     ifBranchStmts)
 
@@ -81,10 +81,10 @@ makeProgram filename [] uses subroutines program externs = do
     checkExtern externs (lineNumber,extern@(externMod,_))
       | Set.member externMod uses = return $ Set.insert extern externs
       | otherwise = parseError lineNumber ("LIBRARY NOT DECLARED USED: " ++ externMod)
-    checkReturn (If ifBranches _) = mapM_ checkReturn $ concatMap ifBranchStmts ifBranches
+    checkReturn (If ifBranches _ _) = mapM_ checkReturn $ concatMap ifBranchStmts ifBranches
     checkReturn (Return lineNumber) = parseError lineNumber "INVALID RETURN"
-    checkReturn (DoLoop _ _ stmts _) = mapM_ checkReturn stmts
-    checkReturn (DoEdges _ _ _ stmts _) = mapM_ checkReturn stmts
+    checkReturn (DoLoop _ _ stmts _ _) = mapM_ checkReturn stmts
+    checkReturn (DoEdges _ _ _ stmts _ _) = mapM_ checkReturn stmts
     checkReturn _ = return ()
 
 parseUses :: Lines -> Either String (Set.Set String,Lines)
@@ -100,8 +100,8 @@ parseLibrary :: Lines -> Either String (Maybe (String,Map.Map String Integer),Li
 parseLibrary [] = eofError
 parseLibrary ((lineNumber,['L':'I':'B':'R':'A':'R':'Y':library]):lines) = do
     isIdent lineNumber library
-    exports <- parseLibraryExports lines Map.empty
-    lines <- nextLineIs lines $ "END" ++ library
+    (exports,lines) <- parseLibraryExports lines Map.empty
+    (_,lines) <- nextLineIs lines $ "END" ++ library
     return (Just (library,exports),lines)
   where
     parseLibraryExports [] _ = eofError
@@ -110,7 +110,7 @@ parseLibrary ((lineNumber,['L':'I':'B':'R':'A':'R':'Y':library]):lines) = do
       | otherwise = do        
         isIdent lineNumber export
         parseLibraryExports lines (Map.insert export lineNumber exports)
-    parseLibraryExports lines exports = return exports
+    parseLibraryExports lines exports = return (exports,lines)
 parseLibrary lines = return (Nothing,lines)
     
 parseProgram :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> Either String Module
@@ -158,7 +158,7 @@ parseRoutineBody lines name args lineNumber = runST $ do
     finalExterns <- readSTRef externsRef
     return $ do
         (args,(stmts,lines)) <- argsStmtsLines
-        lines <- nextLineIs lines ("END" ++ name)
+        (endLineNumber,lines) <- nextLineIs lines ("END" ++ name)
         return (Routine {
             routineName = name,
             routineArgs = map (\ arg -> arg { varIsCallArg = True }) args,
@@ -167,7 +167,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
             routineVarCount = (fromIntegral . Map.size) finalVarMap,
             routineDoEdgesCount = finalDoEdgesCount,
             routineCallArgsMaxCount = finalCallArgsMaxCount,
-            routineSourceLineNumber = lineNumber
+            routineSourceLineNumber = lineNumber,
+            routineEndSourceLineNumber = endLineNumber
             },finalExterns,lines)
   where
     parseRoutineStmts :: Lines -> STRef a (Map.Map String Var) -> STRef a Integer -> STRef a Integer -> STRef a [(String,Integer)] -> STRef a Integer -> STRef a Externs -> [String] -> ST a (Either String ([Var],([Statement],Lines)))
@@ -235,8 +236,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
         parseStmt ((lineNumber,token@('I':'F':_):tokens):lines) = do
             ifBranchesLines <- parseIfBranches ((lineNumber,("ELSE"++token):tokens):lines)
             return $ do
-                (ifBranches,lines) <- ifBranchesLines
-                return (Just $ If ifBranches lineNumber,lines)
+                (ifBranches,endLineNumber,lines) <- ifBranchesLines
+                return (Just $ If ifBranches lineNumber endLineNumber,lines)
         parseStmt ((lineNumber,('C':'A':'L':'L':mod):".":rout:"(":args):lines) = do
             modifySTRef externsRef ((lineNumber,(mod,rout)):)
             args <- return $ parseCallArgs lineNumber args
@@ -267,8 +268,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
             return $ do
                 arg <- arg
                 (stmts,lines) <- stmtsLines
-                lines <- nextLineIs lines "ENDDO"
-                return $ (Just $ DoLoop arg doIndex stmts lineNumber,lines)
+                (endLineNumber,lines) <- nextLineIs lines "ENDDO"
+                return $ (Just $ DoLoop arg doIndex stmts lineNumber endLineNumber,lines)
         parseStmt ((lineNumber,['D':'O':arg0,"<",arg1]):lines) = do
             doIndex <- readSTRef doIndicesRef
             modifySTRef doIndicesRef (+1)
@@ -283,8 +284,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 arg0 <- arg0
                 arg1 <- arg1
                 (stmts,lines) <- stmtsLines
-                lines <- nextLineIs lines "ENDDO"
-                return $ (Just $ DoEdges (arg0,arg1) doIndex doEdgesIndex stmts lineNumber,lines)
+                (endLineNumber,lines) <- nextLineIs lines "ENDDO"
+                return $ (Just $ DoEdges (arg0,arg1) doIndex doEdgesIndex stmts lineNumber endLineNumber,lines)
         parseStmt ((lineNumber,['E':'X':'I':'T':arg]):lines) = do
             doStack <- readSTRef doStackRef
             arg <- getVar lineNumber False arg
@@ -296,16 +297,16 @@ parseRoutineBody lines name args lineNumber = runST $ do
             exitStmt arg doIndex = return (Just $ Exit arg doIndex lineNumber,lines)
         parseStmt lines = return $ return (Nothing,lines)
 
-        -- parseIfBranches :: Lines -> ST a (Either String ([IfBranch],Lines))
+        -- parseIfBranches :: Lines -> ST a (Either String ([IfBranch],Integer,Lines))
         parseIfBranches [] = return eofError
-        parseIfBranches ((_,["ENDIF"]):lines) =
-            return $ return ([],lines)
+        parseIfBranches ((lineNumber,["ENDIF"]):lines) =
+            return $ return ([],lineNumber,lines)
         parseIfBranches ((lineNumber,["ELSE"]):lines) = do
             stmtsLines <- parseStmts lines
             return $ do
                 (stmts,lines) <- stmtsLines
-                lines <- nextLineIs lines "ENDIF"
-                return ([IfElse stmts lineNumber],lines)
+                (endLineNumber,lines) <- nextLineIs lines "ENDIF"
+                return ([IfElse stmts lineNumber],endLineNumber,lines)
         parseIfBranches ((lineNumber,['E':'L':'S':'E':'I':'F':arg0,"=",arg1]):lines) = do
             arg0 <- getVar lineNumber False arg0
             arg1 <- getVar lineNumber False arg1
@@ -316,8 +317,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 arg0 <- arg0
                 arg1 <- arg1
                 (stmts,_) <- stmtsLines
-                (ifBranches,lines) <- ifBranchesLines
-                return (IfEq (arg0,arg1) stmts lineNumber:ifBranches,lines)
+                (ifBranches,endLineNumber,lines) <- ifBranchesLines
+                return (IfEq (arg0,arg1) stmts lineNumber:ifBranches,endLineNumber,lines)
         parseIfBranches ((lineNumber,['E':'L':'S':'E':'I':'F':arg0,">",arg1]):lines) = do
             arg0 <- getVar lineNumber False arg0
             arg1 <- getVar lineNumber False arg1
@@ -328,8 +329,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 arg0 <- arg0
                 arg1 <- arg1
                 (stmts,_) <- stmtsLines
-                (ifBranches,lines) <- ifBranchesLines
-                return (IfEdge (arg0,arg1) stmts lineNumber:ifBranches,lines)
+                (ifBranches,endLineNumber,lines) <- ifBranchesLines
+                return (IfEdge (arg0,arg1) stmts lineNumber:ifBranches,endLineNumber,lines)
         parseIfBranches ((lineNumber,_):_) = return $ syntaxError lineNumber
 
 parseCallArgs :: Integer -> [String] -> Either String [String]
@@ -340,10 +341,10 @@ parseCallArgs lineNumber (arg:",":args) = do
     return $ arg:args
 parseCallArgs lineNumber _ = syntaxError lineNumber
 
-nextLineIs :: Lines -> String -> Either String Lines
+nextLineIs :: Lines -> String -> Either String (Integer,Lines)
 nextLineIs [] str = eofError
 nextLineIs ((lineNumber,line):lines) str
-  | line == [str] = return lines
+  | line == [str] = return (lineNumber,lines)
   | otherwise = syntaxError lineNumber
 
 isIdent :: Integer -> String -> Either String ()

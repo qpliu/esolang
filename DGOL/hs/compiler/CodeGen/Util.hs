@@ -3,6 +3,7 @@ module CodeGen.Util(
     functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
     GlobalStrzTable(GlobalStrzTable),globalStrz,globalStrzAsI8Ptr,globalStrzDefs,
     call,
+    fileMetadata,subprogramMetadata,lineNumberMetadata
 )
 where
 
@@ -11,16 +12,18 @@ import Data.Char(ord)
 import Data.String(fromString)
 import Data.Word(Word32)
 
-import LLVM.AST(Definition(GlobalDefinition))
+import LLVM.AST(Definition(GlobalDefinition,MetadataNodeDefinition))
 import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,integerBits,integerValue,memberType,memberValues)
 import LLVM.AST.Global(Parameter(Parameter),initializer,name,parameters,returnType,type',globalVariableDefaults,functionDefaults)
+import LLVM.AST.Instruction(Named(Do,(:=)),metadata,metadata')
 import LLVM.AST.Name(Name)
-import LLVM.AST.Operand(Operand(ConstantOperand))
+import LLVM.AST.Operand(Metadata(MDString,MDNode,MDValue),MetadataNode(MetadataNode,MetadataNodeReference),MetadataNodeID(MetadataNodeID),Operand(ConstantOperand))
 import qualified LLVM.AST.IntegerPredicate
 import LLVM.AST.Type(Type(ArrayType,FunctionType),i8,ptr,resultType,argumentTypes,isVarArg,nArrayElements,elementType)
 import qualified LLVM.IRBuilder.Instruction
+import LLVM.IRBuilder.Internal.SnocList(SnocList(SnocList))
 import LLVM.IRBuilder.Module(MonadModuleBuilder,emitDefn)
-import LLVM.IRBuilder.Monad(MonadIRBuilder)
+import LLVM.IRBuilder.Monad(MonadIRBuilder,PartialBlock(PartialBlock),modifyBlock)
 
 eq :: LLVM.AST.IntegerPredicate.IntegerPredicate
 eq = LLVM.AST.IntegerPredicate.EQ
@@ -97,3 +100,53 @@ globalStrzType str = ArrayType {
 
 call :: MonadIRBuilder m => Operand -> [Operand] -> m Operand
 call f args = LLVM.IRBuilder.Instruction.call f (map (flip (,) []) args)
+
+fileMetadata :: MonadModuleBuilder m => String -> m (MetadataNodeID,MetadataNodeID)
+fileMetadata filename = do
+    let fileMetadataNodeID = MetadataNodeID 0
+    let nextMetadataNodeID = MetadataNodeID 1
+    emitDefn $ MetadataNodeDefinition fileMetadataNodeID (map Just [
+        MDString (fromString "DIFile"),
+        MDString (fromString "filename"),
+        MDString (fromString filename)
+        ])
+    return (fileMetadataNodeID,nextMetadataNodeID)
+
+subprogramMetadata :: MonadModuleBuilder m => MetadataNodeID -> MetadataNodeID -> String -> Integer -> m MetadataNodeID
+subprogramMetadata fileMetadataNodeID metadataNodeID@(MetadataNodeID nodeIDNum) name lineNumber = do
+    emitDefn $ MetadataNodeDefinition metadataNodeID (map Just [
+        MDString (fromString "DISubprogram"),
+        MDString (fromString "name"),
+        MDString (fromString name),
+        MDString (fromString "file"),
+        MDNode $ MetadataNodeReference fileMetadataNodeID,
+        MDString (fromString "line"),
+        MDString (fromString $ show lineNumber)
+        ])
+    return $ MetadataNodeID $ nodeIDNum + 1
+
+lineNumberMetadata :: MonadIRBuilder m => m a -> (MetadataNodeID,Integer) -> m a
+lineNumberMetadata a (subprogramMetadataID,lineNumber) = do
+    a <- a
+    modifyBlock attachMetadata
+    return a
+  where
+    attachMetadata (PartialBlock name insns (Just term)) =
+        PartialBlock name insns (Just (attachMdTerm term))
+    attachMetadata (PartialBlock name (SnocList (insn:insns)) Nothing) =
+        PartialBlock name (SnocList (attachMdInsn insn:insns)) Nothing
+    attachMetadata partialBlock = partialBlock
+    attachMdTerm (name := term) = name := term { metadata' = dbg }
+    attachMdTerm (Do term) = Do term { metadata' = dbg }
+    attachMdInsn (name := insn) = name := insn { metadata = dbg }
+    attachMdInsn (Do insn) = Do insn { metadata = dbg }
+    dbg = [
+        (fromString "dbg",
+         MetadataNode (map Just [
+            MDString (fromString "DILocation"),
+            MDString (fromString "scope"),
+            MDNode $ MetadataNodeReference subprogramMetadataID,
+            MDString (fromString "line"),
+            MDString (fromString $ show lineNumber)
+            ]))
+        ]

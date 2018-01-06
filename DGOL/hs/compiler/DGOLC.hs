@@ -167,3 +167,9 @@ p :: FilePath -> IO ()
 p file = do
     src <- readFile file
     print $ parse file src
+
+m :: [String] -> FilePath -> IO LLVM.AST.Module
+m libs file = do
+    src <- readFile file
+    ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file src
+    return $ buildModule (fromString $ takeFileName file) (codeGen ast libs)

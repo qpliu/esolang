@@ -6,9 +6,9 @@ module AST.AST(
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
     IfBranch(IfEq,IfEdge,IfElse),
     moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,
-    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,
+    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,routineEndSourceLineNumber,
     varName,varIndex,varIsCallArg,
-    stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,stmtSourceLineNumber,
+    stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,stmtSourceLineNumber,stmtEndSourceLineNumber,
     ifBranchVars,ifBranchStmts,ifBranchSourceLineNumber
 )
 where
@@ -37,7 +37,8 @@ data Routine = Routine {
     routineVarCount :: Integer,
     routineDoEdgesCount :: Integer,
     routineCallArgsMaxCount :: Integer,
-    routineSourceLineNumber :: Integer
+    routineSourceLineNumber :: Integer,
+    routineEndSourceLineNumber :: Integer
     }
     deriving Show
 
@@ -68,7 +69,8 @@ data Statement =
         }
   | If {
         stmtIfBranches :: [IfBranch],
-        stmtSourceLineNumber :: Integer
+        stmtSourceLineNumber :: Integer,
+        stmtEndSourceLineNumber :: Integer
         }
   | Call {
         stmtCallTarget :: (Maybe String,String),
@@ -82,14 +84,16 @@ data Statement =
         stmtVar :: Var,
         stmtDoIndex :: Integer,
         stmtStmts :: [Statement],
-        stmtSourceLineNumber :: Integer
+        stmtSourceLineNumber :: Integer,
+        stmtEndSourceLineNumber :: Integer
         }
   | DoEdges {
         stmtVars :: (Var,Var),
         stmtDoIndex :: Integer,
         stmtDoEdgesIndex :: Integer,
         stmtStmts :: [Statement],
-        stmtSourceLineNumber :: Integer
+        stmtSourceLineNumber :: Integer,
+        stmtEndSourceLineNumber :: Integer
         }
   | Exit {
         stmtVar :: Var,
