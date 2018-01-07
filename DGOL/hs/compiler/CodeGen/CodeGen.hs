@@ -40,40 +40,40 @@ import CodeGen.Util(
     intConst,nullConst,
     functionRef,
     call,
-    fileMetadata,subprogramMetadata,lineNumberMetadata)
+    debugMetadata,subprogramMetadata,lineNumberMetadata)
 
 
 codeGen :: Module -> [String] -> ModuleBuilder ()
-codeGen (Library name subroutines externs srcFileName) _ = do
-    (fileMetadataID,nextNodeID) <- fileMetadata srcFileName
+codeGen (Library name subroutines externs srcFileName srcDir) _ = do
+    (fileMetadataID,compileUnitMetadataID,nextNodeID) <- debugMetadata srcFileName srcDir
     runtimeDecls
     mapM_ (declareExtern []) externs
-    foldM_ (defineSubroutine fileMetadataID name) nextNodeID subroutines
+    foldM_ (defineSubroutine fileMetadataID compileUnitMetadataID name) nextNodeID subroutines
     mapM_ (defineExportedSubroutine name) subroutines
     return ()
-codeGen (Program name subroutines program externs srcFileName) libs = do
-    (fileMetadataID,nextNodeID) <- fileMetadata srcFileName
+codeGen (Program name subroutines program externs srcFileName srcDir) libs = do
+    (fileMetadataID,compileUnitMetadataID,nextNodeID) <- debugMetadata srcFileName srcDir
     runtimeDefs
     libs <- foldM defineLibs [] libs
     mapM_ (declareExtern libs) externs
-    nextNodeID <- foldM (defineSubroutine fileMetadataID name) nextNodeID subroutines
-    defineMain fileMetadataID nextNodeID program
+    nextNodeID <- foldM (defineSubroutine fileMetadataID compileUnitMetadataID name) nextNodeID subroutines
+    defineMain fileMetadataID compileUnitMetadataID nextNodeID program
     return ()
 
-declareExtern :: [String] -> (String,String) -> ModuleBuilder Operand
+declareExtern :: [String] -> (String,String) -> ModuleBuilder ()
 declareExtern libs (mod,rout)
-  | elem mod libs =
-        return $ nullConst void
-  | otherwise =
+  | elem mod libs = return ()
+  | otherwise = do
         extern (fromString (mod ++ "." ++ rout)) [pFrameType] void
+        return ()
 
 defineLibs :: [String] -> String -> ModuleBuilder [String]
 defineLibs libs lib =
     maybe (return libs) (>> return (lib:libs)) (dgolLibDefs lib)
 
-defineSubroutine :: MetadataNodeID -> String -> MetadataNodeID -> Routine -> ModuleBuilder MetadataNodeID
-defineSubroutine fileMetadataID moduleName metadataNodeID routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
-    nextMetadataNodeID <- subprogramMetadata fileMetadataID metadataNodeID (moduleName ++ "." ++ name) lineNumber
+defineSubroutine :: MetadataNodeID -> MetadataNodeID -> String -> MetadataNodeID -> Routine -> ModuleBuilder MetadataNodeID
+defineSubroutine fileMetadataID compileUnitMetadataID moduleName metadataNodeID routine@(Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
+    let varCount = length vars
     function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
         (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID routine callerFrame entryLabel (varCount > 1)
         entryLabel <- block
@@ -87,25 +87,28 @@ defineSubroutine fileMetadataID moduleName metadataNodeID routine@(Routine name 
             callerCallArgsCount <- load callerCallArgsCountPtr 0
             return (callerCallArgsCount,callerCallArgsArray)
         codeGenStmts metadataNodeID moduleName frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
+    nextMetadataNodeID <- subprogramMetadata fileMetadataID compileUnitMetadataID metadataNodeID (moduleName ++ "." ++ name) lineNumber
     return nextMetadataNodeID
 
-defineExportedSubroutine :: String -> Routine -> ModuleBuilder Operand
+defineExportedSubroutine :: String -> Routine -> ModuleBuilder ()
 defineExportedSubroutine moduleName (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber)
-  | not exported =
-        return $ nullConst void
-  | otherwise = function (routineName True moduleName name) [(pFrameType,NoParameterName)] void $ \ [frame] -> do
-        call (routineRef moduleName Nothing name) [frame]
-        retVoid
+  | not exported = return ()
+  | otherwise = do
+        function (routineName True moduleName name) [(pFrameType,NoParameterName)] void $ \ [frame] -> do
+            call (routineRef moduleName Nothing name) [frame]
+            retVoid
+        return ()
 
-defineMain :: MetadataNodeID -> MetadataNodeID -> Routine -> ModuleBuilder Operand
-defineMain fileMetadataID metadataNodeID routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
-    subprogramMetadata fileMetadataID metadataNodeID name lineNumber
+defineMain :: MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> Routine -> ModuleBuilder ()
+defineMain fileMetadataID compileUnitMetadataID metadataNodeID routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
     function (fromString "main") [] void $ \ _ -> mdo
         (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID routine (nullConst pFrameType) entryLabel False
         entryLabel <- block
         let callerCallArgsArray = nullConst pppNodeType
         let callerCallArgsCount = intConst 32 0
         codeGenStmts metadataNodeID name frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
+    subprogramMetadata fileMetadataID compileUnitMetadataID metadataNodeID name lineNumber
+    return ()
 
 routineName :: Bool -> String -> String -> Name
 routineName exported mod rout =
@@ -116,7 +119,8 @@ routineRef mod maybeMod rout =
     functionRef (maybe (routineName False mod) (routineName True) maybeMod $ rout) [pFrameType] void
 
 functionPrologue :: (MonadIRBuilder m, MonadFix m) => MetadataNodeID -> Routine -> Operand -> Name -> Bool -> m (Operand,Operand,Operand,Operand,Operand,Name)
-functionPrologue subprogramMetadataID (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) callerFrame entryLabel doCompactCall = do
+functionPrologue subprogramMetadataID (Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) callerFrame entryLabel doCompactCall = mdo
+    let varCount = fromIntegral $ length vars
     frame <- alloca frameType Nothing 0
 
     callerFramePtr <- gep frame [intConst 32 0,intConst 32 0]
@@ -170,6 +174,9 @@ functionPrologue subprogramMetadataID (Routine name args stmts exported varCount
     br entryLabel
 
     exitLabel <- block
+    br doExitCleanupLabel `lineNumberMetadata` (subprogramMetadataID,endLineNumber)
+
+    doExitCleanupLabel <- block
     mapM_ (\ doEdgesIndex -> mdo
         edgesArrayPtr <- gep doEdgesArray [intConst 32 doEdgesIndex,intConst 32 1]
         edgesArray <- load edgesArrayPtr 0
@@ -190,7 +197,7 @@ functionPrologue subprogramMetadataID (Routine name args stmts exported varCount
         return ()
       else do
         return ()
-    retVoid `lineNumberMetadata` (subprogramMetadataID,endLineNumber)
+    retVoid
 
     return (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel)
 
@@ -252,13 +259,13 @@ codeGenStmts subprogramMetadataID moduleName frame varArray doEdgesArray callArg
         return $ any (hasExit doIndex) stmts
     codeGenStmt doStack _ (DoEdges (var0,var1) doIndex doEdgesIndex stmts lineNumber endLineNumber) = mdo
         trace lineNumber "%d: DO<\n"
-        (var0Ptr,var1EdgesSize,edgesArray) <- setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel
+        (var0Ptr,var1EdgesSize,edgesArray) <- setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel lineNumber
 
         initLoopLabel <- block
         br loopLabel
 
         loopLabel <- block
-        loopIndex <- phi [(intConst 32 0,initLoopLabel),(nextLoopIndex,loopIterateLabel)] `lineNumberMetadata` (subprogramMetadataID,lineNumber)
+        loopIndex <- phi [(intConst 32 0,initLoopLabel),(nextLoopIndex,loopIterateLabel)]
         loopIndexCheck <- icmp uge loopIndex var1EdgesSize
         condBr loopIndexCheck exitLoopLabel loopLabel2
 
@@ -321,6 +328,9 @@ codeGenStmts subprogramMetadataID moduleName frame varArray doEdgesArray callArg
         return ()
     codeGenIfBranch doStack exitIfLabel (IfElse stmts lineNumber) = mdo
         trace lineNumber "%d: ELSE\n"
+        br elseLabel `lineNumberMetadata` (subprogramMetadataID,lineNumber)
+
+        elseLabel <- block
         fellThru <- foldM (codeGenStmt doStack) True stmts
         return ()
 
@@ -335,10 +345,12 @@ codeGenStmts subprogramMetadataID moduleName frame varArray doEdgesArray callArg
 
     getVarPtr :: (MonadIRBuilder m, MonadFix m) => Var -> Maybe Integer -> m Operand
     getVarPtr (Var _ index isCallArg) maybeLineNumber
-      | not isCallArg =
-            gep varArray [intConst 32 index]
+      | not isCallArg = do
+            var <- gep varArray [intConst 32 index]
+            maybe (return var) (lineNumberMetadata (return var) . (,) subprogramMetadataID) maybeLineNumber
       | otherwise = mdo
             callerCallArgsCountCheck <- icmp uge (intConst 32 index) callerCallArgsCount
+            maybe (return ()) (lineNumberMetadata (return ()) . (,) subprogramMetadataID) maybeLineNumber
             condBr callerCallArgsCountCheck localPtrLabel checkCallerArgLabel
 
             checkCallerArgLabel <- block
@@ -359,7 +371,7 @@ codeGenStmts subprogramMetadataID moduleName frame varArray doEdgesArray callArg
         br getVarLabel
 
         getVarLabel <- block
-        varPtr <- getVarPtr var Nothing
+        varPtr <- getVarPtr var maybeLineNumber
         br getVarNullCheckLabel
 
         getVarNullCheckLabel <- block
@@ -379,9 +391,9 @@ codeGenStmts subprogramMetadataID moduleName frame varArray doEdgesArray callArg
     getVal NewVal = call newNode [frame]
     getVal (Val var) = getVar var Nothing
 
-    setupDoEdges :: (MonadIRBuilder m, MonadFix m) => Var -> Var -> Integer -> Name -> Name -> m (Operand,Operand,Operand)
-    setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel = mdo
-        var0Ptr <- getVarPtr var0 Nothing
+    setupDoEdges :: (MonadIRBuilder m, MonadFix m) => Var -> Var -> Integer -> Name -> Name -> Integer -> m (Operand,Operand,Operand)
+    setupDoEdges var0 var1 doEdgesIndex initLoopLabel exitLoopLabel lineNumber = mdo
+        var0Ptr <- getVarPtr var0 (Just lineNumber)
         node1 <- getVar var1 Nothing
         node1EdgesSizePtr <- gep node1 [intConst 32 0,intConst 32 2]
         node1EdgesSize <- load node1EdgesSizePtr 0

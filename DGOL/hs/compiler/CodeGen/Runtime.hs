@@ -718,7 +718,7 @@ moveNodeReferenceImpl = function moveNodeReferenceName [(ppNodeType,NoParameterN
     retVoid
 
 moveNodeReferencesInEdgeArrayName :: Name
-moveNodeReferencesInEdgeArrayName = "moveNodeReferencesInEdgeArrayName"
+moveNodeReferencesInEdgeArrayName = "moveNodeReferencesInEdgeArray"
 
 moveNodeReferencesInEdgeArray :: Operand
 moveNodeReferencesInEdgeArray = functionRef moveNodeReferencesInEdgeArrayName [i32,ppNodeType,i32,ppNodeType] void

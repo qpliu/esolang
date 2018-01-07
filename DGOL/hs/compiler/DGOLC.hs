@@ -2,7 +2,7 @@ import Control.Exception(Exception,catch,displayException,throwIO)
 import Control.Monad(foldM)
 import qualified Data.ByteString
 import Data.String(fromString)
-import System.Directory(removeFile,getTemporaryDirectory)
+import System.Directory(removeFile,getCurrentDirectory,getTemporaryDirectory)
 import System.Environment(getArgs,getProgName)
 import System.Exit(exitFailure)
 import System.FilePath(combine,replaceExtension,takeExtension,takeFileName)
@@ -27,7 +27,8 @@ instance Exception CompileException where
 dgolFileToModule :: [String] -> Context -> FilePath -> (Module -> IO a) -> IO a
 dgolFileToModule libs context file process = do
     src <- readFile file
-    ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file src
+    dir <- getCurrentDirectory
+    ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file dir src
     let mbuilder = codeGen ast libs
     let mod = buildModule (fromString $ takeFileName file) mbuilder
     withModuleFromAST context mod { LLVM.AST.moduleSourceFileName = fromString file } process
@@ -166,10 +167,12 @@ ll libs file = do
 p :: FilePath -> IO ()
 p file = do
     src <- readFile file
-    print $ parse file src
+    dir <- getCurrentDirectory
+    print $ parse file dir src
 
 m :: [String] -> FilePath -> IO LLVM.AST.Module
 m libs file = do
     src <- readFile file
-    ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file src
+    dir <- getCurrentDirectory
+    ast <- either (throwIO . CompileException . (file++) . (':':)) return $ parse file dir src
     return $ buildModule (fromString $ takeFileName file) (codeGen ast libs)

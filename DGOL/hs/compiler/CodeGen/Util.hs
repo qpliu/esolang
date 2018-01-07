@@ -3,7 +3,7 @@ module CodeGen.Util(
     functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
     GlobalStrzTable(GlobalStrzTable),globalStrz,globalStrzAsI8Ptr,globalStrzDefs,
     call,
-    fileMetadata,subprogramMetadata,lineNumberMetadata
+    debugMetadata,subprogramMetadata,lineNumberMetadata
 )
 where
 
@@ -12,7 +12,7 @@ import Data.Char(ord)
 import Data.String(fromString)
 import Data.Word(Word32)
 
-import LLVM.AST(Definition(GlobalDefinition,MetadataNodeDefinition))
+import LLVM.AST(Definition(GlobalDefinition,MetadataNodeDefinition,NamedMetadataDefinition))
 import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,integerBits,integerValue,memberType,memberValues)
 import LLVM.AST.Global(Parameter(Parameter),initializer,name,parameters,returnType,type',globalVariableDefaults,functionDefaults)
 import LLVM.AST.Instruction(Named(Do,(:=)),metadata,metadata')
@@ -101,29 +101,58 @@ globalStrzType str = ArrayType {
 call :: MonadIRBuilder m => Operand -> [Operand] -> m Operand
 call f args = LLVM.IRBuilder.Instruction.call f (map (flip (,) []) args)
 
-fileMetadata :: MonadModuleBuilder m => String -> m (MetadataNodeID,MetadataNodeID)
-fileMetadata filename = do
-    let fileMetadataNodeID = MetadataNodeID 0
-    let nextMetadataNodeID = MetadataNodeID 1
+debugMetadata :: MonadModuleBuilder m => FilePath -> FilePath -> m (MetadataNodeID,MetadataNodeID,MetadataNodeID)
+debugMetadata filename directory = do
+    let nodeIDNum = 0
+    let dwarfVersionNodeID = MetadataNodeID nodeIDNum
+    let debugVersionNodeID = MetadataNodeID (nodeIDNum + 1)
+    let fileMetadataNodeID = MetadataNodeID (nodeIDNum + 2)
+    let compileUnitMetadataNodeID = MetadataNodeID (nodeIDNum + 3)
+    let nextMetadataNodeID = MetadataNodeID (nodeIDNum + 4)
+    emitDefn $ MetadataNodeDefinition dwarfVersionNodeID (map Just [
+        MDValue (intConst 32 2),
+        MDString (fromString "Dwarf Version"),
+        MDValue (intConst 32 2)
+        ])
+    emitDefn $ MetadataNodeDefinition debugVersionNodeID (map Just [
+        MDValue (intConst 32 2),
+        MDString (fromString "Debug Info Version"),
+        MDValue (intConst 32 3)
+        ])
+    emitDefn $ NamedMetadataDefinition (fromString "TODO.llvm.dbg.cu") [compileUnitMetadataNodeID]
+    emitDefn $ NamedMetadataDefinition (fromString "llvm.module.flags") [dwarfVersionNodeID,debugVersionNodeID]
     emitDefn $ MetadataNodeDefinition fileMetadataNodeID (map Just [
         MDString (fromString "DIFile"),
         MDString (fromString "filename"),
-        MDString (fromString filename)
+        MDString (fromString filename),
+        MDString (fromString "directory"),
+        MDString (fromString directory)
         ])
-    return (fileMetadataNodeID,nextMetadataNodeID)
+    emitDefn $ MetadataNodeDefinition compileUnitMetadataNodeID (map Just [
+        MDString (fromString "distinct"),
+        MDString (fromString "DICompileUnit"),
+        MDString (fromString "language"),
+        MDString (fromString "DW_LANG_C99"),
+        MDString (fromString "file"),
+        MDNode $ MetadataNodeReference fileMetadataNodeID
+        ])
+    return (fileMetadataNodeID,compileUnitMetadataNodeID,nextMetadataNodeID)
 
-subprogramMetadata :: MonadModuleBuilder m => MetadataNodeID -> MetadataNodeID -> String -> Integer -> m MetadataNodeID
-subprogramMetadata fileMetadataNodeID metadataNodeID@(MetadataNodeID nodeIDNum) name lineNumber = do
+subprogramMetadata :: MonadModuleBuilder m => MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> String -> Integer -> m MetadataNodeID
+subprogramMetadata fileMetadataNodeID compileUnitMetadataNodeID metadataNodeID@(MetadataNodeID nodeIDNum) name lineNumber = do
     emitDefn $ MetadataNodeDefinition metadataNodeID (map Just [
+        MDString (fromString "distinct"),
         MDString (fromString "DISubprogram"),
         MDString (fromString "name"),
         MDString (fromString name),
         MDString (fromString "file"),
         MDNode $ MetadataNodeReference fileMetadataNodeID,
+        MDString (fromString "unit"),
+        MDNode $ MetadataNodeReference compileUnitMetadataNodeID,
         MDString (fromString "line"),
         MDString (fromString $ show lineNumber)
         ])
-    return $ MetadataNodeID $ nodeIDNum + 1
+    return $ MetadataNodeID (nodeIDNum + 1)
 
 lineNumberMetadata :: MonadIRBuilder m => m a -> (MetadataNodeID,Integer) -> m a
 lineNumberMetadata a (subprogramMetadataID,lineNumber) = do
@@ -141,7 +170,7 @@ lineNumberMetadata a (subprogramMetadataID,lineNumber) = do
     attachMdInsn (name := insn) = name := insn { metadata = dbg }
     attachMdInsn (Do insn) = Do insn { metadata = dbg }
     dbg = [
-        (fromString "dbg",
+        (fromString "TODO.dbg",
          MetadataNode (map Just [
             MDString (fromString "DILocation"),
             MDString (fromString "scope"),

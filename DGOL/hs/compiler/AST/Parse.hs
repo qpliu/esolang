@@ -6,7 +6,7 @@ where
 import Control.Monad(foldM,foldM_)
 import Control.Monad.ST(ST,runST)
 import Data.Char(isAlphaNum,isSpace)
-import Data.List(groupBy)
+import Data.List(groupBy,sortBy)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.STRef(STRef,modifySTRef,newSTRef,readSTRef,writeSTRef)
@@ -18,13 +18,13 @@ import AST.AST(
     Val(Val,NewVal),
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
     IfBranch(IfEq,IfEdge,IfElse),
-    moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,
-    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,routineEndSourceLineNumber,
+    moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,moduleSourceDirectory,
+    routineName,routineArgs,routineStmts,routineExported,routineVars,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,routineEndSourceLineNumber,
     varName,varIsCallArg,
     ifBranchStmts)
 
-parse :: FilePath -> String -> Either String Module
-parse filename src = parseModule filename $ filter (not . null . snd) $ map (fmap (tokenize . stripSpaces)) $ zip [1..] $ lines src
+parse :: FilePath -> FilePath -> String -> Either String Module
+parse filename directory src = parseModule filename directory $ filter (not . null . snd) $ map (fmap (tokenize . stripSpaces)) $ zip [1..] $ lines src
   where
     stripSpaces line = filter (not . isSpace) $ takeWhile (/= '*') line
     tokenize str = groupBy areAlphaNum str
@@ -32,27 +32,28 @@ parse filename src = parseModule filename $ filter (not . null . snd) $ map (fma
 
 type Lines = [(Integer,[String])]
 
-parseModule :: FilePath -> Lines -> Either String Module
-parseModule filename lines = do
+parseModule :: FilePath -> FilePath -> Lines -> Either String Module
+parseModule filename directory lines = do
     (uses,lines) <- parseUses lines
     (subroutines,externs,lines) <- parseSubroutines lines
     (maybeExports,lines) <- parseLibrary lines
-    maybe (parseProgram filename lines uses subroutines externs)
-          (makeLibrary filename lines uses subroutines externs) maybeExports
+    maybe (parseProgram filename directory lines uses subroutines externs)
+          (makeLibrary filename directory lines uses subroutines externs) maybeExports
 
 type Externs = [(Integer,(String,String))]
 
-makeLibrary :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> (String,Map.Map String Integer) -> Either String Module
-makeLibrary filename ((lineNumber,_):_) uses subroutines externs (name,exports) = do
+makeLibrary :: FilePath -> FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> (String,Map.Map String Integer) -> Either String Module
+makeLibrary filename directory ((lineNumber,_):_) uses subroutines externs (name,exports) = do
     parseError lineNumber "TRAILING JUNK"
-makeLibrary filename [] uses subroutines externs (name,exports) = do
+makeLibrary filename directory [] uses subroutines externs (name,exports) = do
     mapM_ checkExport $ Map.toList exports
     externs <- foldM checkExtern Set.empty externs
     return Library {
         moduleName = name,
         moduleSubroutines = (map markExport . Map.elems) subroutines,
         moduleExterns = Set.toList externs,
-        moduleSourceFileName = filename
+        moduleSourceFileName = filename,
+        moduleSourceDirectory = directory
         }
   where
     checkExport (export,lineNumber)
@@ -64,10 +65,10 @@ makeLibrary filename [] uses subroutines externs (name,exports) = do
     markExport routine =
         routine { routineExported = Map.member (routineName routine) exports }
 
-makeProgram :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Routine -> Externs -> Either String Module
-makeProgram filename ((lineNumber,_):_) uses subroutines program externs = do
+makeProgram :: FilePath -> FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Routine -> Externs -> Either String Module
+makeProgram filename directory ((lineNumber,_):_) uses subroutines program externs = do
     parseError lineNumber "TRAILING JUNK"
-makeProgram filename [] uses subroutines program externs = do
+makeProgram filename directory [] uses subroutines program externs = do
     externs <- foldM checkExtern Set.empty externs
     mapM_ checkReturn $ routineStmts program
     return Program {
@@ -75,7 +76,8 @@ makeProgram filename [] uses subroutines program externs = do
         moduleSubroutines = Map.elems subroutines,
         moduleProgram = program,
         moduleExterns = Set.toList externs,
-        moduleSourceFileName = filename
+        moduleSourceFileName = filename,
+        moduleSourceDirectory = directory
         }
   where
     checkExtern externs (lineNumber,extern@(externMod,_))
@@ -113,13 +115,13 @@ parseLibrary ((lineNumber,['L':'I':'B':'R':'A':'R':'Y':library]):lines) = do
     parseLibraryExports lines exports = return (exports,lines)
 parseLibrary lines = return (Nothing,lines)
     
-parseProgram :: FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> Either String Module
-parseProgram filename [] uses subroutines externs = eofError
-parseProgram filename ((lineNumber,['P':'R':'O':'G':'R':'A':'M':name]):lines) uses subroutines externs = do
+parseProgram :: FilePath -> FilePath -> Lines -> Set.Set String -> Map.Map String Routine -> Externs -> Either String Module
+parseProgram filename directory [] uses subroutines externs = eofError
+parseProgram filename directory ((lineNumber,['P':'R':'O':'G':'R':'A':'M':name]):lines) uses subroutines externs = do
     isIdent lineNumber name
     (program,newExterns,lines) <- parseRoutineBody lines name [] lineNumber
-    makeProgram filename lines uses subroutines program (externs ++ newExterns)
-parseProgram filename ((lineNumber,line):_) uses subroutines externs = syntaxError lineNumber
+    makeProgram filename directory lines uses subroutines program (externs ++ newExterns)
+parseProgram filename directory ((lineNumber,line):_) uses subroutines externs = syntaxError lineNumber
 
 parseSubroutines :: Lines -> Either String (Map.Map String Routine,Externs,Lines)
 parseSubroutines lines = parseSubs lines Map.empty []
@@ -151,34 +153,31 @@ parseRoutineBody lines name args lineNumber = runST $ do
     doStackRef <- newSTRef []
     callArgsMaxCountRef <- newSTRef 0
     externsRef <- newSTRef []
-    argsStmtsLines <- parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef args
+    stmtsLines <- parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef args
     finalVarMap <- readSTRef varMapRef
     finalDoEdgesCount <- readSTRef doEdgesIndicesRef
     finalCallArgsMaxCount <- readSTRef callArgsMaxCountRef
     finalExterns <- readSTRef externsRef
     return $ do
-        (args,(stmts,lines)) <- argsStmtsLines
+        (stmts,lines) <- stmtsLines
         (endLineNumber,lines) <- nextLineIs lines ("END" ++ name)
+        let vars = sortBy compareVars $ Map.elems finalVarMap
         return (Routine {
             routineName = name,
-            routineArgs = map (\ arg -> arg { varIsCallArg = True }) args,
+            routineArgs = take (length args) vars,
             routineStmts = stmts,
             routineExported = False,
-            routineVarCount = (fromIntegral . Map.size) finalVarMap,
+            routineVars = vars,
             routineDoEdgesCount = finalDoEdgesCount,
             routineCallArgsMaxCount = finalCallArgsMaxCount,
             routineSourceLineNumber = lineNumber,
             routineEndSourceLineNumber = endLineNumber
             },finalExterns,lines)
   where
-    parseRoutineStmts :: Lines -> STRef a (Map.Map String Var) -> STRef a Integer -> STRef a Integer -> STRef a [(String,Integer)] -> STRef a Integer -> STRef a Externs -> [String] -> ST a (Either String ([Var],([Statement],Lines)))
+    parseRoutineStmts :: Lines -> STRef a (Map.Map String Var) -> STRef a Integer -> STRef a Integer -> STRef a [(String,Integer)] -> STRef a Integer -> STRef a Externs -> [String] -> ST a (Either String ([Statement],Lines))
     parseRoutineStmts lines varMapRef doIndicesRef doEdgesIndicesRef doStackRef callArgsMaxCountRef externsRef args = do
-        args <- mapM (getVar lineNumber True) args
-        stmts <- parseStmts lines
-        return $ do
-            args <- sequence args
-            stmts <- stmts
-            return (args,stmts)
+        mapM_ (getVar lineNumber True) args
+        parseStmts lines
       where
         -- getVar :: Integer -> Bool -> String -> ST a (Either String Var)
         getVar lineNumber isCallArg name = do
@@ -332,6 +331,8 @@ parseRoutineBody lines name args lineNumber = runST $ do
                 (ifBranches,endLineNumber,lines) <- ifBranchesLines
                 return (IfEdge (arg0,arg1) stmts lineNumber:ifBranches,endLineNumber,lines)
         parseIfBranches ((lineNumber,_):_) = return $ syntaxError lineNumber
+    compareVars (Var _ varIndex1 _) (Var _ varIndex2 _) =
+        compare varIndex1 varIndex2
 
 parseCallArgs :: Integer -> [String] -> Either String [String]
 parseCallArgs lineNumber [")"] = return []

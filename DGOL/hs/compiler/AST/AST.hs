@@ -5,8 +5,8 @@ module AST.AST(
     Val(Val,NewVal),
     Statement(LetEq,LetAddEdge,LetRemoveEdge,If,Call,Return,DoLoop,DoEdges,Exit),
     IfBranch(IfEq,IfEdge,IfElse),
-    moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,
-    routineName,routineArgs,routineStmts,routineExported,routineVarCount,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,routineEndSourceLineNumber,
+    moduleName,moduleSubroutines,moduleProgram,moduleExterns,moduleSourceFileName,moduleSourceDirectory,
+    routineName,routineArgs,routineStmts,routineExported,routineVars,routineDoEdgesCount,routineCallArgsMaxCount,routineSourceLineNumber,routineEndSourceLineNumber,
     varName,varIndex,varIsCallArg,
     stmtVar,stmtVal,stmtVars,stmtIfBranches,stmtCallTarget,stmtCallArgs,stmtDoIndex,stmtStmts,stmtDoEdgesIndex,stmtSourceLineNumber,stmtEndSourceLineNumber,
     ifBranchVars,ifBranchStmts,ifBranchSourceLineNumber
@@ -18,14 +18,16 @@ data Module =
         moduleName :: String,
         moduleSubroutines :: [Routine],
         moduleExterns :: [(String,String)],
-        moduleSourceFileName :: FilePath
+        moduleSourceFileName :: FilePath,
+        moduleSourceDirectory :: FilePath
         }
   | Program {
         moduleName :: String,
         moduleSubroutines :: [Routine],
         moduleProgram :: Routine,
         moduleExterns :: [(String,String)],
-        moduleSourceFileName :: FilePath
+        moduleSourceFileName :: FilePath,
+        moduleSourceDirectory :: FilePath
         }
     deriving Show
 
@@ -34,7 +36,7 @@ data Routine = Routine {
     routineArgs :: [Var],
     routineStmts :: [Statement],
     routineExported :: Bool,
-    routineVarCount :: Integer,
+    routineVars :: [Var],
     routineDoEdgesCount :: Integer,
     routineCallArgsMaxCount :: Integer,
     routineSourceLineNumber :: Integer,
