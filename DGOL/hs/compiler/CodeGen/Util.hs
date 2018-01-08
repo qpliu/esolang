@@ -3,7 +3,7 @@ module CodeGen.Util(
     functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
     GlobalStrzTable(GlobalStrzTable),globalStrz,globalStrzAsI8Ptr,globalStrzDefs,
     call,
-    debugMetadata,subprogramMetadata,lineNumberMetadata
+    debugMetadata,subprogramMetadata,lineNumberMetadata,localVariableMetadata
 )
 where
 
@@ -17,7 +17,7 @@ import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constan
 import LLVM.AST.Global(Parameter(Parameter),initializer,name,parameters,returnType,type',globalVariableDefaults,functionDefaults)
 import LLVM.AST.Instruction(Named(Do,(:=)),metadata,metadata')
 import LLVM.AST.Name(Name)
-import LLVM.AST.Operand(Metadata(MDString,MDNode,MDValue),MetadataNode(MetadataNode,MetadataNodeReference),MetadataNodeID(MetadataNodeID),Operand(ConstantOperand))
+import LLVM.AST.Operand(Metadata(MDString,MDNode,MDValue),MetadataNode(MetadataNode,MetadataNodeReference),MetadataNodeID(MetadataNodeID),Operand(ConstantOperand,MetadataOperand))
 import qualified LLVM.AST.IntegerPredicate
 import LLVM.AST.Type(Type(ArrayType,FunctionType),i8,ptr,resultType,argumentTypes,isVarArg,nArrayElements,elementType)
 import qualified LLVM.IRBuilder.Instruction
@@ -179,3 +179,22 @@ lineNumberMetadata a (subprogramMetadataID,lineNumber) = do
             MDString (fromString $ show lineNumber)
             ]))
         ]
+
+localVariableMetadata :: Operand -> String -> Integer -> MetadataNodeID -> MetadataNodeID -> [Operand]
+localVariableMetadata varAddr varName varArgIndex varTypeMetadataID scopeMetadataID = [
+    MetadataOperand $ MDValue varAddr,
+    MetadataOperand $ MDNode $ MetadataNode $ map Just [
+        MDString (fromString "DILocalVariable"),
+        MDString (fromString "name"),
+        MDString (fromString varName),
+        MDString (fromString "scope"),
+        MDNode $ MetadataNodeReference scopeMetadataID,
+        MDString (fromString "arg"),
+        MDString (fromString $ show varArgIndex),
+        MDString (fromString "type"),
+        MDNode $ MetadataNodeReference varTypeMetadataID
+        ],
+    MetadataOperand $ MDNode $ MetadataNode $ map Just [
+        MDString (fromString "DIExpression")
+        ]
+    ]

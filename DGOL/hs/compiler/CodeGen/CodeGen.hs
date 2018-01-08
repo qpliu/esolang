@@ -9,11 +9,12 @@ import Control.Monad(foldM,foldM_,when,zipWithM_)
 import Control.Monad.Fix(MonadFix)
 import Data.String(fromString)
 
+import LLVM.AST(Definition(MetadataNodeDefinition))
 import LLVM.AST.Name(Name)
-import LLVM.AST.Operand(MetadataNodeID,Operand)
+import LLVM.AST.Operand(Metadata(MDString,MDNode,MDValue),MetadataNode(MetadataNode,MetadataNodeReference),MetadataNodeID(MetadataNodeID),Operand)
 import LLVM.AST.Type(i8,i32,ptr,void)
 import LLVM.IRBuilder.Instruction(add,alloca,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,retVoid,store)
-import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),extern,function)
+import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function)
 import LLVM.IRBuilder.Monad(MonadIRBuilder,block)
 
 import AST.AST(
@@ -28,7 +29,7 @@ import CodeGen.DGOLLibs(
 import CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
-    memset,memcpy,malloc,free,
+    memset,memcpy,malloc,free,debugAddr,
     newNode,hasEdge,addEdge,removeEdge,compact,
     trace,traceLabel)
 import CodeGen.Types(
@@ -40,24 +41,26 @@ import CodeGen.Util(
     intConst,nullConst,
     functionRef,
     call,
-    debugMetadata,subprogramMetadata,lineNumberMetadata)
+    debugMetadata,subprogramMetadata,lineNumberMetadata,localVariableMetadata)
 
 
 codeGen :: Module -> [String] -> ModuleBuilder ()
 codeGen (Library name subroutines externs srcFileName srcDir) _ = do
     (fileMetadataID,compileUnitMetadataID,nextNodeID) <- debugMetadata srcFileName srcDir
+    (nodePtrTypeMetadataID,nextNodeID) <- debugTypeMetadata nextNodeID
     runtimeDecls
     mapM_ (declareExtern []) externs
-    foldM_ (defineSubroutine fileMetadataID compileUnitMetadataID name) nextNodeID subroutines
+    foldM_ (defineSubroutine fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID name) nextNodeID subroutines
     mapM_ (defineExportedSubroutine name) subroutines
     return ()
 codeGen (Program name subroutines program externs srcFileName srcDir) libs = do
     (fileMetadataID,compileUnitMetadataID,nextNodeID) <- debugMetadata srcFileName srcDir
+    (nodePtrTypeMetadataID,nextNodeID) <- debugTypeMetadata nextNodeID
     runtimeDefs
     libs <- foldM defineLibs [] libs
     mapM_ (declareExtern libs) externs
-    nextNodeID <- foldM (defineSubroutine fileMetadataID compileUnitMetadataID name) nextNodeID subroutines
-    defineMain fileMetadataID compileUnitMetadataID nextNodeID program
+    nextNodeID <- foldM (defineSubroutine fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID name) nextNodeID subroutines
+    defineMain fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID nextNodeID program
     return ()
 
 declareExtern :: [String] -> (String,String) -> ModuleBuilder ()
@@ -71,11 +74,11 @@ defineLibs :: [String] -> String -> ModuleBuilder [String]
 defineLibs libs lib =
     maybe (return libs) (>> return (lib:libs)) (dgolLibDefs lib)
 
-defineSubroutine :: MetadataNodeID -> MetadataNodeID -> String -> MetadataNodeID -> Routine -> ModuleBuilder MetadataNodeID
-defineSubroutine fileMetadataID compileUnitMetadataID moduleName metadataNodeID routine@(Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
+defineSubroutine :: MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> String -> MetadataNodeID -> Routine -> ModuleBuilder MetadataNodeID
+defineSubroutine fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID moduleName metadataNodeID routine@(Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
     let varCount = length vars
     function (routineName False moduleName name) [(pFrameType,NoParameterName)] void $ \ [callerFrame] -> mdo
-        (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID routine callerFrame entryLabel (varCount > 1)
+        (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID nodePtrTypeMetadataID routine callerFrame entryLabel (varCount > 1)
         entryLabel <- block
         (callerCallArgsCount,callerCallArgsArray) <- if null args
           then do
@@ -86,6 +89,33 @@ defineSubroutine fileMetadataID compileUnitMetadataID moduleName metadataNodeID 
             callerCallArgsCountPtr <- gep callerFrame [intConst 32 0,intConst 32 5]
             callerCallArgsCount <- load callerCallArgsCountPtr 0
             return (callerCallArgsCount,callerCallArgsArray)
+        mapM_ (\ var@(Var name index isCallArg) -> do
+            (varAddr,arg) <- if not isCallArg
+              then do
+                varAddr <- gep varArray [intConst 32 index]
+                return (varAddr,0)
+              else mdo
+                indexCheck <- icmp uge (intConst 32 index) callerCallArgsCount
+                condBr indexCheck useLocalVarLabel checkCallerCallArgsArrayLabel
+
+                checkCallerCallArgsArrayLabel <- block
+                callerArgPtrPtr <- gep callerCallArgsArray [intConst 32 index]
+                -- workaround for
+                -- *** Exception: gep: Can't index into a NamedTypeReference (Name "frame")
+                callerArgPtr_workaround <- load callerArgPtrPtr 0
+                callerArgPtr <- bitcast callerArgPtr_workaround ppNodeType
+                callerArgPtrCheck <- icmp eq callerArgPtr (nullConst ppNodeType)
+                condBr callerArgPtrCheck useLocalVarLabel getVarAddrLabel
+
+                useLocalVarLabel <- block
+                localVarAddr <- gep varArray [intConst 32 index]
+                br getVarAddrLabel
+
+                getVarAddrLabel <- block
+                varAddr <- phi [(callerArgPtr,checkCallerCallArgsArrayLabel),(localVarAddr,useLocalVarLabel)]
+                return (varAddr,index+1)
+            call debugAddr (localVariableMetadata varAddr name arg nodePtrTypeMetadataID metadataNodeID)
+            ) [] -- TODO ... vars
         codeGenStmts metadataNodeID moduleName frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
     nextMetadataNodeID <- subprogramMetadata fileMetadataID compileUnitMetadataID metadataNodeID (moduleName ++ "." ++ name) lineNumber
     return nextMetadataNodeID
@@ -99,10 +129,10 @@ defineExportedSubroutine moduleName (Routine name args stmts exported varCount d
             retVoid
         return ()
 
-defineMain :: MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> Routine -> ModuleBuilder ()
-defineMain fileMetadataID compileUnitMetadataID metadataNodeID routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
+defineMain :: MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> Routine -> ModuleBuilder ()
+defineMain fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID metadataNodeID routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
     function (fromString "main") [] void $ \ _ -> mdo
-        (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID routine (nullConst pFrameType) entryLabel False
+        (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID nodePtrTypeMetadataID routine (nullConst pFrameType) entryLabel False
         entryLabel <- block
         let callerCallArgsArray = nullConst pppNodeType
         let callerCallArgsCount = intConst 32 0
@@ -118,8 +148,8 @@ routineRef :: String -> Maybe String -> String -> Operand
 routineRef mod maybeMod rout =
     functionRef (maybe (routineName False mod) (routineName True) maybeMod $ rout) [pFrameType] void
 
-functionPrologue :: (MonadIRBuilder m, MonadFix m) => MetadataNodeID -> Routine -> Operand -> Name -> Bool -> m (Operand,Operand,Operand,Operand,Operand,Name)
-functionPrologue subprogramMetadataID (Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) callerFrame entryLabel doCompactCall = mdo
+functionPrologue :: (MonadIRBuilder m, MonadFix m) => MetadataNodeID -> MetadataNodeID -> Routine -> Operand -> Name -> Bool -> m (Operand,Operand,Operand,Operand,Operand,Name)
+functionPrologue subprogramMetadataID nodePtrTypeMetadataID (Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) callerFrame entryLabel doCompactCall = mdo
     let varCount = fromIntegral $ length vars
     frame <- alloca frameType Nothing 0
 
@@ -465,3 +495,68 @@ hasExit doIndex (Exit _ exitDoIndex _) = doIndex == exitDoIndex
 hasExit doIndex (DoLoop _ _ stmts _ _) = any (hasExit doIndex) stmts
 hasExit doIndex (DoEdges _ _ _ stmts _ _) = any (hasExit doIndex) stmts
 hasExit _ _ = False
+
+debugTypeMetadata :: MetadataNodeID -> ModuleBuilder (MetadataNodeID,MetadataNodeID)
+debugTypeMetadata (MetadataNodeID nodeIDNum) = do
+    let nodeTypeMetadataID = MetadataNodeID nodeIDNum
+    let nodePtrTypeMetadataID = MetadataNodeID (nodeIDNum + 1)
+    emitDefn $ MetadataNodeDefinition nodeTypeMetadataID $ map Just [
+        MDString (fromString "DICompositeType"),
+        MDString (fromString "tag"),
+        MDString (fromString "DW_TAG_structure_type"),
+        MDString (fromString "name"),
+        MDString (fromString "NODE"),
+        MDString (fromString "elements"),
+        MDNode $ MetadataNode $ map Just [
+            MDNode $ MetadataNode $ map Just [
+                MDString (fromString "DIBasicType"),
+                MDString (fromString "size"),
+                MDString (fromString "8"),
+                MDString (fromString "align"),
+                MDString (fromString "16"),
+                MDString (fromString "encoding"),
+                MDString (fromString "DW_ATE_unsigned_char")
+                ],
+            MDNode $ MetadataNode $ map Just [
+                MDString (fromString "DIBasicType"),
+                MDString (fromString "size"),
+                MDString (fromString "1"),
+                MDString (fromString "align"),
+                MDString (fromString "16"),
+                MDString (fromString "encoding"),
+                MDString (fromString "DW_ATE_boolean")
+                ],
+            MDNode $ MetadataNode $ map Just [
+                MDString (fromString "DIBasicType"),
+                MDString (fromString "size"),
+                MDString (fromString "32"),
+                MDString (fromString "align"),
+                MDString (fromString "32"),
+                MDString (fromString "encoding"),
+                MDString (fromString "DW_ATE_boolean")
+                ],
+            MDNode $ MetadataNode $ map Just [
+                MDString (fromString "DIDerivedType"),
+                MDString (fromString "size"),
+                MDString (fromString "64"),
+                MDString (fromString "align"),
+                MDString (fromString "64"),
+                MDString (fromString "tag"),
+                MDString (fromString "DW_TAG_pointer_type"),
+                MDString (fromString "baseType"),
+                MDNode (MetadataNodeReference nodePtrTypeMetadataID)
+                ]
+            ]
+        ]
+    emitDefn $ MetadataNodeDefinition nodePtrTypeMetadataID $ map Just [
+        MDString (fromString "DIDerivedType"),
+        MDString (fromString "size"),
+        MDString (fromString "64"),
+        MDString (fromString "align"),
+        MDString (fromString "64"),
+        MDString (fromString "tag"),
+        MDString (fromString "DW_TAG_pointer_type"),
+        MDString (fromString "baseType"),
+        MDNode (MetadataNodeReference nodeTypeMetadataID)
+        ]
+    return (nodePtrTypeMetadataID,MetadataNodeID (nodeIDNum + 2))

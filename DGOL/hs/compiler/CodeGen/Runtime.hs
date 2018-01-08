@@ -4,7 +4,7 @@
 module CodeGen.Runtime(
     runtimeDecls,
     runtimeDefs,
-    memset,memcpy,malloc,free,
+    memset,memcpy,malloc,free,debugAddr,
     newNode,hasEdge,addEdge,removeEdge,compact,
     trace,traceLabel,tracef,traceEnabled,
     globalState
@@ -19,7 +19,7 @@ import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constan
 import LLVM.AST.Global(initializer,name,type',globalVariableDefaults)
 import LLVM.AST.Name(Name(UnName))
 import LLVM.AST.Operand(Operand)
-import LLVM.AST.Type(Type(StructureType),void,i1,i8,i32,elementTypes,ptr)
+import LLVM.AST.Type(Type(MetadataType,StructureType),void,i1,i8,i32,elementTypes,ptr)
 import qualified LLVM.AST.Type
 import LLVM.IRBuilder.Instruction(add,alloca,bitcast,br,condBr,gep,icmp,load,phi,ptrtoint,ret,retVoid,store,sub)
 import LLVM.IRBuilder.Module(ModuleBuilder,ParameterName(NoParameterName),emitDefn,extern,function)
@@ -1001,6 +1001,15 @@ free = functionRef freeName [ptr i8] void
 freeDecl :: ModuleBuilder Operand
 freeDecl = extern freeName [ptr i8] void
 
+debugAddrName :: Name
+debugAddrName = "llvm.dbg.addr"
+
+debugAddr :: Operand
+debugAddr = functionRef debugAddrName [MetadataType,MetadataType,MetadataType] void
+
+debugAddrDecl :: ModuleBuilder Operand
+debugAddrDecl = extern debugAddrName [MetadataType,MetadataType,MetadataType] void
+
 commonDecls :: ModuleBuilder ()
 commonDecls = do
     memsetDecl
@@ -1011,6 +1020,7 @@ commonDecls = do
     pageTypedef
     frameTypedef
     doEdgesIteratorTypedef
+    debugAddrDecl
     return ()
 
 runtimeDefs :: ModuleBuilder ()
