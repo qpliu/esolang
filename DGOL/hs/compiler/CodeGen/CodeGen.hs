@@ -39,7 +39,7 @@ import CodeGen.Types(
 import CodeGen.Util(
     eq,uge,
     intConst,nullConst,
-    functionRef,
+    functionRef,functionAlias,
     call,
     debugMetadata,subprogramMetadata,lineNumberMetadata,localVariableMetadata)
 
@@ -124,18 +124,19 @@ defineExportedSubroutine :: String -> Routine -> ModuleBuilder ()
 defineExportedSubroutine moduleName (Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber)
   | not exported = return ()
   | otherwise = do
-        function (routineName True moduleName name) [(pFrameType,NoParameterName)] void $ \ [frame] -> do
-            call (routineRef moduleName Nothing name) [frame]
-            retVoid
-        return ()
+        functionAlias (fromString $ moduleName ++ "." ++ name) (fromString $ "." ++ moduleName ++ "." ++ name) [pFrameType] void
 
 defineMain :: MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> MetadataNodeID -> Routine -> ModuleBuilder ()
-defineMain fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID metadataNodeID routine@(Routine name args stmts exported varCount doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
+defineMain fileMetadataID compileUnitMetadataID nodePtrTypeMetadataID metadataNodeID routine@(Routine name args stmts exported vars doEdgesCount callArgsMaxCount lineNumber endLineNumber) = do
     function (fromString "main") [] void $ \ _ -> mdo
         (frame,varArray,doEdgesArray,callArgsArray,callArgsArraySizeof,exitLabel) <- functionPrologue metadataNodeID nodePtrTypeMetadataID routine (nullConst pFrameType) entryLabel False
         entryLabel <- block
         let callerCallArgsArray = nullConst pppNodeType
         let callerCallArgsCount = intConst 32 0
+        mapM_ (\ var@(Var name index isCallArg) -> do
+            varAddr <- gep varArray [intConst 32 index]
+            call debugAddr (localVariableMetadata varAddr name 0 nodePtrTypeMetadataID metadataNodeID)
+            ) [] -- TODO ... vars
         codeGenStmts metadataNodeID name frame varArray doEdgesArray callArgsArray callArgsArraySizeof callerCallArgsArray callerCallArgsCount exitLabel stmts
     subprogramMetadata fileMetadataID compileUnitMetadataID metadataNodeID name lineNumber
     return ()

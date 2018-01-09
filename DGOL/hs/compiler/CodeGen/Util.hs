@@ -1,6 +1,6 @@
 module CodeGen.Util(
     intConst,nullConst,eq,uge,
-    functionRef,varArgsFunctionRef,varArgsExtern,globalRef,
+    functionRef,varArgsFunctionRef,varArgsExtern,globalRef,functionAlias,
     GlobalStrzTable(GlobalStrzTable),globalStrz,globalStrzAsI8Ptr,globalStrzDefs,
     call,
     debugMetadata,subprogramMetadata,lineNumberMetadata,localVariableMetadata
@@ -14,7 +14,7 @@ import Data.Word(Word32)
 
 import LLVM.AST(Definition(GlobalDefinition,MetadataNodeDefinition,NamedMetadataDefinition))
 import LLVM.AST.Constant(Constant(Array,GlobalReference,Int,Null,Struct),constantType,integerBits,integerValue,memberType,memberValues)
-import LLVM.AST.Global(Parameter(Parameter),initializer,name,parameters,returnType,type',globalVariableDefaults,functionDefaults)
+import LLVM.AST.Global(Parameter(Parameter),initializer,name,parameters,returnType,type',aliasee,globalVariableDefaults,functionDefaults,globalAliasDefaults)
 import LLVM.AST.Instruction(Named(Do,(:=)),metadata,metadata')
 import LLVM.AST.Name(Name)
 import LLVM.AST.Operand(Metadata(MDString,MDNode,MDValue),MetadataNode(MetadataNode,MetadataNodeReference),MetadataNodeID(MetadataNodeID),Operand(ConstantOperand,MetadataOperand))
@@ -64,6 +64,19 @@ varArgsExtern externName argTypes resType = do
 
 globalRef :: Name -> Type -> Operand
 globalRef name typ = ConstantOperand (GlobalReference (ptr typ) name)
+
+functionAlias :: MonadModuleBuilder m => Name -> Name -> [Type] -> Type -> m ()
+functionAlias alias funcName argTypes resType = do
+    let funcType = FunctionType {
+        resultType = resType,
+        argumentTypes = argTypes,
+        isVarArg = False
+        }
+    emitDefn $ GlobalDefinition globalAliasDefaults {
+        name = alias,
+        type' = funcType,
+        aliasee = GlobalReference (ptr funcType) funcName
+        }
 
 data GlobalStrzTable = GlobalStrzTable String [String]
 
