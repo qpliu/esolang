@@ -268,7 +268,7 @@ See also
 * [BRAINFUCK.DGOL](example/BRAINFUCK.DGOL)
 
 ## Implementations
-* [Intepreter in Go](go)
+* [Intepreter in Go](go/interp)
 
   The first implementation of DGOL.  Garbage collection is done by the
   Go runtime garbage collector.
