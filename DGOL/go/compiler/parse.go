@@ -13,7 +13,7 @@ import (
 func Parse(filename string, r io.Reader) (*ASTModule, error) {
 	astModule := &ASTModule{
 		Filename:   filename,
-		Use:        make(map[string]uint),
+		Use:        make(map[string]int),
 		Subroutine: make(map[string]ASTRoutine),
 	}
 	t := newTokenizer(filename, r)
@@ -42,7 +42,7 @@ func Parse(filename string, r io.Reader) (*ASTModule, error) {
 type tokenizer struct {
 	filename   string
 	r          *bufio.Reader
-	lineNumber uint
+	lineNumber int
 	tokens     []string
 	atEOF      bool
 }
@@ -106,7 +106,7 @@ func (t *tokenizer) nextLine() error {
 	}
 }
 
-func (t *tokenizer) tokenize(keyword string) (uint, []string) {
+func (t *tokenizer) tokenize(keyword string) (int, []string) {
 	if len(t.tokens) == 0 || !strings.HasPrefix(t.tokens[0], keyword) {
 		return t.lineNumber, nil
 	}
@@ -118,7 +118,7 @@ func (t *tokenizer) makeErr(message string) error {
 	return errors.New(fmt.Sprintf("%s:%d: %s", t.filename, t.lineNumber, message))
 }
 
-func (t *tokenizer) makeErrAt(lineNumber uint, message string) error {
+func (t *tokenizer) makeErrAt(lineNumber int, message string) error {
 	return errors.New(fmt.Sprintf("%s:%d: %s", t.filename, lineNumber, message))
 }
 
@@ -134,6 +134,7 @@ func parseUses(t *tokenizer, astModule *ASTModule) error {
 			return t.makeErr("DUPLICATE USE")
 		}
 		astModule.Use[tokens[0]] = lineNumber
+		t.nextLine()
 	}
 }
 
@@ -171,7 +172,7 @@ func parseSubroutines(t *tokenizer, astModule *ASTModule) error {
 			LineNumber:       lineNumber,
 			EndLineNumber:    endLineNumber,
 			Exported:         false,
-			ParameterCount:   uint(len(args)),
+			ParameterCount:   len(args),
 			Vars:             routineInfo.varList,
 			DoEdgesCount:     routineInfo.doEdgesCount,
 			CallArgsMaxCount: routineInfo.callArgsMaxCount,
@@ -189,10 +190,9 @@ func parseLibrary(t *tokenizer, astModule *ASTModule) (bool, error) {
 		return false, t.makeErr("SYNTAX ERROR")
 	}
 	astModule.Name = tokens[0]
+	exportCount := 0
 	for {
-		if err := t.nextLine(); err != nil {
-			return false, nil
-		}
+		t.nextLine()
 		_, tokens := t.tokenize("SUBROUTINE")
 		if tokens == nil {
 			break
@@ -207,10 +207,14 @@ func parseLibrary(t *tokenizer, astModule *ASTModule) (bool, error) {
 		}
 		subroutine.Exported = true
 		astModule.Subroutine[tokens[0]] = subroutine
+		exportCount++
 	}
 	_, tokens = t.tokenize("END")
 	if len(tokens) != 1 || tokens[0] != astModule.Name {
 		return false, t.makeErr("SYNTAX ERROR")
+	}
+	if exportCount == 0 {
+		return false, t.makeErr("EMPTY LIBRARY")
 	}
 	return true, nil
 }
@@ -320,7 +324,7 @@ func parseStatement(t *tokenizer, routineInfo *routineInfo) (ASTStatement, bool,
 			modName = tokens[0]
 			routName = tokens[2]
 			args, ok = parseArgs(tokens[3:])
-			if _, ok := routineInfo.uses[modName]; ok {
+			if _, ok := routineInfo.uses[modName]; !ok {
 				return ASTStatement{}, false, t.makeErr("UNDECLARED MODULE")
 			}
 		} else {
@@ -342,6 +346,9 @@ func parseStatement(t *tokenizer, routineInfo *routineInfo) (ASTStatement, bool,
 			}
 			stmt.Args = append(stmt.Args, val)
 		}
+		if routineInfo.callArgsMaxCount < len(args) {
+			routineInfo.callArgsMaxCount = len(args)
+		}
 		return stmt, true, nil
 	} else if lineNumber, tokens := t.tokenize("RETURN"); tokens != nil {
 		if len(tokens) != 1 || tokens[0] != "" {
@@ -357,14 +364,12 @@ func parseStatement(t *tokenizer, routineInfo *routineInfo) (ASTStatement, bool,
 		ok := false
 		doLoopIndex := routineInfo.doLoopCount
 		routineInfo.doLoopCount++
-		doEdgesIndex := uint(0)
+		doEdgesIndex := 0
 		if len(tokens) == 1 {
 			stmtType = StmtDoLoop
 			var arg ASTVar
 			arg, ok = routineInfo.getVar(tokens[0])
 			args = append(args, &arg)
-			doEdgesIndex = routineInfo.doEdgesCount
-			routineInfo.doEdgesCount++
 		} else if len(tokens) == 3 && tokens[1] == "<" {
 			stmtType = StmtDoEdges
 			var arg ASTVar
@@ -374,6 +379,8 @@ func parseStatement(t *tokenizer, routineInfo *routineInfo) (ASTStatement, bool,
 				arg, ok = routineInfo.getVar(tokens[0])
 				args = append(args, &arg)
 			}
+			doEdgesIndex = routineInfo.doEdgesCount
+			routineInfo.doEdgesCount++
 		}
 		if !ok {
 			return ASTStatement{}, false, t.makeErr("SYNTAX ERROR")
@@ -445,7 +452,7 @@ func parseIfBranch(t *tokenizer, routineInfo *routineInfo) (ASTIfBranch, bool, e
 		var ifBranchType ASTIfBranchType
 		if len(tokens) == 3 && tokens[1] == "=" {
 			ifBranchType = IfBranchEq
-		} else if len(tokens) == 3 && tokens[1] == "<" {
+		} else if len(tokens) == 3 && tokens[1] == ">" {
 			ifBranchType = IfBranchEdge
 		} else {
 			return ASTIfBranch{}, false, t.makeErr("SYNTAX ERROR")
@@ -467,7 +474,7 @@ func parseIfBranch(t *tokenizer, routineInfo *routineInfo) (ASTIfBranch, bool, e
 			LineNumber: lineNumber,
 			Args:       []ASTVar{arg0, arg1},
 			Statements: statements,
-		}, false, nil
+		}, true, nil
 	} else if lineNumber, tokens := t.tokenize("ELSE"); tokens != nil {
 		if len(tokens) != 1 || tokens[0] != "" {
 			return ASTIfBranch{}, false, t.makeErr("SYNTAX ERROR")
@@ -490,14 +497,14 @@ type routineInfo struct {
 	varList          []ASTVar
 	varMap           map[string]ASTVar
 	doStackLabel     []string
-	doStackIndex     []uint
-	doLoopCount      uint
-	doEdgesCount     uint
-	callArgsMaxCount uint
-	uses             map[string]uint
+	doStackIndex     []int
+	doLoopCount      int
+	doEdgesCount     int
+	callArgsMaxCount int
+	uses             map[string]int
 }
 
-func makeRoutineInfo(args []string, uses map[string]uint) *routineInfo {
+func makeRoutineInfo(args []string, uses map[string]int) *routineInfo {
 	r := &routineInfo{
 		varMap: make(map[string]ASTVar),
 		uses:   uses,
@@ -511,7 +518,7 @@ func makeRoutineInfo(args []string, uses map[string]uint) *routineInfo {
 		}
 		v := ASTVar{
 			Name:      arg,
-			Index:     uint(len(r.varList)),
+			Index:     len(r.varList),
 			IsCallArg: true,
 		}
 		r.varList = append(r.varList, v)
@@ -529,7 +536,7 @@ func (r *routineInfo) getVar(varName string) (ASTVar, bool) {
 	}
 	v := ASTVar{
 		Name:      varName,
-		Index:     uint(len(r.varList)),
+		Index:     len(r.varList),
 		IsCallArg: false,
 	}
 	r.varList = append(r.varList, v)
@@ -568,6 +575,9 @@ func parseArgs(tokens []string) ([]string, bool) {
 	if len(tokens) < 2 || tokens[0] != "(" || tokens[len(tokens)-1] != ")" {
 		return nil, false
 	}
+	if len(tokens) >= 3 && len(tokens)%2 != 1 {
+		return nil, false
+	}
 	var args []string
 	for i, token := range tokens[1 : len(tokens)-1] {
 		if i%2 == 0 && isVal(token) {
@@ -579,7 +589,7 @@ func parseArgs(tokens []string) ([]string, bool) {
 	return args, true
 }
 
-func hasReturn(statements []ASTStatement) (uint, bool) {
+func hasReturn(statements []ASTStatement) (int, bool) {
 	for _, statement := range statements {
 		if statement.Type == StmtReturn {
 			return statement.LineNumber, true

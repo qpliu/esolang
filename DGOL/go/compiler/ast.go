@@ -3,47 +3,47 @@ package main
 type ASTModule struct {
 	Filename   string
 	Name       string
-	Use        map[string]uint
+	Use        map[string]int
 	Subroutine map[string]ASTRoutine
 	Program    *ASTRoutine
 }
 
 type ASTRoutine struct {
 	Name             string
-	LineNumber       uint
-	EndLineNumber    uint
+	LineNumber       int
+	EndLineNumber    int
 	Exported         bool
-	ParameterCount   uint
+	ParameterCount   int
 	Vars             []ASTVar
-	DoEdgesCount     uint
-	CallArgsMaxCount uint
+	DoEdgesCount     int
+	CallArgsMaxCount int
 	Statements       []ASTStatement
 }
 
 type ASTVar struct {
 	Name      string
-	Index     uint
+	Index     int
 	IsCallArg bool
 }
 
 type ASTStatement struct {
 	Type              ASTStatementType
-	LineNumber        uint
-	EndLineNumber     uint
+	LineNumber        int
+	EndLineNumber     int
 	Args              []*ASTVar
 	CallTargetModule  string
 	CallTargetRoutine string
 	IfBranches        []ASTIfBranch
 	Statements        []ASTStatement
-	DoLoopIndex       uint
-	DoEdgesIndex      uint
+	DoLoopIndex       int
+	DoEdgesIndex      int
 }
 
 type ASTStatementType int
 
 type ASTIfBranch struct {
 	Type       ASTIfBranchType
-	LineNumber uint
+	LineNumber int
 	Args       []ASTVar
 	Statements []ASTStatement
 }
