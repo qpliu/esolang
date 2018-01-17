@@ -57,25 +57,25 @@ func RuntimeDecls(context llvm.Context, name string) (llvm.Module, RTDecls) {
 		llvm.Int8Type(),  // gc mark
 		llvm.Int1Type(),  // live flag
 		llvm.Int32Type(), // size of allocated edges array
-		decls.PPNodeType,    // array of edges
+		decls.PPNodeType, // array of edges
 	}, false)
 
 	decls.DoEdgesIteratorType = mod.Context().StructCreateNamed("doEdgesIterator")
 	decls.PDoEdgesIteratorType = llvm.PointerType(decls.DoEdgesIteratorType, 0)
 	decls.DoEdgesIteratorType.StructSetBody([]llvm.Type{
 		llvm.Int32Type(), // size of allocated edges array
-		decls.PPNodeType,    // array of edges
+		decls.PPNodeType, // array of edges
 	}, false)
 
 	decls.FrameType = mod.Context().StructCreateNamed("frame")
 	decls.PFrameType = llvm.PointerType(decls.FrameType, 0)
 	decls.FrameType.StructSetBody([]llvm.Type{
 		decls.PFrameType,           // caller frame
-		llvm.Int32Type(),        // number of local vars
+		llvm.Int32Type(),           // number of local vars
 		decls.PPNodeType,           // local vars (stack allocated)
-		llvm.Int32Type(),        // number of doEdgesIterators
+		llvm.Int32Type(),           // number of doEdgesIterators
 		decls.PDoEdgesIteratorType, // doEdgesIterators (stack allocated)
-		llvm.Int32Type(),        // number of call args
+		llvm.Int32Type(),           // number of call args
 		decls.PPPNodeType,          // call args (stack allocated)
 	}, false)
 

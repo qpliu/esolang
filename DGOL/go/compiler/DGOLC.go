@@ -33,7 +33,8 @@ func main() {
 	func() {
 		context := llvm.NewContext()
 		//defer context.Dispose()
-		mod, _ := RuntimeDefs(context, "test")
+		mod, rtDecls := RuntimeDefs(context, "test")
+		AddDGOLLib(mod, rtDecls, "IO")
 		defer mod.Dispose()
 		llvm.VerifyModule(mod, llvm.PrintMessageAction)
 		mod.Dump()
