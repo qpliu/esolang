@@ -46,9 +46,9 @@ const (
 	compactName    = "compact"
 )
 
-func RuntimeDecls(context llvm.Context, name string) (llvm.Module, RTDecls) {
+func RuntimeDecls(context llvm.Context, name string) (llvm.Module, *RTDecls) {
 	mod := context.NewModule(name)
-	decls := RTDecls{}
+	decls := &RTDecls{}
 	decls.NodeType = mod.Context().StructCreateNamed("node")
 	decls.PNodeType = llvm.PointerType(decls.NodeType, 0)
 	decls.PPNodeType = llvm.PointerType(decls.PNodeType, 0)
@@ -100,7 +100,7 @@ func RuntimeDecls(context llvm.Context, name string) (llvm.Module, RTDecls) {
 		llvm.PointerType(llvm.Int8Type(), 0),
 	}, false))
 
-	decls.NewNode = llvm.AddFunction(mod, newNodeName, llvm.FunctionType(decls.PNodeType, []llvm.Type{}, false))
+	decls.NewNode = llvm.AddFunction(mod, newNodeName, llvm.FunctionType(decls.PNodeType, []llvm.Type{decls.PFrameType}, false))
 	decls.HasEdge = llvm.AddFunction(mod, hasEdgeName, llvm.FunctionType(llvm.Int1Type(), []llvm.Type{decls.PNodeType, decls.PNodeType}, false))
 	decls.AddEdge = llvm.AddFunction(mod, addEdgeName, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PNodeType, decls.PNodeType}, false))
 	decls.RemoveEdge = llvm.AddFunction(mod, removeEdgeName, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PNodeType, decls.PNodeType}, false))
@@ -109,7 +109,7 @@ func RuntimeDecls(context llvm.Context, name string) (llvm.Module, RTDecls) {
 	return mod, decls
 }
 
-func RuntimeDefs(context llvm.Context, name string) (llvm.Module, RTDecls) {
+func RuntimeDefs(context llvm.Context, name string) (llvm.Module, *RTDecls) {
 	mod, decls := RuntimeDecls(context, name)
 
 	decls.PageType = mod.Context().StructCreateNamed("page")
@@ -150,16 +150,101 @@ func RuntimeDefs(context llvm.Context, name string) (llvm.Module, RTDecls) {
 	return mod, decls
 }
 
-func defNewNode(mod llvm.Module, decls RTDecls) {
+func defNewNode(mod llvm.Module, decls *RTDecls) {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 	entryBlock := llvm.AddBasicBlock(decls.NewNode, "")
+
+	frameParam := decls.HasEdge.FirstParam()
+
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	retryNewNodeBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateBr(retryNewNodeBlock)
+
+	b.SetInsertPoint(retryNewNodeBlock, retryNewNodeBlock.FirstInstruction())
+	initialPage := llvm.ConstGEP(decls.GlobalState, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	})
+
+	newNodePageLoopBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateBr(newNodePageLoopBlock)
+
+	// iterate over nodes ands pages
+	b.SetInsertPoint(newNodePageLoopBlock, newNodePageLoopBlock.FirstInstruction())
+	newNodePage := b.CreatePHI(decls.PPageType, "")
+	var newNodeNextPage llvm.Value
+	var newNodePageLoopNextIndexBlock, newNodePageLoopNextPageBlock llvm.BasicBlock
+	defer func() {
+		newNodePage.AddIncoming([]llvm.Value{
+			initialPage,
+			newNodePage,
+			newNodeNextPage,
+		}, []llvm.BasicBlock{
+			retryNewNodeBlock,
+			newNodePageLoopNextIndexBlock,
+			newNodePageLoopNextPageBlock,
+		})
+	}()
+	newNodeIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var newNodeNextIndex llvm.Value
+	defer func() {
+		newNodeIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			newNodeNextIndex,
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+		}, []llvm.BasicBlock{
+			retryNewNodeBlock,
+			newNodePageLoopNextIndexBlock,
+			newNodePageLoopNextPageBlock,
+		})
+	}()
+	newNodeAlivePtr := b.CreateGEP(newNodePage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		newNodeIndex,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	newNodeAlive := b.CreateLoad(newNodeAlivePtr, "")
+	returnNewNodeBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	newNodePageLoopNextIndexBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(newNodeAlive, newNodePageLoopNextIndexBlock, returnNewNodeBlock)
+
+	// found free node
+	b.SetInsertPoint(returnNewNodeBlock, returnNewNodeBlock.FirstInstruction())
+	b.CreateStore(llvm.ConstInt(llvm.Int1Type(), 1, false), newNodeAlivePtr)
+	newNodePtr := b.CreateGEP(newNodePage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		newNodeIndex,
+	}, "")
+	b.CreateRet(newNodePtr)
+
+	// iterate to next node in page
+	b.SetInsertPoint(newNodePageLoopNextIndexBlock, newNodePageLoopNextIndexBlock.FirstInstruction())
+	newNodeNextIndex = b.CreateAdd(newNodeIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	newNodeNextIndexCheck := b.CreateICmp(llvm.IntUGE, newNodeNextIndex, llvm.ConstInt(llvm.Int32Type(), pageSize, false), "")
+	newNodePageLoopNextPageBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(newNodeNextIndexCheck, newNodePageLoopNextPageBlock, newNodePageLoopBlock)
+
+	// iterate to next page
+	b.SetInsertPoint(newNodePageLoopNextPageBlock, newNodePageLoopNextPageBlock.FirstInstruction())
+	newNodeNextPagePtr := b.CreateGEP(newNodePage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	newNodeNextPage = b.CreateLoad(newNodeNextPagePtr, "")
+	newNodeNextPageCheck := b.CreateICmp(llvm.IntEQ, newNodeNextPage, llvm.ConstNull(decls.PPageType), "")
+	startGCMarkBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(newNodeNextPageCheck, startGCMarkBlock, newNodePageLoopBlock)
+
+	b.SetInsertPoint(startGCMarkBlock, startGCMarkBlock.FirstInstruction())
 	//...
+	_ = frameParam
 	b.CreateRet(llvm.ConstNull(decls.PNodeType))
 }
 
-func defHasEdge(mod llvm.Module, decls RTDecls) {
+func defHasEdge(mod llvm.Module, decls *RTDecls) {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 
@@ -211,7 +296,7 @@ func defHasEdge(mod llvm.Module, decls RTDecls) {
 	b.CreateRet(llvm.ConstInt(llvm.Int1Type(), 0, false))
 }
 
-func defAddEdge(mod llvm.Module, decls RTDecls) {
+func defAddEdge(mod llvm.Module, decls *RTDecls) {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 
@@ -331,7 +416,7 @@ func defAddEdge(mod llvm.Module, decls RTDecls) {
 	b.CreateRetVoid()
 }
 
-func defRemoveEdge(mod llvm.Module, decls RTDecls) {
+func defRemoveEdge(mod llvm.Module, decls *RTDecls) {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 
@@ -384,7 +469,7 @@ func defRemoveEdge(mod llvm.Module, decls RTDecls) {
 	b.CreateRetVoid()
 }
 
-func defCompact(mod llvm.Module, decls RTDecls) {
+func defCompact(mod llvm.Module, decls *RTDecls) {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 	entryBlock := llvm.AddBasicBlock(decls.Compact, "")

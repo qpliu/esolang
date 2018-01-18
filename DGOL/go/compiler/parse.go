@@ -10,9 +10,10 @@ import (
 	"unicode"
 )
 
-func Parse(filename string, r io.Reader) (*ASTModule, error) {
+func Parse(filename, dir string, r io.Reader) (*ASTModule, error) {
 	astModule := &ASTModule{
 		Filename:   filename,
+		Dir:        dir,
 		Use:        make(map[string]int),
 		Subroutine: make(map[string]ASTRoutine),
 	}

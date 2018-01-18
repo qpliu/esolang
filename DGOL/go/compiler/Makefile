@@ -1,4 +1,4 @@
-DGOLC: DGOLC.go ast.go parse.go runtime.go dgol_libs.go
+DGOLC: DGOLC.go ast.go parse.go runtime.go dgol_libs.go codegen.go
 	go build $^
 
 clean:

@@ -2,6 +2,7 @@ package main
 
 type ASTModule struct {
 	Filename   string
+	Dir        string
 	Name       string
 	Use        map[string]int
 	Subroutine map[string]ASTRoutine
