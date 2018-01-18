@@ -18,7 +18,7 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 	dib := llvm.NewDIBuilder(mod)
 	defer dib.Destroy()
 	defer dib.Finalize()
-	dib.CreateCompileUnit(llvm.DICompileUnit{
+	diCU := dib.CreateCompileUnit(llvm.DICompileUnit{
 		Language:       llvm.DwarfLang(1),
 		File:           astModule.Filename,
 		Dir:            astModule.Dir,
@@ -28,19 +28,52 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 		RuntimeVersion: 1,
 	})
 	diFile := dib.CreateFile(astModule.Filename, astModule.Dir)
+	diVoidType := dib.CreateBasicType(llvm.DIBasicType{
+		Name:       "void",
+		SizeInBits: 0,
+		Encoding:   0,
+	})
+	diSubroutineType := dib.CreateSubroutineType(llvm.DISubroutineType{
+		File:       diFile,
+		Parameters: []llvm.Metadata{diVoidType},
+	})
 	for _, routine := range astModule.Subroutine {
-		rout := codeGenRoutine(mod, decls, diFile, astModule.Name, routine, false)
+		diScope := dib.CreateFunction(diCU, llvm.DIFunction{
+			Name:         astModule.Name + "." + routine.Name,
+			LinkageName:  "." + astModule.Name + "." + routine.Name,
+			File:         diFile,
+			Line:         routine.LineNumber,
+			Type:         diSubroutineType,
+			LocalToUnit:  !routine.Exported,
+			IsDefinition: true,
+			ScopeLine:    routine.LineNumber,
+			Flags:        0,
+			Optimized:    false,
+		})
+		rout := codeGenRoutine(mod, decls, diScope, astModule.Name, routine, false)
 		if routine.Exported {
 			llvm.AddAlias(mod, rout.Type(), rout, astModule.Name+"."+routine.Name)
 		}
 	}
 	if astModule.Program != nil {
-		codeGenRoutine(mod, decls, diFile, astModule.Name, *astModule.Program, true)
+		diScope := dib.CreateFunction(diCU, llvm.DIFunction{
+			Name:         astModule.Name,
+			LinkageName:  "main",
+			File:         diFile,
+			Line:         astModule.Program.LineNumber,
+			Type:         diSubroutineType,
+			LocalToUnit:  true,
+			IsDefinition: true,
+			ScopeLine:    astModule.Program.LineNumber,
+			Flags:        0,
+			Optimized:    false,
+		})
+		codeGenRoutine(mod, decls, diScope, astModule.Name, *astModule.Program, true)
 	}
 	return mod
 }
 
-func codeGenRoutine(mod llvm.Module, decls *RTDecls, diFile llvm.Metadata, modName string, routine ASTRoutine, isMain bool) llvm.Value {
+func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modName string, routine ASTRoutine, isMain bool) llvm.Value {
 	var rout llvm.Value
 	var callerFrame llvm.Value
 	if isMain {
@@ -56,7 +89,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diFile llvm.Metadata, modNa
 
 	entryBlock := llvm.AddBasicBlock(rout, "")
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	b.SetCurrentDebugLocation(uint(routine.LineNumber), 0, diFile, llvm.Metadata{})
+	b.SetCurrentDebugLocation(uint(routine.LineNumber), 0, diScope, llvm.Metadata{})
 	frame := b.CreateAlloca(decls.FrameType, "")
 	callerFramePtr := b.CreateGEP(frame, []llvm.Value{
 		llvm.ConstInt(llvm.Int32Type(), 0, false),
@@ -169,7 +202,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diFile llvm.Metadata, modNa
 	b.CreateBr(routBodyBlock)
 
 	b.SetInsertPoint(epilogueBlock, epilogueBlock.FirstInstruction())
-	b.SetCurrentDebugLocation(uint(routine.EndLineNumber), 0, diFile, llvm.Metadata{})
+	b.SetCurrentDebugLocation(uint(routine.EndLineNumber), 0, diScope, llvm.Metadata{})
 	for i := 0; i < routine.DoEdgesCount; i++ {
 		edgesArrayPtr := b.CreateGEP(doEdgesArray, []llvm.Value{
 			llvm.ConstInt(llvm.Int32Type(), uint64(i), false),
@@ -188,15 +221,79 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diFile llvm.Metadata, modNa
 
 		b.SetInsertPoint(nextBlock, nextBlock.FirstInstruction())
 	}
-	//... check and free doEdgesArray[..].edgeArray
 	if !isMain {
 		b.CreateCall(decls.Compact, []llvm.Value{callerFrame}, "")
 	}
 	b.CreateRetVoid()
 
+	getVarPtr := func(astVar ASTVar) llvm.Value {
+		//...
+		return llvm.ConstNull(decls.PPNodeType)
+	}
+	getVar := func(astVar ASTVar) llvm.Value {
+		varPtr := getVarPtr(astVar)
+		//...
+		return b.CreateLoad(varPtr, "")
+	}
+	getVal := func(val *ASTVar) llvm.Value {
+		if val == nil {
+			return b.CreateCall(decls.NewNode, []llvm.Value{frame}, "")
+		}
+		return getVar(*val)
+	}
+
+	var genStmt func(ASTStatement) bool
+	genStmts := func(stmts []ASTStatement) bool {
+		for _, stmt := range stmts {
+			if !genStmt(stmt) {
+				return false
+			}
+		}
+		return true
+	}
+	genStmt = func(stmt ASTStatement) bool {
+		b.SetCurrentDebugLocation(uint(stmt.LineNumber), 0, diScope, llvm.Metadata{})
+		switch stmt.Type {
+		case StmtLetEq:
+			{
+				varPtr := getVarPtr(*stmt.Args[0])
+				val := getVal(stmt.Args[1])
+				b.CreateStore(val, varPtr)
+			}
+		case StmtLetAddEdge:
+			{
+				varNode := getVar(*stmt.Args[0])
+				val := getVal(stmt.Args[1])
+				b.CreateCall(decls.AddEdge, []llvm.Value{varNode, val}, "")
+			}
+		case StmtLetRemoveEdge:
+			{
+				varNode := getVar(*stmt.Args[0])
+				val := getVal(stmt.Args[1])
+				b.CreateCall(decls.RemoveEdge, []llvm.Value{varNode, val}, "")
+			}
+		case StmtIf:
+			//...
+		case StmtCall:
+			//...
+		case StmtReturn:
+			b.CreateBr(epilogueBlock)
+			return false
+		case StmtDoLoop:
+			//...
+		case StmtDoEdges:
+			//...
+		case StmtExit:
+			//...
+		}
+		return true
+	}
+
 	b.SetInsertPoint(routBodyBlock, routBodyBlock.FirstInstruction())
+	if genStmts(routine.Statements) {
+		b.CreateBr(epilogueBlock)
+	}
 	//...
-	b.CreateBr(epilogueBlock)
 	_, _ = callerArgCount, callerArgArray
 
 	return rout
