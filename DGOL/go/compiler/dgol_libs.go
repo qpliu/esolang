@@ -211,7 +211,7 @@ func addIOLibWRITEBYTE(mod llvm.Module, decls *RTDecls, writeFunc llvm.Value) {
 		llvm.ConstInt(llvm.Int32Type(), 6, false),
 	}, "")
 	argArray := b.CreateLoad(argArrayPtr, "")
-	arg0IndexCheck := b.CreateICmp(llvm.IntUGE, llvm.ConstInt(llvm.Int32Type(), 0, false), argCount, "")
+	arg0IndexCheck := b.CreateICmp(llvm.IntEQ, llvm.ConstInt(llvm.Int32Type(), 0, false), argCount, "")
 	arg0CheckBlock := llvm.AddBasicBlock(fn, "")
 	doneValues = append(doneValues, llvm.ConstInt(llvm.Int8Type(), 0, false))
 	donePreds = append(donePreds, entryBlock)

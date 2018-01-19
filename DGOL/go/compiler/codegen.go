@@ -15,6 +15,7 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			AddDGOLLib(mod, decls, lib)
 		}
 	}
+	codeGenMetadata(mod)
 	dib := llvm.NewDIBuilder(mod)
 	defer dib.Destroy()
 	defer dib.Finalize()
@@ -80,9 +81,13 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 		rout = llvm.AddFunction(mod, "main", llvm.FunctionType(llvm.VoidType(), []llvm.Type{}, false))
 		callerFrame = llvm.ConstNull(decls.PFrameType)
 	} else {
-		rout = llvm.AddFunction(mod, "."+modName+"."+routine.Name, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+		rout = mod.NamedFunction("." + modName + "." + routine.Name)
+		if rout.IsNil() {
+			rout = llvm.AddFunction(mod, "."+modName+"."+routine.Name, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+		}
 		callerFrame = rout.FirstParam()
 	}
+	rout.SetSubprogram(diScope)
 
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
@@ -227,13 +232,69 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 	b.CreateRetVoid()
 
 	getVarPtr := func(astVar ASTVar) llvm.Value {
-		//...
-		return llvm.ConstNull(decls.PPNodeType)
+		if !astVar.IsCallArg {
+			return b.CreateGEP(varArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false)}, "")
+		}
+		checkIndexBlock := llvm.AddBasicBlock(rout, "")
+		checkCallerArgBlock := llvm.AddBasicBlock(rout, "")
+		useLocalBlock := llvm.AddBasicBlock(rout, "")
+		returnVarPtrBlock := llvm.AddBasicBlock(rout, "")
+
+		b.CreateBr(checkIndexBlock)
+
+		b.SetInsertPoint(checkIndexBlock, checkIndexBlock.FirstInstruction())
+		indexCheck := b.CreateICmp(llvm.IntUGE, llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false), callerArgCount, "")
+		b.CreateCondBr(indexCheck, useLocalBlock, checkCallerArgBlock)
+
+		b.SetInsertPoint(checkCallerArgBlock, checkCallerArgBlock.FirstInstruction())
+		callerArgPtr := b.CreateGEP(callerArgArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false)}, "")
+		callerArg := b.CreateLoad(callerArgPtr, "")
+		callerArgCheck := b.CreateICmp(llvm.IntEQ, callerArg, llvm.ConstNull(decls.PPNodeType), "")
+		b.CreateCondBr(callerArgCheck, useLocalBlock, returnVarPtrBlock)
+
+		b.SetInsertPoint(useLocalBlock, useLocalBlock.FirstInstruction())
+		localVarPtr := b.CreateGEP(varArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false)}, "")
+		b.CreateBr(returnVarPtrBlock)
+
+		b.SetInsertPoint(returnVarPtrBlock, returnVarPtrBlock.FirstInstruction())
+		varPtr := b.CreatePHI(decls.PPNodeType, "")
+		varPtr.AddIncoming([]llvm.Value{
+			callerArg,
+			localVarPtr,
+		}, []llvm.BasicBlock{
+			checkCallerArgBlock,
+			useLocalBlock,
+		})
+		return varPtr
 	}
 	getVar := func(astVar ASTVar) llvm.Value {
+		checkNodeBlock := llvm.AddBasicBlock(rout, "")
+		newNodeBlock := llvm.AddBasicBlock(rout, "")
+		returnNodeBlock := llvm.AddBasicBlock(rout, "")
+
+		b.CreateBr(checkNodeBlock)
+
+		b.SetInsertPoint(checkNodeBlock, checkNodeBlock.FirstInstruction())
 		varPtr := getVarPtr(astVar)
-		//...
-		return b.CreateLoad(varPtr, "")
+		initialNode := b.CreateLoad(varPtr, "")
+		nodeCheck := b.CreateICmp(llvm.IntEQ, initialNode, llvm.ConstNull(decls.PNodeType), "")
+		b.CreateCondBr(nodeCheck, newNodeBlock, returnNodeBlock)
+
+		b.SetInsertPoint(newNodeBlock, newNodeBlock.FirstInstruction())
+		newNode := b.CreateCall(decls.NewNode, []llvm.Value{frame}, "")
+		b.CreateStore(newNode, varPtr)
+		b.CreateBr(returnNodeBlock)
+
+		b.SetInsertPoint(returnNodeBlock, returnNodeBlock.FirstInstruction())
+		node := b.CreatePHI(decls.PNodeType, "")
+		node.AddIncoming([]llvm.Value{
+			initialNode,
+			newNode,
+		}, []llvm.BasicBlock{
+			checkNodeBlock,
+			newNodeBlock,
+		})
+		return node
 	}
 	getVal := func(val *ASTVar) llvm.Value {
 		if val == nil {
@@ -243,6 +304,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 	}
 
 	var genStmt func(ASTStatement) bool
+	doStack := make(map[int]llvm.BasicBlock)
 	genStmts := func(stmts []ASTStatement) bool {
 		for _, stmt := range stmts {
 			if !genStmt(stmt) {
@@ -255,46 +317,115 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 		b.SetCurrentDebugLocation(uint(stmt.LineNumber), 0, diScope, llvm.Metadata{})
 		switch stmt.Type {
 		case StmtLetEq:
-			{
-				varPtr := getVarPtr(*stmt.Args[0])
-				val := getVal(stmt.Args[1])
-				b.CreateStore(val, varPtr)
-			}
+			varPtr := getVarPtr(*stmt.Args[0])
+			val := getVal(stmt.Args[1])
+			b.CreateStore(val, varPtr)
 		case StmtLetAddEdge:
-			{
-				varNode := getVar(*stmt.Args[0])
-				val := getVal(stmt.Args[1])
-				b.CreateCall(decls.AddEdge, []llvm.Value{varNode, val}, "")
-			}
+			varNode := getVar(*stmt.Args[0])
+			val := getVal(stmt.Args[1])
+			b.CreateCall(decls.AddEdge, []llvm.Value{varNode, val}, "")
 		case StmtLetRemoveEdge:
-			{
-				varNode := getVar(*stmt.Args[0])
-				val := getVal(stmt.Args[1])
-				b.CreateCall(decls.RemoveEdge, []llvm.Value{varNode, val}, "")
-			}
+			varNode := getVar(*stmt.Args[0])
+			val := getVal(stmt.Args[1])
+			b.CreateCall(decls.RemoveEdge, []llvm.Value{varNode, val}, "")
 		case StmtIf:
 			//...
 		case StmtCall:
-			//...
+			callArgsArraySizeof := llvm.ConstPtrToInt(llvm.ConstGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(routine.CallArgsMaxCount), false)}), llvm.Int32Type())
+			callArgsArrayRawPtr := b.CreateBitCast(callArgsArray, llvm.PointerType(llvm.Int8Type(), 0), "")
+			b.CreateCall(decls.Memset, []llvm.Value{
+				callArgsArrayRawPtr,
+				llvm.ConstInt(llvm.Int8Type(), 0, false),
+				callArgsArraySizeof,
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				llvm.ConstInt(llvm.Int1Type(), 0, false),
+			}, "")
+			for i, arg := range stmt.Args {
+				if arg == nil {
+					continue
+				}
+				varPtr := getVarPtr(*arg)
+				argPtr := b.CreateGEP(callArgsArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(i), false)}, "")
+				b.CreateStore(varPtr, argPtr)
+			}
+			var callTargetName string
+			if stmt.CallTargetModule == "" {
+				callTargetName = "." + modName + "." + stmt.CallTargetRoutine
+			} else {
+				callTargetName = stmt.CallTargetModule + "." + stmt.CallTargetRoutine
+			}
+			callTarget := mod.NamedFunction(callTargetName)
+			if callTarget.IsNil() {
+				callTarget = llvm.AddFunction(mod, callTargetName, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+			}
+			b.CreateCall(callTarget, []llvm.Value{frame}, "")
 		case StmtReturn:
 			b.CreateBr(epilogueBlock)
 			return false
 		case StmtDoLoop:
-			//...
+			loopBlock := llvm.AddBasicBlock(rout, "")
+			b.CreateBr(loopBlock)
+
+			b.SetInsertPoint(loopBlock, loopBlock.FirstInstruction())
+			if hasExit(stmt.DoLoopIndex, stmt) {
+				exitBlock := llvm.AddBasicBlock(rout, "")
+				doStack[stmt.DoLoopIndex] = exitBlock
+				if genStmts(stmt.Statements) {
+					b.SetCurrentDebugLocation(uint(stmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+					b.CreateBr(loopBlock)
+				}
+
+				b.SetInsertPoint(exitBlock, exitBlock.FirstInstruction())
+			} else {
+				if genStmts(stmt.Statements) {
+					b.SetCurrentDebugLocation(uint(stmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+					b.CreateBr(loopBlock)
+				}
+				return false
+			}
 		case StmtDoEdges:
 			//...
 		case StmtExit:
-			//...
+			b.CreateBr(doStack[stmt.DoLoopIndex])
+			return false
 		}
 		return true
 	}
 
 	b.SetInsertPoint(routBodyBlock, routBodyBlock.FirstInstruction())
 	if genStmts(routine.Statements) {
+		b.SetCurrentDebugLocation(uint(routine.EndLineNumber), 0, diScope, llvm.Metadata{})
 		b.CreateBr(epilogueBlock)
 	}
-	//...
-	_, _ = callerArgCount, callerArgArray
 
 	return rout
+}
+
+func hasExit(doLoopIndex int, stmt ASTStatement) bool {
+	if stmt.Type == StmtExit && stmt.DoLoopIndex == doLoopIndex {
+		return true
+	}
+	for _, s := range stmt.Statements {
+		if hasExit(doLoopIndex, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func codeGenMetadata(mod llvm.Module) {
+	mod.AddNamedMetadataOperand("llvm.module.flags", mod.Context().MDNode([]llvm.Metadata{
+		llvm.ConstInt(llvm.Int32Type(), 2, false).ConstantAsMetadata(),
+		mod.Context().MDString("Dwarf Version"),
+		llvm.ConstInt(llvm.Int32Type(), 4, false).ConstantAsMetadata(),
+	}))
+	mod.AddNamedMetadataOperand("llvm.module.flags", mod.Context().MDNode([]llvm.Metadata{
+		llvm.ConstInt(llvm.Int32Type(), 2, false).ConstantAsMetadata(),
+		mod.Context().MDString("Debug Info Version"),
+		llvm.ConstInt(llvm.Int32Type(), 3, false).ConstantAsMetadata(),
+	}))
+
+	mod.AddNamedMetadataOperand("llvm.ident", mod.Context().MDNode([]llvm.Metadata{
+		mod.Context().MDString("DGOLC"),
+	}))
 }
