@@ -304,6 +304,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 	}
 
 	var genStmt func(ASTStatement) bool
+	var genIfBranch func(ASTStatement, ASTIfBranch, **llvm.BasicBlock) bool
 	doStack := make(map[int]llvm.BasicBlock)
 	genStmts := func(stmts []ASTStatement) bool {
 		for _, stmt := range stmts {
@@ -329,7 +330,21 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 			val := getVal(stmt.Args[1])
 			b.CreateCall(decls.RemoveEdge, []llvm.Value{varNode, val}, "")
 		case StmtIf:
-			//...
+			var endifBlock *llvm.BasicBlock = nil
+			fellthru := false
+			for _, ifBranch := range stmt.IfBranches {
+				fellthru = genIfBranch(stmt, ifBranch, &endifBlock)
+			}
+			if fellthru {
+				b.SetCurrentDebugLocation(uint(stmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+				if endifBlock == nil {
+					block := llvm.AddBasicBlock(rout, "")
+					endifBlock = &block
+				}
+				b.CreateBr(*endifBlock)
+				b.SetInsertPoint(*endifBlock, endifBlock.FirstInstruction())
+			}
+			return endifBlock != nil
 		case StmtCall:
 			callArgsArraySizeof := llvm.ConstPtrToInt(llvm.ConstGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(routine.CallArgsMaxCount), false)}), llvm.Int32Type())
 			callArgsArrayRawPtr := b.CreateBitCast(callArgsArray, llvm.PointerType(llvm.Int8Type(), 0), "")
@@ -384,10 +399,142 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 				return false
 			}
 		case StmtDoEdges:
-			//...
+			checkIteratorArraySizeBlock := llvm.AddBasicBlock(rout, "")
+			checkIteratorArrayNullBlock := llvm.AddBasicBlock(rout, "")
+			//... more blocks
+			//... freeIteratorArrayBlock
+			//... allocIteratorArrayBlock
+			copyEdgesBlock := llvm.AddBasicBlock(rout, "")
+			//... checkLoopIndexBlock
+			//... checkLoopEdgeBlock
+			//... loopBodyBlock
+			enddoBlock := llvm.AddBasicBlock(rout, "")
+			exitLoopBlock := llvm.AddBasicBlock(rout, "")
+			doStack[stmt.DoLoopIndex] = enddoBlock
+
+			var0Ptr := getVarPtr(*stmt.Args[0])
+			node1 := getVar(*stmt.Args[1])
+			node1EdgesArraySizePtr := b.CreateGEP(node1, []llvm.Value{
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				llvm.ConstInt(llvm.Int32Type(), 2, false),
+			}, "")
+			node1EdgesArraySize := b.CreateLoad(node1EdgesArraySizePtr, "")
+			node1EdgesArraySizeCheck := b.CreateICmp(llvm.IntEQ, node1EdgesArraySize, llvm.ConstInt(llvm.Int32Type(), 0, false), "")
+			b.CreateCondBr(node1EdgesArraySizeCheck, exitLoopBlock, checkIteratorArraySizeBlock)
+
+			b.SetInsertPoint(checkIteratorArraySizeBlock, checkIteratorArraySizeBlock.FirstInstruction())
+			iteratorArraySizePtr := b.CreateGEP(doEdgesArray, []llvm.Value{
+				llvm.ConstInt(llvm.Int32Type(), uint64(stmt.DoEdgesIndex), false),
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+			}, "")
+			initialIteratorArraySize := b.CreateLoad(iteratorArraySizePtr, "")
+			iteratorArrayPtr := b.CreateGEP(doEdgesArray, []llvm.Value{
+				llvm.ConstInt(llvm.Int32Type(), uint64(stmt.DoEdgesIndex), false),
+				llvm.ConstInt(llvm.Int32Type(), 1, false),
+			}, "")
+			initialIteratorArray := b.CreateLoad(iteratorArrayPtr, "")
+			initialIteratorArraySizeCheck := b.CreateICmp(llvm.IntUGE, initialIteratorArraySize, node1EdgesArraySize, "")
+			b.CreateCondBr(initialIteratorArraySizeCheck, copyEdgesBlock, checkIteratorArrayNullBlock)
+
+			b.SetInsertPoint(checkIteratorArrayNullBlock, checkIteratorArrayNullBlock.FirstInstruction())
+			iteratorArrayNullCheck := b.CreateICmp(llvm.IntEQ, initialIteratorArray, llvm.ConstNull(decls.PPNodeType), "")
+			_ = iteratorArrayNullCheck
+			//... if null, allocIteratorArrayBlock, else freeIteratorArrayBlock
+			b.CreateBr(enddoBlock)
+
+			//... freeIteratorArrayBlock
+			//... call free
+			//... br allocIteratorArrayBlock
+
+			//... allocIteratorArrayBlock
+			//... call malloc
+			//... store
+			//... br copyEdgesBlock
+
+			b.SetInsertPoint(copyEdgesBlock, copyEdgesBlock.FirstInstruction())
+			//... iteratorArray = phi initialIteratorArray/checkIteratorArraySizeBlock, newIteratorArray/allocIteratorArrayBlock
+			//... iteratorArraySize = phi initialIteratorArraySize/checkIteratorArraySizeBlock, node1EdgesArraySize/allocIteratorArrayBlock
+			//... call memset - clear iteratorArray
+			//... call memcpy - copy edges
+			//... br checkLoopIndexBlock
+			b.CreateBr(enddoBlock)
+
+			//... checkLoopIndexBlock
+			//... loopIndex = phi
+			//... if loopIndex >= node1EdgesArraySize, enddoBlock, else checkLoopEdgeBlock
+
+			//... checkLoopEdgeBlock
+			//... loopEdge = load iteratorArray[loopIndex]
+			//... if loopEdge == null, checkLoopIndexBlock, else loopBodyBlock
+
+			//... loopBodyBlock
+			//... store loopEdge var0Ptr
+			//... if genStmts, br checkLoopIndexBlock
+			_ = var0Ptr
+
+			b.SetInsertPoint(enddoBlock, enddoBlock.FirstInstruction())
+			b.SetCurrentDebugLocation(uint(stmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+			//... call memset - clear iteratorArray
+			b.CreateBr(exitLoopBlock)
+
+			b.SetInsertPoint(exitLoopBlock, exitLoopBlock.FirstInstruction())
+			nextBlock := llvm.AddBasicBlock(rout, "")
+			b.CreateBr(nextBlock)
+
+			b.SetInsertPoint(nextBlock, nextBlock.FirstInstruction())
 		case StmtExit:
 			b.CreateBr(doStack[stmt.DoLoopIndex])
 			return false
+		}
+		return true
+	}
+	genIfBranch = func(ifStmt ASTStatement, ifBranch ASTIfBranch, endifBlock **llvm.BasicBlock) bool {
+		b.SetCurrentDebugLocation(uint(ifBranch.LineNumber), 0, diScope, llvm.Metadata{})
+		switch ifBranch.Type {
+		case IfBranchEq:
+			thenBlock := llvm.AddBasicBlock(rout, "")
+			elseBlock := llvm.AddBasicBlock(rout, "")
+			arg0 := getVar(ifBranch.Args[0])
+			arg1 := getVar(ifBranch.Args[1])
+			check := b.CreateICmp(llvm.IntEQ, arg0, arg1, "")
+			b.CreateCondBr(check, thenBlock, elseBlock)
+
+			b.SetInsertPoint(thenBlock, thenBlock.FirstInstruction())
+			if genStmts(ifBranch.Statements) {
+				b.SetCurrentDebugLocation(uint(ifStmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+				if *endifBlock == nil {
+					block := llvm.AddBasicBlock(rout, "")
+					*endifBlock = &block
+				}
+				b.CreateBr(**endifBlock)
+			}
+
+			b.SetInsertPoint(elseBlock, elseBlock.FirstInstruction())
+		case IfBranchEdge:
+			thenBlock := llvm.AddBasicBlock(rout, "")
+			elseBlock := llvm.AddBasicBlock(rout, "")
+			arg0 := getVar(ifBranch.Args[0])
+			arg1 := getVar(ifBranch.Args[1])
+			check := b.CreateCall(decls.HasEdge, []llvm.Value{arg0, arg1}, "")
+			b.CreateCondBr(check, thenBlock, elseBlock)
+
+			b.SetInsertPoint(thenBlock, thenBlock.FirstInstruction())
+			if genStmts(ifBranch.Statements) {
+				b.SetCurrentDebugLocation(uint(ifStmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+				if *endifBlock == nil {
+					block := llvm.AddBasicBlock(rout, "")
+					*endifBlock = &block
+				}
+				b.CreateBr(**endifBlock)
+			}
+
+			b.SetInsertPoint(elseBlock, elseBlock.FirstInstruction())
+		case IfBranchElse:
+			elseBlock := llvm.AddBasicBlock(rout, "")
+			b.CreateBr(elseBlock)
+
+			b.SetInsertPoint(elseBlock, elseBlock.FirstInstruction())
+			return genStmts(ifBranch.Statements)
 		}
 		return true
 	}
@@ -408,6 +555,13 @@ func hasExit(doLoopIndex int, stmt ASTStatement) bool {
 	for _, s := range stmt.Statements {
 		if hasExit(doLoopIndex, s) {
 			return true
+		}
+	}
+	for _, ifBranch := range stmt.IfBranches {
+		for _, s := range ifBranch.Statements {
+			if hasExit(doLoopIndex, s) {
+				return true
+			}
 		}
 	}
 	return false

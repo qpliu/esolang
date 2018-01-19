@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -71,6 +72,47 @@ func usage() {
 }
 
 func buildExecutable(srcFiles, libs []string, dir string, objFiles []string, outFile string) {
+	args := []string{"-o", outFile}
+	args = append(args, objFiles...)
+	tmpDir := os.TempDir()
+	for i, srcFile := range srcFiles {
+		objFile := filepath.Join(tmpDir, fmt.Sprintf("%d.%d.bc", os.Getpid(), i))
+		args = append(args, objFile)
+
+		file, err := os.Open(srcFile)
+		if err != nil {
+			println(err.Error())
+			os.Exit(1)
+		}
+		defer file.Close()
+
+		astModule, err := Parse(srcFile, dir, file)
+		if err != nil {
+			println(err.Error())
+			os.Exit(1)
+		}
+
+		context := llvm.NewContext()
+		//defer context.Dispose()
+		mod := CodeGen(context, astModule, libs)
+		//defer mod.Dispose()
+
+		mb := llvm.WriteBitcodeToMemoryBuffer(mod)
+		defer mb.Dispose()
+
+		out, err := os.Create(objFile)
+		if err != nil {
+			println(err.Error())
+			os.Exit(1)
+		}
+		defer out.Close()
+
+		if _, err := out.Write(mb.Bytes()); err != nil {
+			println(err.Error())
+			os.Exit(1)
+		}
+	}
+	exec.Command("clang", args...).Run()
 }
 
 func buildObject(srcFile string, libs []string, dir string, output string) {
@@ -134,6 +176,7 @@ func buildObj(mod llvm.Module, codeGenFileType llvm.CodeGenFileType) []byte {
 	defer machine.Dispose()
 	mb, err := machine.EmitToMemoryBuffer(mod, codeGenFileType)
 	if err != nil {
+		println(err.Error())
 		return nil
 	}
 	defer mb.Dispose()

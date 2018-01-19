@@ -295,7 +295,7 @@ func addIOLibWRITEBYTE(mod llvm.Module, decls *RTDecls, writeFunc llvm.Value) {
 	buffer := b.CreateAlloca(llvm.Int8Type(), "")
 	b.CreateStore(byte, buffer)
 	b.CreateCall(writeFunc, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
 		buffer,
 		llvm.ConstInt(llvm.Int32Type(), 1, false),
 	}, "")
