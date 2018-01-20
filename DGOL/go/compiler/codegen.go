@@ -268,14 +268,14 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 		return varPtr
 	}
 	getVar := func(astVar ASTVar) llvm.Value {
+		varPtr := getVarPtr(astVar)
+
 		checkNodeBlock := llvm.AddBasicBlock(rout, "")
 		newNodeBlock := llvm.AddBasicBlock(rout, "")
 		returnNodeBlock := llvm.AddBasicBlock(rout, "")
-
 		b.CreateBr(checkNodeBlock)
 
 		b.SetInsertPoint(checkNodeBlock, checkNodeBlock.FirstInstruction())
-		varPtr := getVarPtr(astVar)
 		initialNode := b.CreateLoad(varPtr, "")
 		nodeCheck := b.CreateICmp(llvm.IntEQ, initialNode, llvm.ConstNull(decls.PNodeType), "")
 		b.CreateCondBr(nodeCheck, newNodeBlock, returnNodeBlock)
@@ -401,13 +401,13 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 		case StmtDoEdges:
 			checkIteratorArraySizeBlock := llvm.AddBasicBlock(rout, "")
 			checkIteratorArrayNullBlock := llvm.AddBasicBlock(rout, "")
-			//... more blocks
-			//... freeIteratorArrayBlock
-			//... allocIteratorArrayBlock
+			freeIteratorArrayBlock := llvm.AddBasicBlock(rout, "")
+			allocIteratorArrayBlock := llvm.AddBasicBlock(rout, "")
 			copyEdgesBlock := llvm.AddBasicBlock(rout, "")
-			//... checkLoopIndexBlock
-			//... checkLoopEdgeBlock
-			//... loopBodyBlock
+			checkLoopIndexBlock := llvm.AddBasicBlock(rout, "")
+			checkLoopEdgeBlock := llvm.AddBasicBlock(rout, "")
+			loopBodyBlock := llvm.AddBasicBlock(rout, "")
+			loopBodyEndBlock := llvm.AddBasicBlock(rout, "")
 			enddoBlock := llvm.AddBasicBlock(rout, "")
 			exitLoopBlock := llvm.AddBasicBlock(rout, "")
 			doStack[stmt.DoLoopIndex] = enddoBlock
@@ -419,9 +419,12 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 				llvm.ConstInt(llvm.Int32Type(), 2, false),
 			}, "")
 			node1EdgesArraySize := b.CreateLoad(node1EdgesArraySizePtr, "")
+			node1EdgesArraySizeofRawPtr := b.CreateGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{node1EdgesArraySize}, "")
+			node1EdgesArraySizeof := b.CreatePtrToInt(node1EdgesArraySizeofRawPtr, llvm.Int32Type(), "")
 			node1EdgesArraySizeCheck := b.CreateICmp(llvm.IntEQ, node1EdgesArraySize, llvm.ConstInt(llvm.Int32Type(), 0, false), "")
 			b.CreateCondBr(node1EdgesArraySizeCheck, exitLoopBlock, checkIteratorArraySizeBlock)
 
+			// if initialIteratorArraySize >= node1EdgesArraySize, copyEdgesBlock, else checkIteratorArrayNullBlock
 			b.SetInsertPoint(checkIteratorArraySizeBlock, checkIteratorArraySizeBlock.FirstInstruction())
 			iteratorArraySizePtr := b.CreateGEP(doEdgesArray, []llvm.Value{
 				llvm.ConstInt(llvm.Int32Type(), uint64(stmt.DoEdgesIndex), false),
@@ -433,48 +436,138 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 				llvm.ConstInt(llvm.Int32Type(), 1, false),
 			}, "")
 			initialIteratorArray := b.CreateLoad(iteratorArrayPtr, "")
+			initialIteratorArrayRawPtr := b.CreateBitCast(initialIteratorArray, llvm.PointerType(llvm.Int8Type(), 0), "")
 			initialIteratorArraySizeCheck := b.CreateICmp(llvm.IntUGE, initialIteratorArraySize, node1EdgesArraySize, "")
 			b.CreateCondBr(initialIteratorArraySizeCheck, copyEdgesBlock, checkIteratorArrayNullBlock)
 
+			// if initialIteratorArray == null, allocIteratorArrayBlock, else freeIteratorArrayBlock
 			b.SetInsertPoint(checkIteratorArrayNullBlock, checkIteratorArrayNullBlock.FirstInstruction())
 			iteratorArrayNullCheck := b.CreateICmp(llvm.IntEQ, initialIteratorArray, llvm.ConstNull(decls.PPNodeType), "")
-			_ = iteratorArrayNullCheck
-			//... if null, allocIteratorArrayBlock, else freeIteratorArrayBlock
-			b.CreateBr(enddoBlock)
+			b.CreateCondBr(iteratorArrayNullCheck, allocIteratorArrayBlock, freeIteratorArrayBlock)
 
-			//... freeIteratorArrayBlock
-			//... call free
-			//... br allocIteratorArrayBlock
+			// free(initialIteratorArray), br allocIteratorArrayBlock
+			b.SetInsertPoint(freeIteratorArrayBlock, freeIteratorArrayBlock.FirstInstruction())
+			b.CreateCall(decls.Free, []llvm.Value{initialIteratorArrayRawPtr}, "")
+			b.CreateBr(allocIteratorArrayBlock)
 
-			//... allocIteratorArrayBlock
-			//... call malloc
-			//... store
-			//... br copyEdgesBlock
+			// newIteratorArray = malloc, br copyEdgesBlock
+			b.SetInsertPoint(allocIteratorArrayBlock, allocIteratorArrayBlock.FirstInstruction())
+			newIteratorArraySizeofRawPtr := b.CreateGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{
+				node1EdgesArraySize,
+			}, "")
+			newIteratorArraySizeof := b.CreatePtrToInt(newIteratorArraySizeofRawPtr, llvm.Int32Type(), "")
+			newIteratorArrayRawPtr := b.CreateCall(decls.Malloc, []llvm.Value{
+				newIteratorArraySizeof,
+			}, "")
+			newIteratorArray := b.CreateBitCast(newIteratorArrayRawPtr, decls.PPNodeType, "")
+			b.CreateStore(newIteratorArray, iteratorArrayPtr)
+			b.CreateBr(copyEdgesBlock)
 
+			// iteratorArray = phi initialIteratorArray/newIteratorArray
+			// bzero iteratorArray
+			// memcpy iteratorArray node1EdgesArray
 			b.SetInsertPoint(copyEdgesBlock, copyEdgesBlock.FirstInstruction())
-			//... iteratorArray = phi initialIteratorArray/checkIteratorArraySizeBlock, newIteratorArray/allocIteratorArrayBlock
-			//... iteratorArraySize = phi initialIteratorArraySize/checkIteratorArraySizeBlock, node1EdgesArraySize/allocIteratorArrayBlock
-			//... call memset - clear iteratorArray
-			//... call memcpy - copy edges
-			//... br checkLoopIndexBlock
-			b.CreateBr(enddoBlock)
+			initialIteratorArraySizeofRawPtr := b.CreateGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{
+				initialIteratorArraySize,
+			}, "")
+			initialIteratorArraySizeof := b.CreatePtrToInt(initialIteratorArraySizeofRawPtr, llvm.Int32Type(), "")
+			iteratorArray := b.CreatePHI(decls.PPNodeType, "")
+			iteratorArray.AddIncoming([]llvm.Value{
+				initialIteratorArray,
+				newIteratorArray,
+			}, []llvm.BasicBlock{
+				checkIteratorArraySizeBlock,
+				allocIteratorArrayBlock,
+			})
+			iteratorArrayRawPtr := b.CreatePHI(decls.PPNodeType, "")
+			iteratorArrayRawPtr.AddIncoming([]llvm.Value{
+				initialIteratorArrayRawPtr,
+				newIteratorArrayRawPtr,
+			}, []llvm.BasicBlock{
+				checkIteratorArraySizeBlock,
+				allocIteratorArrayBlock,
+			})
+			iteratorArraySizeof := b.CreatePHI(llvm.Int32Type(), "")
+			iteratorArraySizeof.AddIncoming([]llvm.Value{
+				initialIteratorArraySizeof,
+				newIteratorArraySizeof,
+			}, []llvm.BasicBlock{
+				checkIteratorArraySizeBlock,
+				allocIteratorArrayBlock,
+			})
+			b.CreateCall(decls.Memset, []llvm.Value{
+				iteratorArrayRawPtr,
+				llvm.ConstInt(llvm.Int8Type(), 0, false),
+				iteratorArraySizeof,
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				llvm.ConstInt(llvm.Int1Type(), 0, false),
+			}, "")
+			node1EdgesArrayPtr := b.CreateGEP(node1, []llvm.Value{
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				llvm.ConstInt(llvm.Int32Type(), 3, false),
+			}, "")
+			node1EdgesArray := b.CreateLoad(node1EdgesArrayPtr, "")
+			node1EdgesArrayRawPtr := b.CreateBitCast(node1EdgesArray, llvm.PointerType(llvm.Int8Type(), 0), "")
+			b.CreateCall(decls.Memcpy, []llvm.Value{
+				iteratorArrayRawPtr,
+				node1EdgesArrayRawPtr,
+				node1EdgesArraySizeof,
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				llvm.ConstInt(llvm.Int1Type(), 0, false),
+			}, "")
+			b.CreateBr(checkLoopIndexBlock)
 
-			//... checkLoopIndexBlock
-			//... loopIndex = phi
-			//... if loopIndex >= node1EdgesArraySize, enddoBlock, else checkLoopEdgeBlock
+			// loopIndex = phi 0/nextLoopIndex
+			// if loopIndex >= node1EdgesArraySize, enddoBlock, else checkLoopEdgeBlock
+			b.SetInsertPoint(checkLoopIndexBlock, checkLoopIndexBlock.FirstInstruction())
+			loopIndex := b.CreatePHI(llvm.Int32Type(), "")
+			loopNextIndex := b.CreateAdd(loopIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+			loopIndex.AddIncoming([]llvm.Value{
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				loopNextIndex,
+				loopNextIndex,
+			}, []llvm.BasicBlock{
+				copyEdgesBlock,
+				checkLoopEdgeBlock,
+				loopBodyEndBlock,
+			})
+			loopIndexCheck := b.CreateICmp(llvm.IntUGE, loopIndex, node1EdgesArraySize, "")
+			b.CreateCondBr(loopIndexCheck, enddoBlock, checkLoopEdgeBlock)
 
-			//... checkLoopEdgeBlock
-			//... loopEdge = load iteratorArray[loopIndex]
-			//... if loopEdge == null, checkLoopIndexBlock, else loopBodyBlock
+			// loopEdge = load iteratorArray[loopIndex]
+			// if loopEdge == null, checkLoopIndexBlock, else loopBodyBlock
+			b.SetInsertPoint(checkLoopEdgeBlock, checkLoopEdgeBlock.FirstInstruction())
+			loopEdgePtr := b.CreateGEP(iteratorArray, []llvm.Value{loopIndex}, "")
+			loopEdge := b.CreateLoad(loopEdgePtr, "")
+			loopEdgeCheck := b.CreateICmp(llvm.IntEQ, loopEdge, llvm.ConstNull(decls.PNodeType), "")
+			b.CreateCondBr(loopEdgeCheck, checkLoopIndexBlock, loopBodyBlock)
 
-			//... loopBodyBlock
-			//... store loopEdge var0Ptr
-			//... if genStmts, br checkLoopIndexBlock
-			_ = var0Ptr
+			// var0 = loopEdge
+			// iteratorArray[loopIndex] = null
+			// loop body
+			// br loopBodyEndBlock
+			b.SetInsertPoint(loopBodyBlock, loopBodyBlock.FirstInstruction())
+			b.CreateStore(loopEdge, var0Ptr)
+			b.CreateStore(llvm.ConstNull(decls.PNodeType), loopEdgePtr)
+			if genStmts(stmt.Statements) {
+				b.CreateBr(loopBodyEndBlock)
+			}
 
+			// br checkLoopIndexBlock
+			b.SetInsertPoint(loopBodyEndBlock, loopBodyEndBlock.FirstInstruction())
+			b.SetCurrentDebugLocation(uint(stmt.EndLineNumber), 0, diScope, llvm.Metadata{})
+			b.CreateBr(checkLoopIndexBlock)
+
+			// bzero iteratorArray
 			b.SetInsertPoint(enddoBlock, enddoBlock.FirstInstruction())
 			b.SetCurrentDebugLocation(uint(stmt.EndLineNumber), 0, diScope, llvm.Metadata{})
-			//... call memset - clear iteratorArray
+			b.CreateCall(decls.Memset, []llvm.Value{
+				iteratorArrayRawPtr,
+				llvm.ConstInt(llvm.Int8Type(), 0, false),
+				iteratorArraySizeof,
+				llvm.ConstInt(llvm.Int32Type(), 0, false),
+				llvm.ConstInt(llvm.Int1Type(), 0, false),
+			}, "")
 			b.CreateBr(exitLoopBlock)
 
 			b.SetInsertPoint(exitLoopBlock, exitLoopBlock.FirstInstruction())
