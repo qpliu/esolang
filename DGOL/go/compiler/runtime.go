@@ -151,6 +151,8 @@ func RuntimeDefs(context llvm.Context, name string) (llvm.Module, *RTDecls) {
 }
 
 func defNewNode(mod llvm.Module, decls *RTDecls) {
+	markNodes := defMarkNodes(mod, decls)
+
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 	entryBlock := llvm.AddBasicBlock(decls.NewNode, "")
@@ -254,14 +256,14 @@ func defNewNode(mod llvm.Module, decls *RTDecls) {
 	b.SetInsertPoint(markFrameLoopBlock, markFrameLoopBlock.FirstInstruction())
 	frame := b.CreatePHI(decls.PFrameType, "")
 	var markNextFrame llvm.Value
-	var markEdgesDoIteratorsLoopBlock llvm.BasicBlock
+	var markDoEdgesIteratorsLoopBlock llvm.BasicBlock
 	defer func() {
 		frame.AddIncoming([]llvm.Value{
 			frameParam,
 			markNextFrame,
 		}, []llvm.BasicBlock{
 			startGCMarkBlock,
-			markEdgesDoIteratorsLoopBlock,
+			markDoEdgesIteratorsLoopBlock,
 		})
 	}()
 	frameCheck := b.CreateICmp(llvm.IntEQ, frame, llvm.ConstNull(decls.PFrameType), "")
@@ -285,35 +287,189 @@ func defNewNode(mod llvm.Module, decls *RTDecls) {
 		llvm.ConstInt(llvm.Int32Type(), 2, false),
 	}, "")
 	markVarArray := b.CreateLoad(markVarArrayPtr, "")
-	markDoEdgesIteratorSizePtr := b.CreateGEP(frame, []llvm.Value{
+	markDoEdgesIteratorsSizePtr := b.CreateGEP(frame, []llvm.Value{
 		llvm.ConstInt(llvm.Int32Type(), 0, false),
 		llvm.ConstInt(llvm.Int32Type(), 3, false),
 	}, "")
-	markDoEdgesIteratorSize := b.CreateLoad(markDoEdgesIteratorSizePtr, "")
-	markDoEdgesIteratorArrayPtr := b.CreateGEP(frame, []llvm.Value{
+	markDoEdgesIteratorsSize := b.CreateLoad(markDoEdgesIteratorsSizePtr, "")
+	markDoEdgesIteratorsArrayPtr := b.CreateGEP(frame, []llvm.Value{
 		llvm.ConstInt(llvm.Int32Type(), 0, false),
 		llvm.ConstInt(llvm.Int32Type(), 4, false),
 	}, "")
-	markDoEdgesIteratorArray := b.CreateLoad(markDoEdgesIteratorArrayPtr, "")
+	markDoEdgesIteratorsArray := b.CreateLoad(markDoEdgesIteratorsArrayPtr, "")
 	markVarLoopBlock := llvm.AddBasicBlock(decls.NewNode, "")
 	b.CreateBr(markVarLoopBlock)
 
-	// iterate over vars in frame
+	// mark phase: iterate over vars in frame
 	b.SetInsertPoint(markVarLoopBlock, markVarLoopBlock.FirstInstruction())
-	//...
-	b.CreateRet(llvm.ConstNull(decls.PNodeType))
+	markVarIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var markVarNextIndex llvm.Value
+	var markVarLoopBodyBlock llvm.BasicBlock
+	defer func() {
+		markVarIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			markVarNextIndex,
+		}, []llvm.BasicBlock{
+			markFrameLoopBodyBlock,
+			markVarLoopBodyBlock,
+		})
+	}()
+	markVarNextIndex = b.CreateAdd(markVarIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	markVarIndexCheck := b.CreateICmp(llvm.IntUGE, markVarIndex, markVarArraySize, "")
+	markVarLoopBodyBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	markDoEdgesIteratorsLoopBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(markVarIndexCheck, markDoEdgesIteratorsLoopBlock, markVarLoopBodyBlock)
 
-	markEdgesDoIteratorsLoopBlock = llvm.AddBasicBlock(decls.NewNode, "")
-	b.SetInsertPoint(markEdgesDoIteratorsLoopBlock, markEdgesDoIteratorsLoopBlock.FirstInstruction())
-	//...
-	markNextFrame = frame
-	b.CreateBr(markFrameLoopBlock)
+	// mark phase: mark var
+	b.SetInsertPoint(markVarLoopBodyBlock, markVarLoopBodyBlock.FirstInstruction())
+	markNodeVarPtr := b.CreateGEP(markVarArray, []llvm.Value{markVarIndex}, "")
+	markVarNode := b.CreateLoad(markNodeVarPtr, "")
+	b.CreateCall(markNodes, []llvm.Value{newGcMark, markVarNode}, "")
+	b.CreateBr(markVarLoopBlock)
 
-	_, _, _, _ = markVarArraySize, markVarArray, markDoEdgesIteratorSize, markDoEdgesIteratorArray
+	// mark phase: iterate over doEdgeIterators in frame
+	b.SetInsertPoint(markDoEdgesIteratorsLoopBlock, markDoEdgesIteratorsLoopBlock.FirstInstruction())
+	markDoEdgesIteratorsIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var markDoEdgesIteratorsNextIndex llvm.Value
+	var markIteratorEdgesLoopBlock llvm.BasicBlock
+	defer func() {
+		markDoEdgesIteratorsIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			markDoEdgesIteratorsNextIndex,
+		}, []llvm.BasicBlock{
+			markVarLoopBlock,
+			markIteratorEdgesLoopBlock,
+		})
+	}()
+	markDoEdgesIteratorsNextIndex = b.CreateAdd(markDoEdgesIteratorsIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	markDoEdgesIteratorsIndexCheck := b.CreateICmp(llvm.IntUGE, markDoEdgesIteratorsIndex, markDoEdgesIteratorsSize, "")
+	markDoEdgesIteratorLoopBodyBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(markDoEdgesIteratorsIndexCheck, markFrameLoopBlock, markDoEdgesIteratorLoopBodyBlock)
 
+	// mark phase: set up current doEdgeIterator
+	b.SetInsertPoint(markDoEdgesIteratorLoopBodyBlock, markDoEdgesIteratorLoopBodyBlock.FirstInstruction())
+	markIteratorEdgesSizePtr := b.CreateGEP(markDoEdgesIteratorsArray, []llvm.Value{
+		markDoEdgesIteratorsIndex,
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	markIteratorEdgesSize := b.CreateLoad(markIteratorEdgesSizePtr, "")
+	markIteratorEdgesArrayPtr := b.CreateGEP(markDoEdgesIteratorsArray, []llvm.Value{
+		markDoEdgesIteratorsIndex,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	markIteratorEdgesArray := b.CreateLoad(markIteratorEdgesArrayPtr, "")
+	markIteratorEdgesLoopBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateBr(markIteratorEdgesLoopBlock)
+
+	// iterate over edges in current doEdgeIterator
+	b.SetInsertPoint(markIteratorEdgesLoopBlock, markIteratorEdgesLoopBlock.FirstInstruction())
+	var markIteratorEdgesNextIndex llvm.Value
+	var markIteratorEdgesLoopBodyBlock llvm.BasicBlock
+	markIteratorEdgesIndex := b.CreatePHI(llvm.Int32Type(), "")
+	defer func() {
+		markIteratorEdgesIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			markIteratorEdgesNextIndex,
+		}, []llvm.BasicBlock{
+			markDoEdgesIteratorLoopBodyBlock,
+			markIteratorEdgesLoopBodyBlock,
+		})
+	}()
+	markIteratorEdgesNextIndex = b.CreateAdd(markIteratorEdgesIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	markIteratorEdgesIndexCheck := b.CreateICmp(llvm.IntUGE, markIteratorEdgesIndex, markIteratorEdgesSize, "")
+	markIteratorEdgesLoopBodyBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(markIteratorEdgesIndexCheck, markDoEdgesIteratorsLoopBlock, markIteratorEdgesLoopBodyBlock)
+
+	b.SetInsertPoint(markIteratorEdgesLoopBodyBlock, markIteratorEdgesLoopBodyBlock.FirstInstruction())
+	iteratorEdgePtr := b.CreateGEP(markIteratorEdgesArray, []llvm.Value{markIteratorEdgesIndex}, "")
+	iteratorEdge := b.CreateLoad(iteratorEdgePtr, "")
+	b.CreateCall(markNodes, []llvm.Value{newGcMark, iteratorEdge}, "")
+	b.CreateBr(markIteratorEdgesLoopBlock)
+
+	// sweep phase
 	b.SetInsertPoint(startGCSweepBlock, startGCSweepBlock.FirstInstruction())
+	sweepPageLoopBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateBr(sweepPageLoopBlock)
+
+	b.SetInsertPoint(sweepPageLoopBlock, sweepPageLoopBlock.FirstInstruction())
 	//...
 	b.CreateRet(llvm.ConstNull(decls.PNodeType))
+}
+
+func defMarkNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
+	markNodes := llvm.AddFunction(mod, "", llvm.FunctionType(llvm.VoidType(), []llvm.Type{llvm.Int8Type(), decls.PNodeType}, false))
+
+	b := mod.Context().NewBuilder()
+	defer b.Dispose()
+
+	gcMark := markNodes.FirstParam()
+	nodeParam := llvm.NextParam(gcMark)
+
+	entryBlock := llvm.AddBasicBlock(markNodes, "")
+	doneBlock := llvm.AddBasicBlock(markNodes, "")
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	nullCheck := b.CreateICmp(llvm.IntEQ, nodeParam, llvm.ConstNull(decls.PNodeType), "")
+	checkAliveBlock := llvm.AddBasicBlock(markNodes, "")
+	b.CreateCondBr(nullCheck, doneBlock, checkAliveBlock)
+
+	b.SetInsertPoint(checkAliveBlock, checkAliveBlock.FirstInstruction())
+	alivePtr := b.CreateGEP(nodeParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	aliveCheck := b.CreateLoad(alivePtr, "")
+	checkGcMarkBlock := llvm.AddBasicBlock(markNodes, "")
+	b.CreateCondBr(aliveCheck, checkGcMarkBlock, doneBlock)
+
+	b.SetInsertPoint(checkGcMarkBlock, checkGcMarkBlock.FirstInstruction())
+	nodeGcMarkPtr := b.CreateGEP(nodeParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	nodeGcMark := b.CreateLoad(nodeGcMarkPtr, "")
+	nodeGcMarkCheck := b.CreateICmp(llvm.IntEQ, nodeGcMark, gcMark, "")
+	checkEdgesInitBlock := llvm.AddBasicBlock(markNodes, "")
+	b.CreateCondBr(nodeGcMarkCheck, doneBlock, checkEdgesInitBlock)
+
+	b.SetInsertPoint(checkEdgesInitBlock, checkEdgesInitBlock.FirstInstruction())
+	b.CreateStore(gcMark, nodeGcMarkPtr)
+	nodeEdgesArraySizePtr := b.CreateGEP(nodeParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	nodeEdgesArraySize := b.CreateLoad(nodeEdgesArraySizePtr, "")
+	nodeEdgesArrayPtr := b.CreateGEP(nodeParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	nodeEdgesArray := b.CreateLoad(nodeEdgesArrayPtr, "")
+	checkEdgesLoopBlock := llvm.AddBasicBlock(markNodes, "")
+	b.CreateBr(checkEdgesLoopBlock)
+
+	b.SetInsertPoint(checkEdgesLoopBlock, checkEdgesLoopBlock.FirstInstruction())
+	checkEdgesLoopBodyBlock := llvm.AddBasicBlock(markNodes, "")
+	edgeIndex := b.CreatePHI(llvm.Int32Type(), "")
+	nextEdgeIndex := b.CreateAdd(edgeIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	edgeIndex.AddIncoming([]llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		nextEdgeIndex,
+	}, []llvm.BasicBlock{
+		checkEdgesInitBlock,
+		checkEdgesLoopBodyBlock,
+	})
+	edgeIndexCheck := b.CreateICmp(llvm.IntUGE, edgeIndex, nodeEdgesArraySize, "")
+	b.CreateCondBr(edgeIndexCheck, doneBlock, checkEdgesLoopBodyBlock)
+
+	b.SetInsertPoint(checkEdgesLoopBodyBlock, checkEdgesLoopBodyBlock.FirstInstruction())
+	edgeElementPtr := b.CreateGEP(nodeEdgesArray, []llvm.Value{edgeIndex}, "")
+	edgeElement := b.CreateLoad(edgeElementPtr, "")
+	b.CreateCall(markNodes, []llvm.Value{gcMark, edgeElement}, "")
+	b.CreateBr(checkEdgesLoopBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
+	b.CreateRetVoid()
+
+	return markNodes
 }
 
 func defHasEdge(mod llvm.Module, decls *RTDecls) {
