@@ -392,8 +392,188 @@ func defNewNode(mod llvm.Module, decls *RTDecls) {
 	b.CreateBr(sweepPageLoopBlock)
 
 	b.SetInsertPoint(sweepPageLoopBlock, sweepPageLoopBlock.FirstInstruction())
-	//...
-	b.CreateRet(llvm.ConstNull(decls.PNodeType))
+	var sweepPageLoopNextIndexBlock llvm.BasicBlock
+	var sweepPageLoopNextPageBlock llvm.BasicBlock
+	sweepPage := b.CreatePHI(decls.PPageType, "")
+	var sweepNextPage llvm.Value
+	defer func() {
+		sweepPage.AddIncoming([]llvm.Value{
+			initialPage,
+			sweepPage,
+			sweepNextPage,
+		}, []llvm.BasicBlock{
+			startGCSweepBlock,
+			sweepPageLoopNextIndexBlock,
+			sweepPageLoopNextPageBlock,
+		})
+	}()
+	sweepIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var sweepNextIndex llvm.Value
+	defer func() {
+		sweepIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			sweepNextIndex,
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+		}, []llvm.BasicBlock{
+			startGCSweepBlock,
+			sweepPageLoopNextIndexBlock,
+			sweepPageLoopNextPageBlock,
+		})
+	}()
+	sweepPageLiveCount := b.CreatePHI(llvm.Int32Type(), "")
+	var sweepNextPageLiveCount llvm.Value
+	defer func() {
+		sweepPageLiveCount.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			sweepNextPageLiveCount,
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+		}, []llvm.BasicBlock{
+			startGCSweepBlock,
+			sweepPageLoopNextIndexBlock,
+			sweepPageLoopNextPageBlock,
+		})
+	}()
+	compactionEligibleCount := b.CreatePHI(llvm.Int32Type(), "")
+	var nextCompactionEligibleCount llvm.Value
+	defer func() {
+		compactionEligibleCount.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			compactionEligibleCount,
+			nextCompactionEligibleCount,
+		}, []llvm.BasicBlock{
+			startGCSweepBlock,
+			sweepPageLoopNextIndexBlock,
+			sweepPageLoopNextPageBlock,
+		})
+	}()
+	sweepNodeAlivePtr := b.CreateGEP(sweepPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		sweepIndex,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	sweepNodeAliveCheck := b.CreateLoad(sweepNodeAlivePtr, "")
+	sweepCheckNodeBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	sweepPageLoopNextIndexBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(sweepNodeAliveCheck, sweepCheckNodeBlock, sweepPageLoopNextIndexBlock)
+
+	b.SetInsertPoint(sweepCheckNodeBlock, sweepCheckNodeBlock.FirstInstruction())
+	sweepGcMarkPtr := b.CreateGEP(sweepPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		sweepIndex,
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	sweepGcMark := b.CreateLoad(sweepGcMarkPtr, "")
+	sweepGcMarkCheck := b.CreateICmp(llvm.IntEQ, newGcMark, sweepGcMark, "")
+	incrementedPageLiveCount := b.CreateAdd(sweepPageLiveCount, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	sweepCollectNodeBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(sweepGcMarkCheck, sweepPageLoopNextIndexBlock, sweepCollectNodeBlock)
+
+	b.SetInsertPoint(sweepCollectNodeBlock, sweepCollectNodeBlock.FirstInstruction())
+	b.CreateStore(llvm.ConstInt(llvm.Int1Type(), 0, false), sweepNodeAlivePtr)
+	sweepNodeEdgesSizePtr := b.CreateGEP(sweepPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		sweepIndex,
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	sweepNodeEdgesSize := b.CreateLoad(sweepNodeEdgesSizePtr, "")
+	sweepNodeEdgesSizeCheck := b.CreateICmp(llvm.IntEQ, sweepNodeEdgesSize, llvm.ConstInt(llvm.Int32Type(), 0, false), "")
+	sweepCollectNodeClearEdgesBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(sweepNodeEdgesSizeCheck, sweepPageLoopNextIndexBlock, sweepCollectNodeClearEdgesBlock)
+
+	b.SetInsertPoint(sweepCollectNodeClearEdgesBlock, sweepCollectNodeClearEdgesBlock.FirstInstruction())
+	sweepNodeEdgesArrayPtr := b.CreateGEP(sweepPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		sweepIndex,
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	sweepNodeEdgesArray := b.CreateLoad(sweepNodeEdgesArrayPtr, "")
+	sweepNodeEdgesRawPtr := b.CreateBitCast(sweepNodeEdgesArray, llvm.PointerType(llvm.Int8Type(), 0), "")
+	sweepNodeEdgesSizeofPtr := b.CreateGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{sweepNodeEdgesSize}, "")
+	sweepNodeEdgesSizeof := b.CreatePtrToInt(sweepNodeEdgesSizeofPtr, llvm.Int32Type(), "")
+	b.CreateCall(decls.Memset, []llvm.Value{
+		sweepNodeEdgesRawPtr,
+		llvm.ConstInt(llvm.Int8Type(), 0, false),
+		sweepNodeEdgesSizeof,
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int1Type(), 0, false),
+	}, "")
+	b.CreateBr(sweepPageLoopNextIndexBlock)
+
+	b.SetInsertPoint(sweepPageLoopNextIndexBlock, sweepPageLoopNextIndexBlock.FirstInstruction())
+	sweepNextPageLiveCount = b.CreatePHI(llvm.Int32Type(), "")
+	defer func() {
+		sweepNextPageLiveCount.AddIncoming([]llvm.Value{
+			sweepPageLiveCount,
+			incrementedPageLiveCount,
+			sweepPageLiveCount,
+			sweepPageLiveCount,
+		}, []llvm.BasicBlock{
+			sweepPageLoopBlock,
+			sweepCheckNodeBlock,
+			sweepCollectNodeBlock,
+			sweepCollectNodeClearEdgesBlock,
+		})
+	}()
+	sweepNextIndex = b.CreateAdd(sweepIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	sweepIndexRangeCheck := b.CreateICmp(llvm.IntUGE, sweepNextIndex, llvm.ConstInt(llvm.Int32Type(), pageSize, false), "")
+	checkCompactEligibleBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(sweepIndexRangeCheck, checkCompactEligibleBlock, sweepPageLoopBlock)
+
+	b.SetInsertPoint(checkCompactEligibleBlock, checkCompactEligibleBlock.FirstInstruction())
+	compactEligibleCheck := b.CreateICmp(llvm.IntUGE, llvm.ConstInt(llvm.Int32Type(), pageCompactionThreshold, false), sweepNextPageLiveCount, "")
+	isCompactEligibleBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	sweepPageLoopNextPageBlock = llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(compactEligibleCheck, isCompactEligibleBlock, sweepPageLoopNextPageBlock)
+
+	b.SetInsertPoint(isCompactEligibleBlock, isCompactEligibleBlock.FirstInstruction())
+	incrementedCompactionEligibleCount := b.CreateAdd(compactionEligibleCount, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(sweepPageLoopNextPageBlock)
+
+	b.SetInsertPoint(sweepPageLoopNextPageBlock, sweepPageLoopNextPageBlock.FirstInstruction())
+	nextCompactionEligibleCount = b.CreatePHI(llvm.Int32Type(), "")
+	nextCompactionEligibleCount.AddIncoming([]llvm.Value{
+		compactionEligibleCount,
+		incrementedCompactionEligibleCount,
+	}, []llvm.BasicBlock{
+		checkCompactEligibleBlock,
+		isCompactEligibleBlock,
+	})
+	sweepNextPagePtr := b.CreateGEP(sweepPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	sweepNextPage = b.CreateLoad(sweepNextPagePtr, "")
+	sweepPageNullCheck := b.CreateICmp(llvm.IntEQ, sweepNextPage, llvm.ConstNull(decls.PPageType), "")
+	checkForNewPageBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(sweepPageNullCheck, checkForNewPageBlock, sweepPageLoopBlock)
+
+	b.SetInsertPoint(checkForNewPageBlock, checkForNewPageBlock.FirstInstruction())
+	compactionEligibleCountPtr := b.CreateGEP(decls.GlobalState, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	b.CreateStore(nextCompactionEligibleCount, compactionEligibleCountPtr)
+	newPageCheck := b.CreateICmp(llvm.IntUGE, sweepNextPageLiveCount, llvm.ConstInt(llvm.Int32Type(), newPageThreshold, false), "")
+	newPageBlock := llvm.AddBasicBlock(decls.NewNode, "")
+	b.CreateCondBr(newPageCheck, newPageBlock, retryNewNodeBlock)
+
+	b.SetInsertPoint(newPageBlock, newPageBlock.FirstInstruction())
+	newPageSizeof := llvm.ConstPtrToInt(llvm.ConstGEP(llvm.ConstNull(decls.PPageType), []llvm.Value{llvm.ConstInt(llvm.Int32Type(), 1, false)}), llvm.Int32Type())
+	newPageRawPtr := b.CreateCall(decls.Malloc, []llvm.Value{newPageSizeof}, "")
+	b.CreateCall(decls.Memset, []llvm.Value{
+		newPageRawPtr,
+		llvm.ConstInt(llvm.Int8Type(), 0, false),
+		newPageSizeof,
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int1Type(), 0, false),
+	}, "")
+	newPage := b.CreateBitCast(newPageRawPtr, decls.PPageType, "")
+	b.CreateStore(newPage, sweepNextPagePtr)
+	b.CreateBr(retryNewNodeBlock)
 }
 
 func defMarkNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
