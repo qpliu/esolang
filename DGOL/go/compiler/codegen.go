@@ -38,10 +38,19 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 		File:       diFile,
 		Parameters: []llvm.Metadata{diVoidType},
 	})
+	routs := make(map[string]llvm.Value)
 	for _, routine := range astModule.Subroutine {
+		routs[routine.Name] = llvm.AddFunction(mod, "", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+	}
+	for _, routine := range astModule.Subroutine {
+		name := astModule.Name + "." + routine.Name
+		linkageName := ""
+		if routine.Exported {
+			linkageName = name
+		}
 		diScope := dib.CreateFunction(diCU, llvm.DIFunction{
-			Name:         astModule.Name + "." + routine.Name,
-			LinkageName:  "." + astModule.Name + "." + routine.Name,
+			Name:         name,
+			LinkageName:  linkageName,
 			File:         diFile,
 			Line:         routine.LineNumber,
 			Type:         diSubroutineType,
@@ -51,7 +60,7 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Flags:        0,
 			Optimized:    false,
 		})
-		rout := codeGenRoutine(mod, decls, diScope, astModule.Name, routine, false)
+		rout := codeGenRoutine(mod, decls, diScope, astModule.Name, routine, false, routs)
 		if routine.Exported {
 			llvm.AddAlias(mod, rout.Type(), rout, astModule.Name+"."+routine.Name)
 		}
@@ -69,22 +78,19 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Flags:        0,
 			Optimized:    false,
 		})
-		codeGenRoutine(mod, decls, diScope, astModule.Name, *astModule.Program, true)
+		codeGenRoutine(mod, decls, diScope, astModule.Name, *astModule.Program, true, routs)
 	}
 	return mod
 }
 
-func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modName string, routine ASTRoutine, isMain bool) llvm.Value {
+func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modName string, routine ASTRoutine, isMain bool, routs map[string]llvm.Value) llvm.Value {
 	var rout llvm.Value
 	var callerFrame llvm.Value
 	if isMain {
 		rout = llvm.AddFunction(mod, "main", llvm.FunctionType(llvm.VoidType(), []llvm.Type{}, false))
 		callerFrame = llvm.ConstNull(decls.PFrameType)
 	} else {
-		rout = mod.NamedFunction("." + modName + "." + routine.Name)
-		if rout.IsNil() {
-			rout = llvm.AddFunction(mod, "."+modName+"."+routine.Name, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
-		}
+		rout = routs[routine.Name]
 		callerFrame = rout.FirstParam()
 	}
 	rout.SetSubprogram(diScope)
@@ -110,7 +116,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 
 	var varArray llvm.Value
 	if len(routine.Vars) == 0 {
-		varArray = llvm.ConstNull(decls.PPPNodeType)
+		varArray = llvm.ConstNull(decls.PPNodeType)
 	} else {
 		varArray = b.CreateArrayAlloca(decls.PNodeType, llvm.ConstInt(llvm.Int32Type(), uint64(len(routine.Vars)), false), "")
 		varArraySizeof := llvm.ConstPtrToInt(llvm.ConstGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(len(routine.Vars)), false)}), llvm.Int32Type())
@@ -127,6 +133,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 		llvm.ConstInt(llvm.Int32Type(), 0, false),
 		llvm.ConstInt(llvm.Int32Type(), 2, false),
 	}, "")
+
 	b.CreateStore(varArray, varArrayPtr)
 
 	doEdgesCountPtr := b.CreateGEP(frame, []llvm.Value{
@@ -342,6 +349,8 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 					endifBlock = &block
 				}
 				b.CreateBr(*endifBlock)
+			}
+			if endifBlock != nil {
 				b.SetInsertPoint(*endifBlock, endifBlock.FirstInstruction())
 			}
 			return endifBlock != nil
@@ -363,15 +372,15 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 				argPtr := b.CreateGEP(callArgsArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(i), false)}, "")
 				b.CreateStore(varPtr, argPtr)
 			}
-			var callTargetName string
+			var callTarget llvm.Value
 			if stmt.CallTargetModule == "" {
-				callTargetName = "." + modName + "." + stmt.CallTargetRoutine
+				callTarget = routs[stmt.CallTargetRoutine]
 			} else {
-				callTargetName = stmt.CallTargetModule + "." + stmt.CallTargetRoutine
-			}
-			callTarget := mod.NamedFunction(callTargetName)
-			if callTarget.IsNil() {
-				callTarget = llvm.AddFunction(mod, callTargetName, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+				callTargetName := stmt.CallTargetModule + "." + stmt.CallTargetRoutine
+				callTarget = mod.NamedFunction(callTargetName)
+				if callTarget.IsNil() {
+					callTarget = llvm.AddFunction(mod, callTargetName, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+				}
 			}
 			b.CreateCall(callTarget, []llvm.Value{frame}, "")
 		case StmtReturn:
@@ -437,6 +446,10 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 			}, "")
 			initialIteratorArray := b.CreateLoad(iteratorArrayPtr, "")
 			initialIteratorArrayRawPtr := b.CreateBitCast(initialIteratorArray, llvm.PointerType(llvm.Int8Type(), 0), "")
+			initialIteratorArraySizeofRawPtr := b.CreateGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{
+				initialIteratorArraySize,
+			}, "")
+			initialIteratorArraySizeof := b.CreatePtrToInt(initialIteratorArraySizeofRawPtr, llvm.Int32Type(), "")
 			initialIteratorArraySizeCheck := b.CreateICmp(llvm.IntUGE, initialIteratorArraySize, node1EdgesArraySize, "")
 			b.CreateCondBr(initialIteratorArraySizeCheck, copyEdgesBlock, checkIteratorArrayNullBlock)
 
@@ -467,10 +480,6 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 			// bzero iteratorArray
 			// memcpy iteratorArray node1EdgesArray
 			b.SetInsertPoint(copyEdgesBlock, copyEdgesBlock.FirstInstruction())
-			initialIteratorArraySizeofRawPtr := b.CreateGEP(llvm.ConstNull(decls.PPNodeType), []llvm.Value{
-				initialIteratorArraySize,
-			}, "")
-			initialIteratorArraySizeof := b.CreatePtrToInt(initialIteratorArraySizeofRawPtr, llvm.Int32Type(), "")
 			iteratorArray := b.CreatePHI(decls.PPNodeType, "")
 			iteratorArray.AddIncoming([]llvm.Value{
 				initialIteratorArray,
@@ -479,7 +488,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 				checkIteratorArraySizeBlock,
 				allocIteratorArrayBlock,
 			})
-			iteratorArrayRawPtr := b.CreatePHI(decls.PPNodeType, "")
+			iteratorArrayRawPtr := b.CreatePHI(llvm.PointerType(llvm.Int8Type(), 0), "")
 			iteratorArrayRawPtr.AddIncoming([]llvm.Value{
 				initialIteratorArrayRawPtr,
 				newIteratorArrayRawPtr,
