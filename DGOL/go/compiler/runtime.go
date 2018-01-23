@@ -882,6 +882,7 @@ func defCompact(mod llvm.Module, decls *RTDecls) {
 
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
+
 	entryBlock := llvm.AddBasicBlock(decls.Compact, "")
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
 	//...

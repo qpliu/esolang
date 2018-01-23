@@ -303,4 +303,168 @@ func addIOLibWRITEBYTE(mod llvm.Module, decls *RTDecls, writeFunc llvm.Value) {
 }
 
 func addDEBUGTRACELib(mod llvm.Module, decls *RTDecls) {
+	printfFunction := mod.NamedFunction("printf")
+	if printfFunction.IsNil() {
+		printfFunction = llvm.AddFunction(mod, "printf", llvm.FunctionType(llvm.VoidType(), []llvm.Type{llvm.PointerType(llvm.Int8Type(), 0)}, true))
+	}
+
+	printf := func(b llvm.Builder, format string, args ...llvm.Value) {
+		formatPtr := b.CreateBitCast(b.CreateGlobalStringPtr(format, ""), llvm.PointerType(llvm.Int8Type(), 0), "")
+		args = append([]llvm.Value{formatPtr}, args...)
+		b.CreateCall(printfFunction, args, "")
+	}
+
+	addDEBUGTRACELibLABEL(mod, decls, printf)
+	addDEBUGTRACELibNODE(mod, decls, printf)
+	addDEBUGTRACELibFRAME(mod, decls, printf)
+	addDEBUGTRACELibARGS(mod, decls, printf)
+	addDEBUGTRACELibPAGES(mod, decls, printf)
+}
+
+func addDEBUGTRACELibLABEL(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {
+	fn := llvm.AddFunction(mod, "DEBUGTRACE.LABEL", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+	frameParam := fn.FirstParam()
+
+	b := mod.Context().NewBuilder()
+	defer b.Dispose()
+
+	entryBlock := llvm.AddBasicBlock(fn, "")
+
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	argCountPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 5, false),
+	}, "")
+	argCount := b.CreateLoad(argCountPtr, "")
+	argArrayPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 6, false),
+	}, "")
+	argArray := b.CreateLoad(argArrayPtr, "")
+	loopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(loopBlock)
+
+	b.SetInsertPoint(loopBlock, loopBlock.FirstInstruction())
+	label := b.CreatePHI(llvm.Int32Type(), "")
+	var nextLabel llvm.Value
+	var testIndexBlock llvm.BasicBlock
+	var addBitBlock llvm.BasicBlock
+	defer func() {
+		label.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			label,
+			nextLabel,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			testIndexBlock,
+			addBitBlock,
+		})
+	}()
+	bit := b.CreatePHI(llvm.Int32Type(), "")
+	var nextBit llvm.Value
+	defer func() {
+		bit.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 1, false),
+			nextBit,
+			nextBit,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			testIndexBlock,
+			addBitBlock,
+		})
+	}()
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+			nextIndex,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			testIndexBlock,
+			addBitBlock,
+		})
+	}()
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, argCount, "")
+	testIndexBlock = llvm.AddBasicBlock(fn, "")
+	addBitBlock = llvm.AddBasicBlock(fn, "")
+	doneBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(indexCheck, doneBlock, testIndexBlock)
+
+	b.SetInsertPoint(testIndexBlock, testIndexBlock.FirstInstruction())
+	nextBit = b.CreateShl(bit, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	argPtr := b.CreateGEP(argArray, []llvm.Value{index}, "")
+	arg := b.CreateLoad(argPtr, "")
+	argCheck := b.CreateICmp(llvm.IntEQ, arg, llvm.ConstNull(decls.PPNodeType), "")
+	b.CreateCondBr(argCheck, loopBlock, addBitBlock)
+
+	b.SetInsertPoint(addBitBlock, addBitBlock.FirstInstruction())
+	nextLabel = b.CreateAdd(label, bit, "")
+	b.CreateBr(loopBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
+	printf(b, "LABEL %d\n", label)
+	b.CreateRetVoid()
+}
+
+func addDEBUGTRACELibNODE(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {
+	fn := llvm.AddFunction(mod, "DEBUGTRACE.NODE", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+	frameParam := fn.FirstParam()
+
+	b := mod.Context().NewBuilder()
+	defer b.Dispose()
+
+	entryBlock := llvm.AddBasicBlock(fn, "")
+
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	//...
+	_ = frameParam
+	b.CreateRetVoid()
+}
+
+func addDEBUGTRACELibFRAME(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {
+	fn := llvm.AddFunction(mod, "DEBUGTRACE.FRAME", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+	frameParam := fn.FirstParam()
+
+	b := mod.Context().NewBuilder()
+	defer b.Dispose()
+
+	entryBlock := llvm.AddBasicBlock(fn, "")
+
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	//...
+	_ = frameParam
+	b.CreateRetVoid()
+}
+
+func addDEBUGTRACELibARGS(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {
+	fn := llvm.AddFunction(mod, "DEBUGTRACE.ARGS", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+	frameParam := fn.FirstParam()
+
+	b := mod.Context().NewBuilder()
+	defer b.Dispose()
+
+	entryBlock := llvm.AddBasicBlock(fn, "")
+
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	//...
+	_ = frameParam
+	b.CreateRetVoid()
+}
+
+func addDEBUGTRACELibPAGES(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {
+	fn := llvm.AddFunction(mod, "DEBUGTRACE.PAGES", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+	frameParam := fn.FirstParam()
+
+	b := mod.Context().NewBuilder()
+	defer b.Dispose()
+
+	entryBlock := llvm.AddBasicBlock(fn, "")
+
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
+	//...
+	_ = frameParam
+	b.CreateRetVoid()
 }
