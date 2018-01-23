@@ -890,7 +890,6 @@ func defCompact(mod llvm.Module, decls *RTDecls) {
 }
 
 func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
-	moveActualNode := defMoveActualNode(mod, decls)
 	moveNodeReferencesInEdgeArray := defMoveNodeReferencesInEdgeArray(mod, decls)
 
 	b := mod.Context().NewBuilder()
@@ -940,7 +939,7 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	srcNode := b.CreateLoad(srcNodePtr, "")
 	destNodePtr := b.CreateGEP(nodeArrayParam, []llvm.Value{moveActualNodesIndexP1}, "")
 	destNode := b.CreateLoad(destNodePtr, "")
-	b.CreateCall(moveActualNode, []llvm.Value{srcNode, destNode}, "")
+	moveActualNode(decls, b, srcNode, destNode)
 	b.CreateBr(moveActualNodesLoopBlock)
 
 	// move the edges for all the nodes in all the pages
@@ -1124,56 +1123,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	return moveNodes
 }
 
-func defMoveActualNode(mod llvm.Module, decls *RTDecls) llvm.Value {
-	b := mod.Context().NewBuilder()
-	defer b.Dispose()
-
-	moveActualNode := llvm.AddFunction(mod, "", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PNodeType, decls.PNodeType}, false))
-
-	srcNodeParam := moveActualNode.FirstParam()
-	destNodeParam := llvm.NextParam(srcNodeParam)
-
-	entryBlock := llvm.AddBasicBlock(moveActualNode, "")
-	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	srcLivePtr := b.CreateGEP(srcNodeParam, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
-		llvm.ConstInt(llvm.Int32Type(), 1, false),
-	}, "")
-	srcEdgeArraySizePtr := b.CreateGEP(srcNodeParam, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
-		llvm.ConstInt(llvm.Int32Type(), 2, false),
-	}, "")
-	srcEdgeArrayPtr := b.CreateGEP(srcNodeParam, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
-		llvm.ConstInt(llvm.Int32Type(), 3, false),
-	}, "")
-	destLivePtr := b.CreateGEP(destNodeParam, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
-		llvm.ConstInt(llvm.Int32Type(), 1, false),
-	}, "")
-	destEdgeArraySizePtr := b.CreateGEP(destNodeParam, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
-		llvm.ConstInt(llvm.Int32Type(), 2, false),
-	}, "")
-	destEdgeArrayPtr := b.CreateGEP(destNodeParam, []llvm.Value{
-		llvm.ConstInt(llvm.Int32Type(), 0, false),
-		llvm.ConstInt(llvm.Int32Type(), 3, false),
-	}, "")
-	srcEdgeArraySize := b.CreateLoad(srcEdgeArraySizePtr, "")
-	srcEdgeArray := b.CreateLoad(srcEdgeArrayPtr, "")
-	destEdgeArraySize := b.CreateLoad(destEdgeArraySizePtr, "")
-	destEdgeArray := b.CreateLoad(destEdgeArrayPtr, "")
-	b.CreateStore(llvm.ConstInt(llvm.Int1Type(), 0, false), srcLivePtr)
-	b.CreateStore(destEdgeArraySize, srcEdgeArraySizePtr)
-	b.CreateStore(destEdgeArray, srcEdgeArrayPtr)
-	b.CreateStore(llvm.ConstInt(llvm.Int1Type(), 1, false), destLivePtr)
-	b.CreateStore(srcEdgeArraySize, destEdgeArraySizePtr)
-	b.CreateStore(srcEdgeArray, destEdgeArrayPtr)
-	b.CreateRetVoid()
-
-	return moveActualNode
-}
-
 func defMoveNodeReferencesInEdgeArray(mod llvm.Module, decls *RTDecls) llvm.Value {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
@@ -1190,9 +1139,117 @@ func defMoveNodeReferencesInEdgeArray(mod llvm.Module, decls *RTDecls) llvm.Valu
 
 	entryBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	//...
-	_, _, _, _ = edgeCountParam, edgeArrayParam, nodeCountParam, nodeArrayParam
+	edgeLoopBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	b.CreateBr(edgeLoopBlock)
+
+	b.SetInsertPoint(edgeLoopBlock, edgeLoopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	var edgeLoopBodyEndBlock llvm.BasicBlock
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			edgeLoopBodyEndBlock,
+		})
+	}()
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, edgeCountParam, "")
+	edgeLoopBodyBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	doneBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	b.CreateCondBr(indexCheck, doneBlock, edgeLoopBodyBlock)
+
+	b.SetInsertPoint(edgeLoopBodyBlock, edgeLoopBodyBlock.FirstInstruction())
+	edgeReference := b.CreateGEP(edgeArrayParam, []llvm.Value{index}, "")
+	edgeLoopBodyEndBlock = llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	moveNodeReference(decls, moveNodeReferencesInEdgeArray, b, edgeReference, nodeCountParam, nodeArrayParam, edgeLoopBodyBlock, edgeLoopBodyEndBlock)
+
+	b.SetInsertPoint(edgeLoopBodyEndBlock, edgeLoopBodyEndBlock.FirstInstruction())
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(edgeLoopBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
 	b.CreateRetVoid()
 
 	return moveNodeReferencesInEdgeArray
+}
+
+func moveActualNode(decls *RTDecls, b llvm.Builder, srcNode, destNode llvm.Value) {
+	srcLivePtr := b.CreateGEP(srcNode, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	srcEdgeArraySizePtr := b.CreateGEP(srcNode, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	srcEdgeArrayPtr := b.CreateGEP(srcNode, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	destLivePtr := b.CreateGEP(destNode, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	destEdgeArraySizePtr := b.CreateGEP(destNode, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	destEdgeArrayPtr := b.CreateGEP(destNode, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	srcEdgeArraySize := b.CreateLoad(srcEdgeArraySizePtr, "")
+	srcEdgeArray := b.CreateLoad(srcEdgeArrayPtr, "")
+	destEdgeArraySize := b.CreateLoad(destEdgeArraySizePtr, "")
+	destEdgeArray := b.CreateLoad(destEdgeArrayPtr, "")
+	b.CreateStore(llvm.ConstInt(llvm.Int1Type(), 0, false), srcLivePtr)
+	b.CreateStore(destEdgeArraySize, srcEdgeArraySizePtr)
+	b.CreateStore(destEdgeArray, srcEdgeArrayPtr)
+	b.CreateStore(llvm.ConstInt(llvm.Int1Type(), 1, false), destLivePtr)
+	b.CreateStore(srcEdgeArraySize, destEdgeArraySizePtr)
+	b.CreateStore(srcEdgeArray, destEdgeArrayPtr)
+}
+
+func moveNodeReference(decls *RTDecls, function llvm.Value, b llvm.Builder, nodeReference, nodeCountParam, nodeArrayParam llvm.Value, entryBlock, exitBlock llvm.BasicBlock) {
+	// nodeCount is size of nodeArray
+	// every other element of nodeArray is the node to be moved
+	// interspersed with the node destination
+	node := b.CreateLoad(nodeReference, "")
+	nodeCheck := b.CreateICmp(llvm.IntEQ, node, llvm.ConstNull(decls.PNodeType), "")
+	nodeArrayLoopBlock := llvm.AddBasicBlock(function, "")
+	b.CreateCondBr(nodeCheck, exitBlock, nodeArrayLoopBlock)
+
+	b.SetInsertPoint(nodeArrayLoopBlock, nodeArrayLoopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	var nodeArrayLoopBodyBlock llvm.BasicBlock
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			nodeArrayLoopBodyBlock,
+		})
+	}()
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 2, false), "")
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, nodeCountParam, "")
+	nodeArrayLoopBodyBlock = llvm.AddBasicBlock(function, "")
+	b.CreateCondBr(indexCheck, exitBlock, nodeArrayLoopBodyBlock)
+
+	b.SetInsertPoint(nodeArrayLoopBodyBlock, nodeArrayLoopBodyBlock.FirstInstruction())
+	srcNodePtr := b.CreateGEP(nodeArrayParam, []llvm.Value{index}, "")
+	srcNode := b.CreateLoad(srcNodePtr, "")
+	srcNodeCheck := b.CreateICmp(llvm.IntEQ, srcNode, llvm.ConstNull(decls.PNodeType), "")
+	moveNodeBlock := llvm.AddBasicBlock(function, "")
+	b.CreateCondBr(srcNodeCheck, moveNodeBlock, nodeArrayLoopBlock)
+
+	b.SetInsertPoint(moveNodeBlock, moveNodeBlock.FirstInstruction())
+	indexP1 := b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	destNodePtr := b.CreateGEP(nodeArrayParam, []llvm.Value{indexP1}, "")
+	destNode := b.CreateLoad(destNodePtr, "")
+	b.CreateStore(destNode, nodeReference)
+	b.CreateBr(exitBlock)
 }
