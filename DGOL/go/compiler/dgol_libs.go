@@ -419,8 +419,80 @@ func addDEBUGTRACELibNODE(mod llvm.Module, decls *RTDecls, printf func(llvm.Buil
 	entryBlock := llvm.AddBasicBlock(fn, "")
 
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	//...
-	_ = frameParam
+	argCountPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 5, false),
+	}, "")
+	argCount := b.CreateLoad(argCountPtr, "")
+	argCountCheck := b.CreateICmp(llvm.IntEQ, argCount, llvm.ConstInt(llvm.Int32Type(), 0, false), "")
+	printNullBlock := llvm.AddBasicBlock(fn, "")
+	checkArgNullBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(argCountCheck, printNullBlock, checkArgNullBlock)
+
+	b.SetInsertPoint(printNullBlock, printNullBlock.FirstInstruction())
+	printf(b, "NODE NULL\n")
+	b.CreateRetVoid()
+
+	b.SetInsertPoint(checkArgNullBlock, checkArgNullBlock.FirstInstruction())
+	argArrayPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 6, false),
+	}, "")
+	argArray := b.CreateLoad(argArrayPtr, "")
+	argPtr := b.CreateGEP(argArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), 0, false)}, "")
+	arg := b.CreateLoad(argPtr, "")
+	argCheck := b.CreateICmp(llvm.IntEQ, arg, llvm.ConstNull(decls.PPNodeType), "")
+	checkNodeNullBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(argCheck, printNullBlock, checkNodeNullBlock)
+
+	b.SetInsertPoint(checkNodeNullBlock, checkNodeNullBlock.FirstInstruction())
+	node := b.CreateLoad(arg, "")
+	nodeCheck := b.CreateICmp(llvm.IntEQ, node, llvm.ConstNull(decls.PNodeType), "")
+	initPrintNodeBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(nodeCheck, printNullBlock, initPrintNodeBlock)
+
+	b.SetInsertPoint(initPrintNodeBlock, initPrintNodeBlock.FirstInstruction())
+	edgeArraySizePtr := b.CreateGEP(node, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	edgeArraySize := b.CreateLoad(edgeArraySizePtr, "")
+	edgeArrayPtr := b.CreateGEP(node, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	edgeArray := b.CreateLoad(edgeArrayPtr, "")
+	printf(b, "NODE %p EDGES[%d]", node, edgeArraySize)
+	loopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(loopBlock)
+
+	b.SetInsertPoint(loopBlock, loopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	var loopBodyBlock llvm.BasicBlock
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+		}, []llvm.BasicBlock{
+			initPrintNodeBlock,
+			loopBodyBlock,
+		})
+	}()
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, edgeArraySize, "")
+	loopBodyBlock = llvm.AddBasicBlock(fn, "")
+	loopDoneBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(indexCheck, loopDoneBlock, loopBodyBlock)
+
+	b.SetInsertPoint(loopBodyBlock, loopBodyBlock.FirstInstruction())
+	edgePtr := b.CreateGEP(edgeArray, []llvm.Value{index}, "")
+	edge := b.CreateLoad(edgePtr, "")
+	printf(b, " %p", edge)
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(loopBlock)
+
+	b.SetInsertPoint(loopDoneBlock, loopDoneBlock.FirstInstruction())
+	printf(b, "\n")
 	b.CreateRetVoid()
 }
 
@@ -434,8 +506,125 @@ func addDEBUGTRACELibFRAME(mod llvm.Module, decls *RTDecls, printf func(llvm.Bui
 	entryBlock := llvm.AddBasicBlock(fn, "")
 
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	//...
-	_ = frameParam
+	callerFramePtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	callerFrame := b.CreateLoad(callerFramePtr, "")
+	localVarCountPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	localVarCount := b.CreateLoad(localVarCountPtr, "")
+	printf(b, "FRAME %p\n CALLER FRAME %p\n LOCAL VARS[%d]", frameParam, callerFrame, localVarCount)
+	localVarArrayPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	localVarArray := b.CreateLoad(localVarArrayPtr, "")
+	localVarLoopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(localVarLoopBlock)
+
+	b.SetInsertPoint(localVarLoopBlock, localVarLoopBlock.FirstInstruction())
+	localVarIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var nextLocalVarIndex llvm.Value
+	var localVarLoopBodyBlock llvm.BasicBlock
+	defer func() {
+		localVarIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextLocalVarIndex,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			localVarLoopBodyBlock,
+		})
+	}()
+	localVarIndexCheck := b.CreateICmp(llvm.IntUGE, localVarIndex, localVarCount, "")
+	localVarLoopBodyBlock = llvm.AddBasicBlock(fn, "")
+	localVarLoopDoneBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(localVarIndexCheck, localVarLoopDoneBlock, localVarLoopBodyBlock)
+
+	b.SetInsertPoint(localVarLoopBodyBlock, localVarLoopBodyBlock.FirstInstruction())
+	localVarNodePtr := b.CreateGEP(localVarArray, []llvm.Value{localVarIndex}, "")
+	localVarNode := b.CreateLoad(localVarNodePtr, "")
+	printf(b, " %p@%p", localVarNode, localVarNodePtr)
+	nextLocalVarIndex = b.CreateAdd(localVarIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(localVarLoopBlock)
+
+	b.SetInsertPoint(localVarLoopDoneBlock, localVarLoopDoneBlock.FirstInstruction())
+	iteratorsCountPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	iteratorsCount := b.CreateLoad(iteratorsCountPtr, "")
+	printf(b, "\n ITERATORS[%d]", iteratorsCount)
+	iteratorsArrayPtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 4, false),
+	}, "")
+	iteratorsArray := b.CreateLoad(iteratorsArrayPtr, "")
+	iteratorsArrayLoopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(iteratorsArrayLoopBlock)
+
+	b.SetInsertPoint(iteratorsArrayLoopBlock, iteratorsArrayLoopBlock.FirstInstruction())
+	iteratorsArrayIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIteratorsArrayIndex llvm.Value
+	var edgeLoopBlock llvm.BasicBlock
+	defer func() {
+		iteratorsArrayIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIteratorsArrayIndex,
+		}, []llvm.BasicBlock{
+			localVarLoopDoneBlock,
+			edgeLoopBlock,
+		})
+	}()
+	iteratorsArrayIndexCheck := b.CreateICmp(llvm.IntUGE, iteratorsArrayIndex, iteratorsCount, "")
+	iteratorsArrayLoopBodyBlock := llvm.AddBasicBlock(fn, "")
+	iteratorsArrayLoopDoneBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(iteratorsArrayIndexCheck, iteratorsArrayLoopDoneBlock, iteratorsArrayLoopBodyBlock)
+
+	b.SetInsertPoint(iteratorsArrayLoopBodyBlock, iteratorsArrayLoopBodyBlock.FirstInstruction())
+	nextIteratorsArrayIndex = b.CreateAdd(iteratorsArrayIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	edgeCountPtr := b.CreateGEP(iteratorsArray, []llvm.Value{
+		iteratorsArrayIndex,
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	edgeCount := b.CreateLoad(edgeCountPtr, "")
+	printf(b, "\n  ITERATOR[%d]", edgeCount)
+	edgeArrayPtr := b.CreateGEP(iteratorsArray, []llvm.Value{
+		iteratorsArrayIndex,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	edgeArray := b.CreateLoad(edgeArrayPtr, "")
+	edgeLoopBlock = llvm.AddBasicBlock(fn, "")
+	b.CreateBr(edgeLoopBlock)
+
+	b.SetInsertPoint(edgeLoopBlock, edgeLoopBlock.FirstInstruction())
+	edgeIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var nextEdgeIndex llvm.Value
+	var edgeLoopBodyBlock llvm.BasicBlock
+	defer func() {
+		edgeIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextEdgeIndex,
+		}, []llvm.BasicBlock{
+			iteratorsArrayLoopBodyBlock,
+			edgeLoopBodyBlock,
+		})
+	}()
+	edgeIndexCheck := b.CreateICmp(llvm.IntUGE, edgeIndex, edgeCount, "")
+	edgeLoopBodyBlock = llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(edgeIndexCheck, iteratorsArrayLoopBlock, edgeLoopBodyBlock)
+
+	b.SetInsertPoint(edgeLoopBodyBlock, edgeLoopBodyBlock.FirstInstruction())
+	edgePtr := b.CreateGEP(edgeArray, []llvm.Value{edgeIndex}, "")
+	edge := b.CreateLoad(edgePtr, "")
+	printf(b, " %p", edge)
+	nextEdgeIndex = b.CreateAdd(edgeIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(edgeLoopBlock)
+
+	b.SetInsertPoint(iteratorsArrayLoopDoneBlock, iteratorsArrayLoopDoneBlock.FirstInstruction())
+	printf(b, "\n")
 	b.CreateRetVoid()
 }
 
@@ -449,9 +638,77 @@ func addDEBUGTRACELibARGS(mod llvm.Module, decls *RTDecls, printf func(llvm.Buil
 	entryBlock := llvm.AddBasicBlock(fn, "")
 
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	//...
-	_ = frameParam
+	printf(b, "ARGS")
+	callerFramePtr := b.CreateGEP(frameParam, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	callerFrame := b.CreateLoad(callerFramePtr, "")
+	callerFrameCheck := b.CreateICmp(llvm.IntEQ, callerFrame, llvm.ConstNull(decls.PFrameType), "")
+	doneBlock := llvm.AddBasicBlock(fn, "")
+	getArgCountBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(callerFrameCheck, doneBlock, getArgCountBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
+	printf(b, "\n")
 	b.CreateRetVoid()
+
+	b.SetInsertPoint(getArgCountBlock, getArgCountBlock.FirstInstruction())
+	argCountPtr := b.CreateGEP(callerFrame, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 5, false),
+	}, "")
+	argCount := b.CreateLoad(argCountPtr, "")
+	printf(b, "[%d]", argCount)
+	argArrayPtr := b.CreateGEP(callerFrame, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 6, false),
+	}, "")
+	argArray := b.CreateLoad(argArrayPtr, "")
+	argLoopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(argLoopBlock)
+
+	b.SetInsertPoint(argLoopBlock, argLoopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	var printArgBlock llvm.BasicBlock
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+		}, []llvm.BasicBlock{
+			getArgCountBlock,
+			printArgBlock,
+		})
+	}()
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, argCount, "")
+	argLoopBodyBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(indexCheck, doneBlock, argLoopBodyBlock)
+
+	b.SetInsertPoint(argLoopBodyBlock, argLoopBodyBlock.FirstInstruction())
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	argPtr := b.CreateGEP(argArray, []llvm.Value{index}, "")
+	arg := b.CreateLoad(argPtr, "")
+	argCheck := b.CreateICmp(llvm.IntEQ, arg, llvm.ConstNull(decls.PPNodeType), "")
+	loadNodeBlock := llvm.AddBasicBlock(fn, "")
+	printArgBlock = llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(argCheck, printArgBlock, loadNodeBlock)
+
+	b.SetInsertPoint(loadNodeBlock, loadNodeBlock.FirstInstruction())
+	node1 := b.CreateLoad(arg, "")
+	b.CreateBr(printArgBlock)
+
+	b.SetInsertPoint(printArgBlock, printArgBlock.FirstInstruction())
+	node := b.CreatePHI(decls.PNodeType, "")
+	node.AddIncoming([]llvm.Value{
+		llvm.ConstNull(decls.PNodeType),
+		node1,
+	}, []llvm.BasicBlock{
+		argLoopBodyBlock,
+		loadNodeBlock,
+	})
+	printf(b, " %p@%p", node, arg)
+	b.CreateBr(argLoopBlock)
 }
 
 func addDEBUGTRACELibPAGES(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {

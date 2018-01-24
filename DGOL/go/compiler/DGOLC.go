@@ -76,7 +76,7 @@ func buildExecutable(srcFiles, libs []string, dir string, objFiles []string, out
 	args = append(args, objFiles...)
 	tmpDir := os.TempDir()
 	for i, srcFile := range srcFiles {
-		objFile := filepath.Join(tmpDir, fmt.Sprintf("%d.%d.bc", os.Getpid(), i))
+		objFile := filepath.Join(tmpDir, fmt.Sprintf("%d.%d.ll", os.Getpid(), i))
 		args = append(args, objFile)
 
 		file, err := os.Open(srcFile)
@@ -97,9 +97,6 @@ func buildExecutable(srcFiles, libs []string, dir string, objFiles []string, out
 		mod := CodeGen(context, astModule, libs)
 		//defer mod.Dispose()
 
-		mb := llvm.WriteBitcodeToMemoryBuffer(mod)
-		defer mb.Dispose()
-
 		out, err := os.Create(objFile)
 		if err != nil {
 			println(err.Error())
@@ -107,12 +104,15 @@ func buildExecutable(srcFiles, libs []string, dir string, objFiles []string, out
 		}
 		defer out.Close()
 
-		if _, err := out.Write(mb.Bytes()); err != nil {
+		if _, err := out.Write([]byte(mod.String())); err != nil {
 			println(err.Error())
 			os.Exit(1)
 		}
 	}
-	exec.Command("clang", args...).Run()
+	cmd := exec.Command("clang", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
 }
 
 func buildObject(srcFile string, libs []string, dir string, output string) {
