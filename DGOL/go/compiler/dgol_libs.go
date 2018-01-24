@@ -713,7 +713,6 @@ func addDEBUGTRACELibARGS(mod llvm.Module, decls *RTDecls, printf func(llvm.Buil
 
 func addDEBUGTRACELibPAGES(mod llvm.Module, decls *RTDecls, printf func(llvm.Builder, string, ...llvm.Value)) {
 	fn := llvm.AddFunction(mod, "DEBUGTRACE.PAGES", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
-	frameParam := fn.FirstParam()
 
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
@@ -721,7 +720,99 @@ func addDEBUGTRACELibPAGES(mod llvm.Module, decls *RTDecls, printf func(llvm.Bui
 	entryBlock := llvm.AddBasicBlock(fn, "")
 
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	//...
-	_ = frameParam
+	compactionEligibleCountPtr := b.CreateGEP(decls.GlobalState, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	compactionEligibleCount := b.CreateLoad(compactionEligibleCountPtr, "")
+	printf(b, "PAGES %d\n", compactionEligibleCount)
+	initialPage := b.CreateGEP(decls.GlobalState, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	pageLoopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(pageLoopBlock)
+
+	b.SetInsertPoint(pageLoopBlock, pageLoopBlock.FirstInstruction())
+	page := b.CreatePHI(decls.PPageType, "")
+	var nextPage llvm.Value
+	var printPageBlock llvm.BasicBlock
+	defer func() {
+		page.AddIncoming([]llvm.Value{
+			initialPage,
+			nextPage,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			printPageBlock,
+		})
+	}()
+	pageCheck := b.CreateICmp(llvm.IntEQ, page, llvm.ConstNull(decls.PPageType), "")
+	doneBlock := llvm.AddBasicBlock(fn, "")
+	pageLoopBodyBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(pageCheck, doneBlock, pageLoopBodyBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
 	b.CreateRetVoid()
+
+	b.SetInsertPoint(pageLoopBodyBlock, pageLoopBodyBlock.FirstInstruction())
+	nextPagePtr := b.CreateGEP(page, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	nextPage = b.CreateLoad(nextPagePtr, "")
+	countLiveNodesLoopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(countLiveNodesLoopBlock)
+
+	b.SetInsertPoint(countLiveNodesLoopBlock, countLiveNodesLoopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	var countLiveNodeBlock, incrementLiveNodeCountBlock llvm.BasicBlock
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+			nextIndex,
+		}, []llvm.BasicBlock{
+			pageLoopBodyBlock,
+			countLiveNodeBlock,
+			incrementLiveNodeCountBlock,
+		})
+	}()
+	count := b.CreatePHI(llvm.Int32Type(), "")
+	var nextCount llvm.Value
+	defer func() {
+		count.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			count,
+			nextCount,
+		}, []llvm.BasicBlock{
+			pageLoopBodyBlock,
+			countLiveNodeBlock,
+			incrementLiveNodeCountBlock,
+		})
+	}()
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, llvm.ConstInt(llvm.Int32Type(), pageSize, false), "")
+	countLiveNodeBlock = llvm.AddBasicBlock(fn, "")
+	incrementLiveNodeCountBlock = llvm.AddBasicBlock(fn, "")
+	printPageBlock = llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(indexCheck, printPageBlock, countLiveNodeBlock)
+
+	b.SetInsertPoint(countLiveNodeBlock, countLiveNodeBlock.FirstInstruction())
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	livePtr := b.CreateGEP(page, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		index,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	live := b.CreateLoad(livePtr, "")
+	b.CreateCondBr(live, incrementLiveNodeCountBlock, countLiveNodesLoopBlock)
+
+	b.SetInsertPoint(incrementLiveNodeCountBlock, incrementLiveNodeCountBlock.FirstInstruction())
+	nextCount = b.CreateAdd(count, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(countLiveNodesLoopBlock)
+
+	b.SetInsertPoint(printPageBlock, printPageBlock.FirstInstruction())
+	printf(b, " PAGE %p NEXT %p LIVE NODES %d\n", page, nextPage, count)
+	b.CreateBr(pageLoopBlock)
 }

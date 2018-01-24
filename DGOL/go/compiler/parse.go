@@ -37,6 +37,16 @@ func Parse(filename, dir string, r io.Reader) (*ASTModule, error) {
 	if !t.atEOF && t.nextLine() != io.EOF {
 		return nil, t.makeErr("TRAILING JUNK")
 	}
+	for _, subroutine := range astModule.Subroutine {
+		if err := checkCalls(astModule, subroutine.Statements); err != nil {
+			return nil, err
+		}
+	}
+	if astModule.Program != nil {
+		if err := checkCalls(astModule, astModule.Program.Statements); err != nil {
+			return nil, err
+		}
+	}
 	return astModule, nil
 }
 
@@ -600,4 +610,18 @@ func hasReturn(statements []ASTStatement) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func checkCalls(astModule *ASTModule, statements []ASTStatement) error {
+	for _, statement := range statements {
+		if statement.Type == StmtCall && statement.CallTargetModule == "" {
+			if _, ok := astModule.Subroutine[statement.CallTargetRoutine]; !ok {
+				return errors.New(fmt.Sprintf("%s:%d: UNDEFINED SUBROUTINE", astModule.Filename, statement.LineNumber))
+			}
+		}
+		if err := checkCalls(astModule, statement.Statements); err != nil {
+			return err
+		}
+	}
+	return nil
 }
