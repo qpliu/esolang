@@ -883,11 +883,359 @@ func defCompact(mod llvm.Module, decls *RTDecls) {
 	b := mod.Context().NewBuilder()
 	defer b.Dispose()
 
+	frameParam := decls.NewNode.FirstParam()
+
 	entryBlock := llvm.AddBasicBlock(decls.Compact, "")
+	startCompactionCheckBlock := llvm.AddBasicBlock(decls.Compact, "")
+	compactionCheckLoopBlock := llvm.AddBasicBlock(decls.Compact, "")
+	countLiveLoopBlock := llvm.AddBasicBlock(decls.Compact, "")
+	checkNodeBlock := llvm.AddBasicBlock(decls.Compact, "")
+	incrementLiveCountBlock := llvm.AddBasicBlock(decls.Compact, "")
+	checkPageBlock := llvm.AddBasicBlock(decls.Compact, "")
+	pageEligibleBlock := llvm.AddBasicBlock(decls.Compact, "")
+	moveNodesCheckBlock := llvm.AddBasicBlock(decls.Compact, "")
+	initMoveNodesBlock := llvm.AddBasicBlock(decls.Compact, "")
+	collectMoveNodesLoopBlock := llvm.AddBasicBlock(decls.Compact, "")
+	findLiveSrcPageIndexBlock := llvm.AddBasicBlock(decls.Compact, "")
+	findFreeTargetPageIndexBlock := llvm.AddBasicBlock(decls.Compact, "")
+	collectMoveNodeBlock := llvm.AddBasicBlock(decls.Compact, "")
+	callMoveNodesBlock := llvm.AddBasicBlock(decls.Compact, "")
+	targetStillEligibleBlock := llvm.AddBasicBlock(decls.Compact, "")
+	computeNewEligibleCountBlock := llvm.AddBasicBlock(decls.Compact, "")
+	doneBlock := llvm.AddBasicBlock(decls.Compact, "")
+	checkNewTargetLiveBlock := llvm.AddBasicBlock(decls.Compact, "")
+
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
-	//...
-	_ = moveNodes
+	compactionEligibleCountPtr := b.CreateGEP(decls.GlobalState, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, "")
+	compactionEligibleCount := b.CreateLoad(compactionEligibleCountPtr, "")
+	compactionEligibleCountCheck := b.CreateICmp(llvm.IntUGE, compactionEligibleCount, llvm.ConstInt(llvm.Int32Type(), 2, false), "")
+	b.CreateCondBr(compactionEligibleCountCheck, startCompactionCheckBlock, doneBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
 	b.CreateRetVoid()
+
+	b.SetInsertPoint(startCompactionCheckBlock, startCompactionCheckBlock.FirstInstruction())
+	initialPage := b.CreateGEP(decls.GlobalState, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	moveNodeArraySize := llvm.ConstInt(llvm.Int32Type(), 2*pageCompactionThreshold, false)
+	moveNodeArray := b.CreateArrayAlloca(decls.PNodeType, moveNodeArraySize, "")
+	b.CreateStore(llvm.ConstInt(llvm.Int32Type(), 0, false), compactionEligibleCountPtr)
+	b.CreateBr(compactionCheckLoopBlock)
+
+	b.SetInsertPoint(compactionCheckLoopBlock, compactionCheckLoopBlock.FirstInstruction())
+	page := b.CreatePHI(decls.PPageType, "")
+	var nextPage llvm.Value
+	defer func() {
+		page.AddIncoming([]llvm.Value{
+			initialPage,
+			nextPage,
+			nextPage,
+			initialPage,
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	previousPage := b.CreatePHI(decls.PPageType, "")
+	defer func() {
+		previousPage.AddIncoming([]llvm.Value{
+			llvm.ConstNull(decls.PPageType),
+			page,
+			page,
+			llvm.ConstNull(decls.PPageType),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	targetPage := b.CreatePHI(decls.PPageType, "")
+	var srcPage llvm.Value
+	defer func() {
+		targetPage.AddIncoming([]llvm.Value{
+			llvm.ConstNull(decls.PPageType),
+			targetPage,
+			srcPage,
+			llvm.ConstNull(decls.PPageType),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	targetLiveCount := b.CreatePHI(llvm.Int32Type(), "")
+	var srcLiveCount llvm.Value
+	defer func() {
+		targetLiveCount.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			targetLiveCount,
+			srcLiveCount,
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	srcPreviousPage := b.CreatePHI(decls.PPageType, "")
+	defer func() {
+		srcPreviousPage.AddIncoming([]llvm.Value{
+			llvm.ConstNull(decls.PPageType),
+			srcPreviousPage,
+			previousPage,
+			llvm.ConstNull(decls.PPageType),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	srcPage = b.CreatePHI(decls.PPageType, "")
+	defer func() {
+		srcPage.AddIncoming([]llvm.Value{
+			llvm.ConstNull(decls.PPageType),
+			srcPage,
+			page,
+			llvm.ConstNull(decls.PPageType),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	srcLiveCount = b.CreatePHI(llvm.Int32Type(), "")
+	var liveCount llvm.Value
+	defer func() {
+		srcLiveCount.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			srcLiveCount,
+			liveCount,
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	stillEligibleCount := b.CreatePHI(llvm.Int32Type(), "")
+	var incrementedStillEligibleCount llvm.Value
+	defer func() {
+		stillEligibleCount.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			stillEligibleCount,
+			incrementedStillEligibleCount,
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+		}, []llvm.BasicBlock{
+			startCompactionCheckBlock,
+			checkPageBlock,
+			pageEligibleBlock,
+			computeNewEligibleCountBlock,
+		})
+	}()
+	pageCheck := b.CreateICmp(llvm.IntEQ, page, llvm.ConstNull(decls.PPageType), "")
+	b.CreateCondBr(pageCheck, moveNodesCheckBlock, countLiveLoopBlock)
+
+	b.SetInsertPoint(countLiveLoopBlock, countLiveLoopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+			nextIndex,
+		}, []llvm.BasicBlock{
+			compactionCheckLoopBlock,
+			checkNodeBlock,
+			incrementLiveCountBlock,
+		})
+	}()
+	liveCount = b.CreatePHI(llvm.Int32Type(), "")
+	var incrementedLiveCount llvm.Value
+	defer func() {
+		liveCount.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			liveCount,
+			incrementedLiveCount,
+		}, []llvm.BasicBlock{
+			compactionCheckLoopBlock,
+			checkNodeBlock,
+			incrementLiveCountBlock,
+		})
+	}()
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, llvm.ConstInt(llvm.Int32Type(), pageSize, false), "")
+	b.CreateCondBr(indexCheck, checkPageBlock, checkNodeBlock)
+
+	b.SetInsertPoint(checkNodeBlock, checkNodeBlock.FirstInstruction())
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	livePtr := b.CreateGEP(page, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		index,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	live := b.CreateLoad(livePtr, "")
+	b.CreateCondBr(live, incrementLiveCountBlock, countLiveLoopBlock)
+
+	b.SetInsertPoint(incrementLiveCountBlock, incrementLiveCountBlock.FirstInstruction())
+	incrementedLiveCount = b.CreateAdd(liveCount, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(countLiveLoopBlock)
+
+	b.SetInsertPoint(checkPageBlock, checkPageBlock.FirstInstruction())
+	nextPagePtr := b.CreateGEP(page, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	nextPage = b.CreateLoad(nextPagePtr, "")
+	liveCountCheck := b.CreateICmp(llvm.IntUGE, liveCount, llvm.ConstInt(llvm.Int32Type(), pageCompactionThreshold, false), "")
+	b.CreateCondBr(liveCountCheck, compactionCheckLoopBlock, pageEligibleBlock)
+
+	b.SetInsertPoint(pageEligibleBlock, pageEligibleBlock.FirstInstruction())
+	incrementedStillEligibleCount = b.CreateAdd(stillEligibleCount, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	b.CreateBr(compactionCheckLoopBlock)
+
+	b.SetInsertPoint(moveNodesCheckBlock, moveNodesCheckBlock.FirstInstruction())
+	targetPageCheck := b.CreateICmp(llvm.IntEQ, targetPage, llvm.ConstNull(decls.PPageType), "")
+	b.CreateCondBr(targetPageCheck, doneBlock, initMoveNodesBlock)
+
+	b.SetInsertPoint(initMoveNodesBlock, initMoveNodesBlock.FirstInstruction())
+	moveNodeCount := b.CreateAdd(srcLiveCount, srcLiveCount, "")
+	b.CreateBr(collectMoveNodesLoopBlock)
+
+	b.SetInsertPoint(collectMoveNodesLoopBlock, collectMoveNodesLoopBlock.FirstInstruction())
+	moveNodeIndex := b.CreatePHI(llvm.Int32Type(), "")
+	var moveNodeNextIndex llvm.Value
+	defer func() {
+		moveNodeIndex.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			moveNodeNextIndex,
+		}, []llvm.BasicBlock{
+			initMoveNodesBlock,
+			collectMoveNodeBlock,
+		})
+	}()
+	srcPageIndex0 := b.CreatePHI(llvm.Int32Type(), "")
+	var srcPageNextIndex1 llvm.Value
+	defer func() {
+		srcPageIndex0.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			srcPageNextIndex1,
+		}, []llvm.BasicBlock{
+			initMoveNodesBlock,
+			collectMoveNodeBlock,
+		})
+	}()
+	targetPageIndex0 := b.CreatePHI(llvm.Int32Type(), "")
+	var targetPageNextIndex1 llvm.Value
+	defer func() {
+		targetPageIndex0.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			targetPageNextIndex1,
+		}, []llvm.BasicBlock{
+			initMoveNodesBlock,
+			collectMoveNodeBlock,
+		})
+	}()
+	moveNodeIndexCheck := b.CreateICmp(llvm.IntUGE, moveNodeIndex, moveNodeCount, "")
+	b.CreateCondBr(moveNodeIndexCheck, callMoveNodesBlock, findLiveSrcPageIndexBlock)
+
+	b.SetInsertPoint(findLiveSrcPageIndexBlock, findLiveSrcPageIndexBlock.FirstInstruction())
+	srcPageIndex1 := b.CreatePHI(llvm.Int32Type(), "")
+	defer func() {
+		srcPageIndex1.AddIncoming([]llvm.Value{
+			srcPageIndex0,
+			srcPageNextIndex1,
+		}, []llvm.BasicBlock{
+			collectMoveNodesLoopBlock,
+			findLiveSrcPageIndexBlock,
+		})
+	}()
+	srcPageNextIndex1 = b.CreateAdd(srcPageIndex1, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	srcPageNodeLivePtr := b.CreateGEP(srcPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		srcPageIndex1,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	srcPageNodeLive := b.CreateLoad(srcPageNodeLivePtr, "")
+	b.CreateCondBr(srcPageNodeLive, findFreeTargetPageIndexBlock, findLiveSrcPageIndexBlock)
+
+	b.SetInsertPoint(findFreeTargetPageIndexBlock, findFreeTargetPageIndexBlock.FirstInstruction())
+	targetPageIndex1 := b.CreatePHI(llvm.Int32Type(), "")
+	defer func() {
+		targetPageIndex1.AddIncoming([]llvm.Value{
+			targetPageIndex0,
+			targetPageNextIndex1,
+		}, []llvm.BasicBlock{
+			findLiveSrcPageIndexBlock,
+			findFreeTargetPageIndexBlock,
+		})
+	}()
+	targetPageNextIndex1 = b.CreateAdd(targetPageIndex1, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	targetNodeLivePtr := b.CreateGEP(targetPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		targetPageIndex1,
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+	}, "")
+	targetPageNodeLive := b.CreateLoad(targetNodeLivePtr, "")
+	b.CreateCondBr(targetPageNodeLive, findFreeTargetPageIndexBlock, collectMoveNodeBlock)
+
+	b.SetInsertPoint(collectMoveNodeBlock, collectMoveNodeBlock.FirstInstruction())
+	srcPageNode := b.CreateGEP(srcPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		srcPageIndex1,
+	}, "")
+	moveNodeArraySrcPtr := b.CreateGEP(moveNodeArray, []llvm.Value{moveNodeIndex}, "")
+	b.CreateStore(srcPageNode, moveNodeArraySrcPtr)
+	targetPageNode := b.CreateGEP(targetPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		targetPageIndex1,
+	}, "")
+	moveNodeIndexP1 := b.CreateAdd(moveNodeIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	moveNodeArrayTargetPtr := b.CreateGEP(moveNodeArray, []llvm.Value{moveNodeIndexP1}, "")
+	b.CreateStore(targetPageNode, moveNodeArrayTargetPtr)
+	moveNodeNextIndex = b.CreateAdd(moveNodeIndex, llvm.ConstInt(llvm.Int32Type(), 2, false), "")
+	b.CreateBr(collectMoveNodesLoopBlock)
+
+	b.SetInsertPoint(callMoveNodesBlock, callMoveNodesBlock.FirstInstruction())
+	b.CreateCall(moveNodes, []llvm.Value{frameParam, moveNodeCount, moveNodeArray}, "")
+	freePage(decls, b, decls.Compact, srcPage, srcPreviousPage, callMoveNodesBlock, checkNewTargetLiveBlock)
+
+	b.SetInsertPoint(checkNewTargetLiveBlock, checkNewTargetLiveBlock.FirstInstruction())
+	newTargetLiveCount := b.CreateAdd(targetLiveCount, srcLiveCount, "")
+	newTargetLiveCountCheck := b.CreateICmp(llvm.IntUGE, llvm.ConstInt(llvm.Int32Type(), pageCompactionThreshold, false), newTargetLiveCount, "")
+	b.CreateCondBr(newTargetLiveCountCheck, targetStillEligibleBlock, computeNewEligibleCountBlock)
+
+	b.SetInsertPoint(targetStillEligibleBlock, targetStillEligibleBlock.FirstInstruction())
+	b.CreateBr(computeNewEligibleCountBlock)
+
+	b.SetInsertPoint(computeNewEligibleCountBlock, computeNewEligibleCountBlock.FirstInstruction())
+	noLongerEligibleCount := b.CreatePHI(llvm.Int32Type(), "")
+	noLongerEligibleCount.AddIncoming([]llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		llvm.ConstInt(llvm.Int32Type(), 2, false),
+	}, []llvm.BasicBlock{
+		targetStillEligibleBlock,
+		checkNewTargetLiveBlock,
+	})
+	newStillEligibleCount := b.CreateSub(stillEligibleCount, noLongerEligibleCount, "")
+	newStillEligibleCountCheck := b.CreateICmp(llvm.IntUGE, newStillEligibleCount, llvm.ConstInt(llvm.Int32Type(), 2, false), "")
+	b.CreateCondBr(newStillEligibleCountCheck, compactionCheckLoopBlock, doneBlock)
 }
 
 func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
@@ -905,20 +1253,31 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	nodeCountParam := llvm.NextParam(frameParam)
 	nodeArrayParam := llvm.NextParam(nodeCountParam)
 
-	// first, move the actual nodes in the pages
 	entryBlock := llvm.AddBasicBlock(moveNodes, "")
+	moveActualNodesLoopBlock := llvm.AddBasicBlock(moveNodes, "")
+	moveActualNodesLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
+	pageLoopBlock := llvm.AddBasicBlock(moveNodes, "")
+	pageLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
+	pageNodeLoopBlock := llvm.AddBasicBlock(moveNodes, "")
+	pageNodeLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
+	pageNodeMoveEdgesBlock := llvm.AddBasicBlock(moveNodes, "")
+	frameLoopBlock := llvm.AddBasicBlock(moveNodes, "")
+	frameLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
+	doEdgesLoopBlock := llvm.AddBasicBlock(moveNodes, "")
+	doEdgesLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
+	doneBlock := llvm.AddBasicBlock(moveNodes, "")
+
+	// first, move the actual nodes in the pages
 	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
 	initialPage := llvm.ConstGEP(decls.GlobalState, []llvm.Value{
 		llvm.ConstInt(llvm.Int32Type(), 0, false),
 		llvm.ConstInt(llvm.Int32Type(), 1, false),
 	})
-	moveActualNodesLoopBlock := llvm.AddBasicBlock(moveNodes, "")
 	b.CreateBr(moveActualNodesLoopBlock)
 
 	b.SetInsertPoint(moveActualNodesLoopBlock, moveActualNodesLoopBlock.FirstInstruction())
 	moveActualNodesIndex := b.CreatePHI(llvm.Int32Type(), "")
 	var moveActualNodesNextIndex llvm.Value
-	var moveActualNodesLoopBodyBlock llvm.BasicBlock
 	defer func() {
 		moveActualNodesIndex.AddIncoming([]llvm.Value{
 			llvm.ConstInt(llvm.Int32Type(), 0, false),
@@ -931,8 +1290,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	moveActualNodesIndexP1 := b.CreateAdd(moveActualNodesIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
 	moveActualNodesNextIndex = b.CreateAdd(moveActualNodesIndex, llvm.ConstInt(llvm.Int32Type(), 2, false), "")
 	moveActualNodesIndexCheck := b.CreateICmp(llvm.IntUGE, moveActualNodesIndex, nodeCountParam, "")
-	moveActualNodesLoopBodyBlock = llvm.AddBasicBlock(moveNodes, "")
-	pageLoopBlock := llvm.AddBasicBlock(moveNodes, "")
 	b.CreateCondBr(moveActualNodesIndexCheck, pageLoopBlock, moveActualNodesLoopBodyBlock)
 
 	b.SetInsertPoint(moveActualNodesLoopBodyBlock, moveActualNodesLoopBodyBlock.FirstInstruction())
@@ -947,7 +1304,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	b.SetInsertPoint(pageLoopBlock, pageLoopBlock.FirstInstruction())
 	page := b.CreatePHI(decls.PPageType, "")
 	var nextPage llvm.Value
-	var pageNodeLoopBlock llvm.BasicBlock
 	defer func() {
 		page.AddIncoming([]llvm.Value{
 			initialPage,
@@ -958,8 +1314,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 		})
 	}()
 	pageCheck := b.CreateICmp(llvm.IntEQ, page, llvm.ConstNull(decls.PPageType), "")
-	pageLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
-	frameLoopBlock := llvm.AddBasicBlock(moveNodes, "")
 	b.CreateCondBr(pageCheck, frameLoopBlock, pageLoopBodyBlock)
 
 	b.SetInsertPoint(pageLoopBodyBlock, pageLoopBodyBlock.FirstInstruction())
@@ -968,19 +1322,16 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 		llvm.ConstInt(llvm.Int32Type(), 0, false),
 	}, "")
 	nextPage = b.CreateLoad(nextPagePtr, "")
-	pageNodeLoopBlock = llvm.AddBasicBlock(moveNodes, "")
 	b.CreateBr(pageNodeLoopBlock)
 
 	b.SetInsertPoint(pageNodeLoopBlock, pageNodeLoopBlock.FirstInstruction())
 	pageNodeIndex := b.CreatePHI(llvm.Int32Type(), "")
 	var pageNodeNextIndex llvm.Value
-	var pageNodeLoopBodyBlock llvm.BasicBlock
-	var pageNodeMoveEdgesBlock llvm.BasicBlock
 	defer func() {
 		pageNodeIndex.AddIncoming([]llvm.Value{
 			llvm.ConstInt(llvm.Int32Type(), 0, false),
 			pageNodeNextIndex,
-			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			pageNodeNextIndex,
 		}, []llvm.BasicBlock{
 			pageLoopBodyBlock,
 			pageNodeLoopBodyBlock,
@@ -989,7 +1340,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	}()
 	pageNodeNextIndex = b.CreateAdd(pageNodeIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
 	pageNodeIndexCheck := b.CreateICmp(llvm.IntUGE, pageNodeIndex, llvm.ConstInt(llvm.Int32Type(), pageSize, false), "")
-	pageNodeLoopBodyBlock = llvm.AddBasicBlock(moveNodes, "")
 	b.CreateCondBr(pageNodeIndexCheck, pageLoopBlock, pageNodeLoopBodyBlock)
 
 	b.SetInsertPoint(pageNodeLoopBodyBlock, pageNodeLoopBodyBlock.FirstInstruction())
@@ -1000,7 +1350,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 		llvm.ConstInt(llvm.Int32Type(), 1, false),
 	}, "")
 	pageNodeLive := b.CreateLoad(pageNodeLivePtr, "")
-	pageNodeMoveEdgesBlock = llvm.AddBasicBlock(moveNodes, "")
 	b.CreateCondBr(pageNodeLive, pageNodeMoveEdgesBlock, pageNodeLoopBlock)
 
 	b.SetInsertPoint(pageNodeMoveEdgesBlock, pageNodeMoveEdgesBlock.FirstInstruction())
@@ -1031,7 +1380,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	b.SetInsertPoint(frameLoopBlock, frameLoopBlock.FirstInstruction())
 	currentFrame := b.CreatePHI(decls.PFrameType, "")
 	var nextFrame llvm.Value
-	var doEdgesLoopBlock llvm.BasicBlock
 	defer func() {
 		currentFrame.AddIncoming([]llvm.Value{
 			frameParam,
@@ -1042,8 +1390,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 		})
 	}()
 	currentFrameCheck := b.CreateICmp(llvm.IntEQ, currentFrame, llvm.ConstNull(decls.PFrameType), "")
-	frameLoopBodyBlock := llvm.AddBasicBlock(moveNodes, "")
-	doneBlock := llvm.AddBasicBlock(moveNodes, "")
 	b.CreateCondBr(currentFrameCheck, doneBlock, frameLoopBodyBlock)
 
 	b.SetInsertPoint(frameLoopBodyBlock, frameLoopBodyBlock.FirstInstruction())
@@ -1078,13 +1424,11 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 		llvm.ConstInt(llvm.Int32Type(), 4, false),
 	}, "")
 	doEdgesArray := b.CreateLoad(doEdgesArrayPtr, "")
-	doEdgesLoopBlock = llvm.AddBasicBlock(moveNodes, "")
 	b.CreateBr(doEdgesLoopBlock)
 
 	b.SetInsertPoint(doEdgesLoopBlock, doEdgesLoopBlock.FirstInstruction())
 	doEdgesIndex := b.CreatePHI(llvm.Int32Type(), "")
 	var doEdgesNextIndex llvm.Value
-	var doEdgesLoopBodyBlock llvm.BasicBlock
 	defer func() {
 		doEdgesIndex.AddIncoming([]llvm.Value{
 			llvm.ConstInt(llvm.Int32Type(), 0, false),
@@ -1096,7 +1440,6 @@ func defMoveNodes(mod llvm.Module, decls *RTDecls) llvm.Value {
 	}()
 	doEdgesNextIndex = b.CreateAdd(doEdgesIndex, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
 	doEdgesIndexCheck := b.CreateICmp(llvm.IntUGE, doEdgesIndex, doEdgesArraySize, "")
-	doEdgesLoopBodyBlock = llvm.AddBasicBlock(moveNodes, "")
 	b.CreateCondBr(doEdgesIndexCheck, frameLoopBlock, doEdgesLoopBodyBlock)
 
 	b.SetInsertPoint(doEdgesLoopBodyBlock, doEdgesLoopBodyBlock.FirstInstruction())
@@ -1139,14 +1482,17 @@ func defMoveNodeReferencesInEdgeArray(mod llvm.Module, decls *RTDecls) llvm.Valu
 	nodeArrayParam := llvm.NextParam(nodeCountParam)
 
 	entryBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
-	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
 	edgeLoopBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	edgeLoopBodyBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	doneBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+	edgeLoopBodyEndBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
+
+	b.SetInsertPoint(entryBlock, entryBlock.FirstInstruction())
 	b.CreateBr(edgeLoopBlock)
 
 	b.SetInsertPoint(edgeLoopBlock, edgeLoopBlock.FirstInstruction())
 	index := b.CreatePHI(llvm.Int32Type(), "")
 	var nextIndex llvm.Value
-	var edgeLoopBodyEndBlock llvm.BasicBlock
 	defer func() {
 		index.AddIncoming([]llvm.Value{
 			llvm.ConstInt(llvm.Int32Type(), 0, false),
@@ -1157,13 +1503,10 @@ func defMoveNodeReferencesInEdgeArray(mod llvm.Module, decls *RTDecls) llvm.Valu
 		})
 	}()
 	indexCheck := b.CreateICmp(llvm.IntUGE, index, edgeCountParam, "")
-	edgeLoopBodyBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
-	doneBlock := llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
 	b.CreateCondBr(indexCheck, doneBlock, edgeLoopBodyBlock)
 
 	b.SetInsertPoint(edgeLoopBodyBlock, edgeLoopBodyBlock.FirstInstruction())
 	edgeReference := b.CreateGEP(edgeArrayParam, []llvm.Value{index}, "")
-	edgeLoopBodyEndBlock = llvm.AddBasicBlock(moveNodeReferencesInEdgeArray, "")
 	moveNodeReference(decls, moveNodeReferencesInEdgeArray, b, edgeReference, nodeCountParam, nodeArrayParam, edgeLoopBodyBlock, edgeLoopBodyEndBlock)
 
 	b.SetInsertPoint(edgeLoopBodyEndBlock, edgeLoopBodyEndBlock.FirstInstruction())
@@ -1252,5 +1595,63 @@ func moveNodeReference(decls *RTDecls, function llvm.Value, b llvm.Builder, node
 	destNodePtr := b.CreateGEP(nodeArrayParam, []llvm.Value{indexP1}, "")
 	destNode := b.CreateLoad(destNodePtr, "")
 	b.CreateStore(destNode, nodeReference)
+	b.CreateBr(exitBlock)
+}
+
+func freePage(decls *RTDecls, b llvm.Builder, fn, page, previousPage llvm.Value, entryBlock, exitBlock llvm.BasicBlock) {
+	nextPagePtr := b.CreateGEP(page, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	nextPage := b.CreateLoad(nextPagePtr, "")
+	previousNextPagePtr := b.CreateGEP(previousPage, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+	}, "")
+	b.CreateStore(nextPage, previousNextPagePtr)
+	nodeLoopBlock := llvm.AddBasicBlock(fn, "")
+	b.CreateBr(nodeLoopBlock)
+
+	b.SetInsertPoint(nodeLoopBlock, nodeLoopBlock.FirstInstruction())
+	index := b.CreatePHI(llvm.Int32Type(), "")
+	var nextIndex llvm.Value
+	var nodeLoopBodyBlock, freeEdgesBlock llvm.BasicBlock
+	defer func() {
+		index.AddIncoming([]llvm.Value{
+			llvm.ConstInt(llvm.Int32Type(), 0, false),
+			nextIndex,
+			nextIndex,
+		}, []llvm.BasicBlock{
+			entryBlock,
+			nodeLoopBodyBlock,
+			freeEdgesBlock,
+		})
+	}()
+	nextIndex = b.CreateAdd(index, llvm.ConstInt(llvm.Int32Type(), 1, false), "")
+	indexCheck := b.CreateICmp(llvm.IntUGE, index, llvm.ConstInt(llvm.Int32Type(), pageSize, false), "")
+	doneBlock := llvm.AddBasicBlock(fn, "")
+	nodeLoopBodyBlock = llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(indexCheck, doneBlock, nodeLoopBodyBlock)
+
+	b.SetInsertPoint(nodeLoopBodyBlock, nodeLoopBodyBlock.FirstInstruction())
+	edgesArrayPtr := b.CreateGEP(page, []llvm.Value{
+		llvm.ConstInt(llvm.Int32Type(), 0, false),
+		llvm.ConstInt(llvm.Int32Type(), 1, false),
+		index,
+		llvm.ConstInt(llvm.Int32Type(), 3, false),
+	}, "")
+	edgesArray := b.CreateLoad(edgesArrayPtr, "")
+	edgesArrayCheck := b.CreateICmp(llvm.IntEQ, edgesArray, llvm.ConstNull(decls.PPNodeType), "")
+	freeEdgesBlock = llvm.AddBasicBlock(fn, "")
+	b.CreateCondBr(edgesArrayCheck, nodeLoopBlock, freeEdgesBlock)
+
+	b.SetInsertPoint(freeEdgesBlock, freeEdgesBlock.FirstInstruction())
+	edgesArrayRawPtr := b.CreateBitCast(edgesArray, llvm.PointerType(llvm.Int8Type(), 0), "")
+	b.CreateCall(decls.Free, []llvm.Value{edgesArrayRawPtr}, "")
+	b.CreateBr(nodeLoopBlock)
+
+	b.SetInsertPoint(doneBlock, doneBlock.FirstInstruction())
+	pageRawPtr := b.CreateBitCast(page, llvm.PointerType(llvm.Int8Type(), 0), "")
+	b.CreateCall(decls.Free, []llvm.Value{pageRawPtr}, "")
 	b.CreateBr(exitBlock)
 }

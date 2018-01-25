@@ -40,17 +40,13 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 	})
 	routs := make(map[string]llvm.Value)
 	for _, routine := range astModule.Subroutine {
-		routs[routine.Name] = llvm.AddFunction(mod, "", llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
+		routs[routine.Name] = llvm.AddFunction(mod, astModule.Name+"."+routine.Name, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
 	}
 	for _, routine := range astModule.Subroutine {
 		name := astModule.Name + "." + routine.Name
-		linkageName := ""
-		if routine.Exported {
-			linkageName = name
-		}
 		diScope := dib.CreateFunction(diCU, llvm.DIFunction{
 			Name:         name,
-			LinkageName:  linkageName,
+			LinkageName:  "",
 			File:         diFile,
 			Line:         routine.LineNumber,
 			Type:         diSubroutineType,
@@ -61,8 +57,8 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Optimized:    false,
 		})
 		rout := codeGenRoutine(mod, decls, diScope, astModule.Name, routine, false, routs)
-		if routine.Exported {
-			llvm.AddAlias(mod, rout.Type(), rout, astModule.Name+"."+routine.Name)
+		if !routine.Exported {
+			rout.SetLinkage(llvm.InternalLinkage)
 		}
 	}
 	if astModule.Program != nil {

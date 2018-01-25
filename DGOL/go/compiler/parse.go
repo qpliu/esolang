@@ -387,8 +387,9 @@ func parseStatement(t *tokenizer, routineInfo *routineInfo) (ASTStatement, bool,
 			arg, ok = routineInfo.getVar(tokens[0])
 			args = append(args, &arg)
 			if ok {
-				arg, ok = routineInfo.getVar(tokens[0])
-				args = append(args, &arg)
+				arg1, ok1 := routineInfo.getVar(tokens[2])
+				args = append(args, &arg1)
+				ok = ok1
 			}
 			doEdgesIndex = routineInfo.doEdgesCount
 			routineInfo.doEdgesCount++
