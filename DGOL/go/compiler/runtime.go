@@ -1586,7 +1586,7 @@ func moveNodeReference(decls *RTDecls, function llvm.Value, b llvm.Builder, node
 	b.SetInsertPoint(nodeArrayLoopBodyBlock, nodeArrayLoopBodyBlock.FirstInstruction())
 	srcNodePtr := b.CreateGEP(nodeArrayParam, []llvm.Value{index}, "")
 	srcNode := b.CreateLoad(srcNodePtr, "")
-	srcNodeCheck := b.CreateICmp(llvm.IntEQ, srcNode, llvm.ConstNull(decls.PNodeType), "")
+	srcNodeCheck := b.CreateICmp(llvm.IntEQ, srcNode, node, "")
 	moveNodeBlock := llvm.AddBasicBlock(function, "")
 	b.CreateCondBr(srcNodeCheck, moveNodeBlock, nodeArrayLoopBlock)
 
