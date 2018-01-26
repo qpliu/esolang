@@ -24,9 +24,9 @@ func InsertDebugAddr(b llvm.Builder, mod llvm.Module, addr llvm.Value, diVar llv
 	valueRef = (*C.LLVMValueRef)(unsafe.Pointer(&diExprVal.C))
 	*valueRef = C.LLVMMetadataAsValue(contextRef, C.LLVMMetadataRef(unsafe.Pointer(diExpr.C)))
 
-	dbgAddr := mod.NamedFunction("llvm.dbg.addr")
+	dbgAddr := mod.NamedFunction("llvm.dbg.declare")
 	if dbgAddr.IsNil() {
-		dbgAddr = llvm.AddFunction(mod, "llvm.dbg.addr", llvm.FunctionType(llvm.VoidType(), []llvm.Type{mdAddrVal.Type(), diVarVal.Type(), diExprVal.Type()}, false))
+		dbgAddr = llvm.AddFunction(mod, "llvm.dbg.declare", llvm.FunctionType(llvm.VoidType(), []llvm.Type{mdAddrVal.Type(), diVarVal.Type(), diExprVal.Type()}, false))
 	}
-	// b.CreateCall(dbgAddr, []llvm.Value{mdAddrVal, diVarVal, diExprVal}, "")
+	b.CreateCall(dbgAddr, []llvm.Value{mdAddrVal, diVarVal, diExprVal}, "")
 }
