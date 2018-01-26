@@ -56,7 +56,7 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Flags:        0,
 			Optimized:    false,
 		})
-		rout := codeGenRoutine(mod, decls, diScope, astModule.Name, routine, false, routs)
+		rout := codeGenRoutine(mod, decls, dib, diScope, diFile, astModule.Name, routine, false, routs)
 		if !routine.Exported {
 			rout.SetLinkage(llvm.InternalLinkage)
 		}
@@ -74,12 +74,12 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Flags:        0,
 			Optimized:    false,
 		})
-		codeGenRoutine(mod, decls, diScope, astModule.Name, *astModule.Program, true, routs)
+		codeGenRoutine(mod, decls, dib, diScope, diFile, astModule.Name, *astModule.Program, true, routs)
 	}
 	return mod
 }
 
-func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modName string, routine ASTRoutine, isMain bool, routs map[string]llvm.Value) llvm.Value {
+func codeGenRoutine(mod llvm.Module, decls *RTDecls, dib *llvm.DIBuilder, diScope, diFile llvm.Metadata, modName string, routine ASTRoutine, isMain bool, routs map[string]llvm.Value) llvm.Value {
 	var rout llvm.Value
 	var callerFrame llvm.Value
 	if isMain {
@@ -203,7 +203,69 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 		callerArgArray = b.CreateLoad(callerArgArrayPtr, "")
 	}
 
-	//... llvm.dbg.addr for vars
+	varPtrs := []llvm.Value{}
+	for _, localVar := range routine.Vars {
+		if !localVar.IsCallArg {
+			varPtr := b.CreateGEP(varArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(localVar.Index), false)}, "")
+			varPtrs = append(varPtrs, varPtr)
+		} else {
+			checkIndexBlock := llvm.AddBasicBlock(rout, "")
+			checkCallerArgBlock := llvm.AddBasicBlock(rout, "")
+			useLocalBlock := llvm.AddBasicBlock(rout, "")
+			setVarPtrBlock := llvm.AddBasicBlock(rout, "")
+			b.CreateBr(checkIndexBlock)
+
+			b.SetInsertPoint(checkIndexBlock, checkIndexBlock.FirstInstruction())
+			indexCheck := b.CreateICmp(llvm.IntUGE, llvm.ConstInt(llvm.Int32Type(), uint64(localVar.Index), false), callerArgCount, "")
+			b.CreateCondBr(indexCheck, useLocalBlock, checkCallerArgBlock)
+
+			b.SetInsertPoint(checkCallerArgBlock, checkCallerArgBlock.FirstInstruction())
+			callerArgPtr := b.CreateGEP(callerArgArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(localVar.Index), false)}, "")
+			callerArg := b.CreateLoad(callerArgPtr, "")
+			callerArgCheck := b.CreateICmp(llvm.IntEQ, callerArg, llvm.ConstNull(decls.PPNodeType), "")
+			b.CreateCondBr(callerArgCheck, useLocalBlock, setVarPtrBlock)
+
+			b.SetInsertPoint(useLocalBlock, useLocalBlock.FirstInstruction())
+			localVarPtr := b.CreateGEP(varArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(localVar.Index), false)}, "")
+			b.CreateBr(setVarPtrBlock)
+
+			b.SetInsertPoint(setVarPtrBlock, setVarPtrBlock.FirstInstruction())
+			varPtr := b.CreatePHI(decls.PPNodeType, "")
+			varPtr.AddIncoming([]llvm.Value{
+				callerArg,
+				localVarPtr,
+			}, []llvm.BasicBlock{
+				checkCallerArgBlock,
+				useLocalBlock,
+			})
+			varPtrs = append(varPtrs, varPtr)
+		}
+	}
+
+	for _, localVar := range routine.Vars {
+		diNodeType := dib.CreateBasicType(llvm.DIBasicType{
+			Name:       "nodeData",
+			SizeInBits: 128,
+			Encoding:   llvm.DW_ATE_unsigned,
+		})
+		diType := dib.CreatePointerType(llvm.DIPointerType{
+			Pointee:     diNodeType,
+			SizeInBits:  128,
+			AlignInBits: 0,
+			Name:        "node",
+		})
+		diVar := dib.CreateAutoVariable(diScope, llvm.DIAutoVariable{
+			Name:           localVar.Name,
+			File:           diFile,
+			Line:           routine.LineNumber,
+			Type:           diType,
+			AlwaysPreserve: false,
+			Flags:          0,
+			AlignInBits:    64,
+		})
+		diExpr := dib.CreateExpression(nil)
+		InsertDebugAddr(b, mod, varPtrs[localVar.Index], diVar, diExpr)
+	}
 
 	epilogueBlock := llvm.AddBasicBlock(rout, "")
 	routBodyBlock := llvm.AddBasicBlock(rout, "")
@@ -235,40 +297,7 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, diScope llvm.Metadata, modN
 	b.CreateRetVoid()
 
 	getVarPtr := func(astVar ASTVar) llvm.Value {
-		if !astVar.IsCallArg {
-			return b.CreateGEP(varArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false)}, "")
-		}
-		checkIndexBlock := llvm.AddBasicBlock(rout, "")
-		checkCallerArgBlock := llvm.AddBasicBlock(rout, "")
-		useLocalBlock := llvm.AddBasicBlock(rout, "")
-		returnVarPtrBlock := llvm.AddBasicBlock(rout, "")
-
-		b.CreateBr(checkIndexBlock)
-
-		b.SetInsertPoint(checkIndexBlock, checkIndexBlock.FirstInstruction())
-		indexCheck := b.CreateICmp(llvm.IntUGE, llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false), callerArgCount, "")
-		b.CreateCondBr(indexCheck, useLocalBlock, checkCallerArgBlock)
-
-		b.SetInsertPoint(checkCallerArgBlock, checkCallerArgBlock.FirstInstruction())
-		callerArgPtr := b.CreateGEP(callerArgArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false)}, "")
-		callerArg := b.CreateLoad(callerArgPtr, "")
-		callerArgCheck := b.CreateICmp(llvm.IntEQ, callerArg, llvm.ConstNull(decls.PPNodeType), "")
-		b.CreateCondBr(callerArgCheck, useLocalBlock, returnVarPtrBlock)
-
-		b.SetInsertPoint(useLocalBlock, useLocalBlock.FirstInstruction())
-		localVarPtr := b.CreateGEP(varArray, []llvm.Value{llvm.ConstInt(llvm.Int32Type(), uint64(astVar.Index), false)}, "")
-		b.CreateBr(returnVarPtrBlock)
-
-		b.SetInsertPoint(returnVarPtrBlock, returnVarPtrBlock.FirstInstruction())
-		varPtr := b.CreatePHI(decls.PPNodeType, "")
-		varPtr.AddIncoming([]llvm.Value{
-			callerArg,
-			localVarPtr,
-		}, []llvm.BasicBlock{
-			checkCallerArgBlock,
-			useLocalBlock,
-		})
-		return varPtr
+		return varPtrs[astVar.Index]
 	}
 	getVar := func(astVar ASTVar) llvm.Value {
 		varPtr := getVarPtr(astVar)
