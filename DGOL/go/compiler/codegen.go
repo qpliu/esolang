@@ -1,6 +1,8 @@
 package main
 
 import (
+	"debug/dwarf"
+
 	"llvm.org/llvm/bindings/go/llvm"
 )
 
@@ -29,15 +31,7 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 		RuntimeVersion: 1,
 	})
 	diFile := dib.CreateFile(astModule.Filename, astModule.Dir)
-	diVoidType := dib.CreateBasicType(llvm.DIBasicType{
-		Name:       "void",
-		SizeInBits: 0,
-		Encoding:   0,
-	})
-	diSubroutineType := dib.CreateSubroutineType(llvm.DISubroutineType{
-		File:       diFile,
-		Parameters: []llvm.Metadata{diVoidType},
-	})
+	diSubroutineType, diPNodeType := genDITypes(dib, diCU, diFile)
 	routs := make(map[string]llvm.Value)
 	for _, routine := range astModule.Subroutine {
 		routs[routine.Name] = llvm.AddFunction(mod, astModule.Name+"."+routine.Name, llvm.FunctionType(llvm.VoidType(), []llvm.Type{decls.PFrameType}, false))
@@ -56,7 +50,7 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Flags:        0,
 			Optimized:    false,
 		})
-		rout := codeGenRoutine(mod, decls, dib, diScope, diFile, astModule.Name, routine, false, routs)
+		rout := codeGenRoutine(mod, decls, dib, diScope, diFile, diPNodeType, astModule.Name, routine, false, routs)
 		if !routine.Exported {
 			rout.SetLinkage(llvm.InternalLinkage)
 		}
@@ -74,12 +68,12 @@ func CodeGen(context llvm.Context, astModule *ASTModule, libs []string) llvm.Mod
 			Flags:        0,
 			Optimized:    false,
 		})
-		codeGenRoutine(mod, decls, dib, diScope, diFile, astModule.Name, *astModule.Program, true, routs)
+		codeGenRoutine(mod, decls, dib, diScope, diFile, diPNodeType, astModule.Name, *astModule.Program, true, routs)
 	}
 	return mod
 }
 
-func codeGenRoutine(mod llvm.Module, decls *RTDecls, dib *llvm.DIBuilder, diScope, diFile llvm.Metadata, modName string, routine ASTRoutine, isMain bool, routs map[string]llvm.Value) llvm.Value {
+func codeGenRoutine(mod llvm.Module, decls *RTDecls, dib *llvm.DIBuilder, diScope, diFile, diPNodeType llvm.Metadata, modName string, routine ASTRoutine, isMain bool, routs map[string]llvm.Value) llvm.Value {
 	var rout llvm.Value
 	var callerFrame llvm.Value
 	if isMain {
@@ -243,22 +237,11 @@ func codeGenRoutine(mod llvm.Module, decls *RTDecls, dib *llvm.DIBuilder, diScop
 	}
 
 	for _, localVar := range routine.Vars {
-		diNodeType := dib.CreateBasicType(llvm.DIBasicType{
-			Name:       "nodeData",
-			SizeInBits: 128,
-			Encoding:   llvm.DW_ATE_unsigned,
-		})
-		diType := dib.CreatePointerType(llvm.DIPointerType{
-			Pointee:     diNodeType,
-			SizeInBits:  128,
-			AlignInBits: 0,
-			Name:        "node",
-		})
 		diVar := dib.CreateAutoVariable(diScope, llvm.DIAutoVariable{
 			Name:           localVar.Name,
 			File:           diFile,
 			Line:           routine.LineNumber,
-			Type:           diType,
+			Type:           diPNodeType,
 			AlwaysPreserve: false,
 			Flags:          0,
 			AlignInBits:    64,
@@ -709,4 +692,111 @@ func codeGenMetadata(mod llvm.Module) {
 	mod.AddNamedMetadataOperand("llvm.ident", mod.Context().MDNode([]llvm.Metadata{
 		mod.Context().MDString("DGOLC"),
 	}))
+}
+
+func genDITypes(dib *llvm.DIBuilder, diCU, diFile llvm.Metadata) (llvm.Metadata, llvm.Metadata) {
+	diVoidType := dib.CreateBasicType(llvm.DIBasicType{
+		Name:       "VOID",
+		SizeInBits: 0,
+		Encoding:   0,
+	})
+	diSubroutineType := dib.CreateSubroutineType(llvm.DISubroutineType{
+		File:       diFile,
+		Parameters: []llvm.Metadata{diVoidType},
+	})
+
+	diNodeTypeDecl := dib.CreateReplaceableCompositeType(diCU, llvm.DIReplaceableCompositeType{
+		Tag:         dwarf.TagStructType,
+		Name:        "NODE",
+		File:        diFile,
+		Line:        0,
+		RuntimeLang: 0,
+		SizeInBits:  128,
+		AlignInBits: 0,
+		Flags:       0,
+	})
+	diPNodeType := dib.CreatePointerType(llvm.DIPointerType{
+		Pointee:     diNodeTypeDecl,
+		SizeInBits:  64,
+		AlignInBits: 0,
+		Name:        "NODE*",
+	})
+
+	diUint8Type := dib.CreateBasicType(llvm.DIBasicType{
+		Name:       "UINT8",
+		SizeInBits: 8,
+		Encoding:   llvm.DW_ATE_unsigned,
+	})
+	diGcMarkType := dib.CreateMemberType(diCU, llvm.DIMemberType{
+		Name:         "GCMARK",
+		File:         diFile,
+		Line:         0,
+		SizeInBits:   8,
+		AlignInBits:  8,
+		OffsetInBits: 0,
+		Flags:        0,
+		Type:         diUint8Type,
+	})
+
+	diUint1Type := dib.CreateBasicType(llvm.DIBasicType{
+		Name:       "UINT1",
+		SizeInBits: 8,
+		Encoding:   llvm.DW_ATE_boolean,
+	})
+	diLiveType := dib.CreateMemberType(diCU, llvm.DIMemberType{
+		Name:         "LIVE",
+		File:         diFile,
+		Line:         0,
+		SizeInBits:   8,
+		AlignInBits:  8,
+		OffsetInBits: 8,
+		Flags:        0,
+		Type:         diUint1Type,
+	})
+
+	diUint32Type := dib.CreateBasicType(llvm.DIBasicType{
+		Name:       "UINT32",
+		SizeInBits: 32,
+		Encoding:   llvm.DW_ATE_unsigned,
+	})
+	diEdgeArraySizeType := dib.CreateMemberType(diCU, llvm.DIMemberType{
+		Name:         "EDGEARRAYSIZE",
+		File:         diFile,
+		Line:         0,
+		SizeInBits:   32,
+		AlignInBits:  32,
+		OffsetInBits: 32,
+		Flags:        0,
+		Type:         diUint32Type,
+	})
+
+	diPPNodeType := dib.CreatePointerType(llvm.DIPointerType{
+		Pointee:     diPNodeType,
+		SizeInBits:  64,
+		AlignInBits: 0,
+		Name:        "NODE**",
+	})
+	diEdgeArrayType := dib.CreateMemberType(diCU, llvm.DIMemberType{
+		Name:         "EDGEARRAY",
+		File:         diFile,
+		Line:         0,
+		SizeInBits:   64,
+		AlignInBits:  64,
+		OffsetInBits: 64,
+		Flags:        0,
+		Type:         diPPNodeType,
+	})
+
+	diNodeType := dib.CreateStructType(diCU, llvm.DIStructType{
+		Name:        "NODE",
+		File:        diFile,
+		Line:        0,
+		SizeInBits:  128,
+		AlignInBits: 128,
+		Flags:       0,
+		DerivedFrom: llvm.Metadata{},
+		Elements:    []llvm.Metadata{diGcMarkType, diLiveType, diEdgeArraySizeType, diEdgeArrayType},
+	})
+	diNodeTypeDecl.ReplaceAllUsesWith(diNodeType)
+	return diSubroutineType, diPNodeType
 }

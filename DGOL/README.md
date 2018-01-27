@@ -299,6 +299,10 @@ See also
   pages by moving all the live nodes from one to the other, then freeing
   the empty page.
 
+* [Compiler to LLVM 5](go/compiler)
+
+  Same as the first compiler to LLVM 5, but with debugging information.
+
 ### Performance of implemenations
 The Haskell interpreter is very slow and was omitted.
 ```
