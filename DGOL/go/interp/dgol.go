@@ -15,7 +15,7 @@ func main() {
 			modules = append(modules, module)
 		}
 	}
-	
+
 	program, err := link(modules, makeStdlibs())
 	if err != nil {
 		os.Stderr.WriteString(err.Error())
