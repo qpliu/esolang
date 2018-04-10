@@ -35,9 +35,9 @@ A mapping P(a,b,s) is **interior to** S if P(a,b,s) **is contained by** S and
 all points in P(a,b,s) are **interior points**.
 
 A mapping P(a,b,s) is an **executable mapping** in S if it is **contained by**
-S but not **interior to** S and for all (α,β,σ) ≠ (0,0,0) there exists a δ > 0
-for which for all 0 > ε > δ, P(a+εα,b+εβ,s+εσ) either is **interior to** S or
-is not **contained by** S.
+S but not **interior to** S and for all (α,β,σ) ≠ (0,0,0), where σ ≥ 0, there
+exists a δ > 0 for which for all 0 > ε > δ, P(a+εα,b+εβ,s+εσ) either is
+**interior to** S or is not **contained by** S.
 
 Execution
 ---------
@@ -77,8 +77,8 @@ The first step is 1,{(0,0)}, then execution terminates because D is empty.
 
 D is the square, -1 ≤ x ≤ 1 and -1 ≤ y ≤ 1.
 P is the square, -1 < x < 1 and -1 < y < 1.
-The first step is 1,{(0,0)}, then execution terminates are no **executable
-mappings**.
+The first step is 1,{(0,0)}, then execution terminates because there are no
+**subregions**.
 
 D is the square, -1 < x < 1 and -1 < y < 1.
 P is the square, -1 ≤ x ≤ 1 and -1 ≤ y ≤ 1.
@@ -92,7 +92,7 @@ D is the square, -1 ≤ x ≤ 1 and -1 ≤ y ≤ 1.
 P is the cross, -1 ≤ x ≤ 1, y = 0, and x = 0, -1 ≤ y ≤ 1.
 The first step is 1,{(0,0)}, then
 the second step is ½,{(-½,-½),(½,-½),(-½,½),(½,½)},
-etc ad infinitum.
+etc.
 
 D is the rectangle, -1 ≤ x ≤ 2 and -1 ≤ y ≤ 1.
 P is the cross, -1 ≤ x ≤ 1, y = 0, and x = 0, -1 ≤ y ≤ 1.
@@ -104,3 +104,8 @@ The first step is 2,{(0,0)}.  Subsequent steps depend on γ.  Larger values
 of γ means the second step is 2γ,{(0,0)}, smaller values of γ means there
 are 4 **executable mappings** in the second step, and, for one value of γ,
 there are 5 **executable mappings** in the second step.
+
+Additional Note
+---------------
+I don't know what would happen if P or D were fractal.  My guess is that,
+in most cases, execution would terminate.
