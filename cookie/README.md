@@ -31,7 +31,7 @@ point (x,y) is mapped to (sx+a,sy+b).
 A mapping P(a,b,s) is **contained by** a subregion S if all points in P(a,b,s)
 are in S.
 
-A mapping P(a,b,s) is **interior to** S if P(a,b,s) **is contained by** S and
+A mapping P(a,b,s) is **interior to** S if P(a,b,s) is **contained by** S and
 all points in P(a,b,s) are **interior points**.
 
 A mapping P(a,b,s) is an **executable mapping** in S if it is **contained by**
@@ -99,7 +99,7 @@ P is the cross, -1 ≤ x ≤ 1, y = 0, and x = 0, -1 ≤ y ≤ 1.
 Execution terminates immediately because there are no **executable mappings**.
 
 D is the square, -1 ≤ x ≤ 1 and -1 ≤ y ≤ 1.
-P is the annulus, γ ≤ x² + y² ≤ 1, where 0 < γ < 1.
+P is the annulus, γ ≤ x<sup>2</sup> + y<sup>2</sup> ≤ 1, where 0 < γ < 1.
 The first step is 2,{(0,0)}.  Subsequent steps depend on γ.  Larger values
 of γ means the second step is 2γ,{(0,0)}, smaller values of γ means there
 are 4 **executable mappings** in the second step, and, for one value of γ,
@@ -107,5 +107,6 @@ there are 5 **executable mappings** in the second step.
 
 Additional Note
 ---------------
-I don't know what would happen if P or D were fractal.  My guess is that,
-in most cases, execution would terminate.
+I don't know what would happen if P or D were fractal.  If D is fractal, there
+can be points in D that are neither **edge points** nor **interior points**.
+My guess is that, in most cases, execution would terminate.
