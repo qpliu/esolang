@@ -8,13 +8,10 @@ const (
 	outputDigitsL = "ivxlcdm"
 	outputDigitsU = "IVXLCDM"
 
-	outputI = 0
-	outputV = 1
-	outputX = 2
-	outputL = 3
-	outputC = 4
-	outputD = 5
-	outputM = 6
+	indexI = 0
+	indexX = 2
+	indexC = 4
+	indexM = 6
 
 	zeroOverline = "\u203e\n"
 	noOverline   = ""
@@ -46,15 +43,15 @@ func output(w io.Writer, value uint32, digits string, overline string) {
 	if value == 0 {
 		return
 	}
-	outputTens(w, digits, overline, outputM, value/1000)
+	outputTens(w, digits, overline, indexM, value/1000)
 	if value > 1000 && value%1000 == 999 {
-		outputDigit(w, digits, overline, outputI)
-		outputDigit(w, digits, overline, outputM)
+		outputDigit(w, digits, overline, indexI)
+		outputDigit(w, digits, overline, indexM)
 		return
 	}
-	outputTens(w, digits, overline, outputC, (value/100)%10)
-	outputTens(w, digits, overline, outputX, (value/10)%10)
-	outputTens(w, digits, overline, outputI, value%10)
+	outputTens(w, digits, overline, indexC, (value/100)%10)
+	outputTens(w, digits, overline, indexX, (value/10)%10)
+	outputTens(w, digits, overline, indexI, value%10)
 }
 
 func outputTens(w io.Writer, digits string, overline string, index int, value uint32) {

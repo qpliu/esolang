@@ -8,9 +8,6 @@ import (
 )
 
 var (
-	ErrIntercalReaderOverflow = errors.New("DON'T BYTE OFF MORE THAN YOU CAN CHEW.")
-	ErrIntercalReaderBadInput = errors.New("WRITE IN NONE OF THE ABOVE TO WASTE YOUR VOTE.")
-
 	eol = errors.New("END OF LINE.")
 )
 
@@ -77,7 +74,7 @@ func (r *IntercalReader) inputDigit(buf *bytes.Buffer) (uint32, error) {
 	case "NINE":
 		return 9, nil
 	default:
-		return 0, ErrIntercalReaderBadInput
+		return 0, Err579
 	}
 }
 
@@ -85,7 +82,9 @@ func (r *IntercalReader) input(limit uint32) (uint32, error) {
 	var buf bytes.Buffer
 	val, err := r.inputDigit(&buf)
 	if err == eol {
-		return 0, ErrIntercalReaderBadInput
+		return 0, Err579
+	} else if err == io.EOF {
+		return 0, Err562
 	} else if err != nil {
 		return 0, err
 	}
@@ -93,11 +92,13 @@ func (r *IntercalReader) input(limit uint32) (uint32, error) {
 		digit, err := r.inputDigit(&buf)
 		if err == eol {
 			return uint32(val), nil
+		} else if err == io.EOF {
+			return 0, Err579
 		} else if err != nil {
 			return 0, err
 		}
 		if val > limit/10 || (val == limit/10 && digit > limit%10) {
-			return 0, ErrIntercalReaderOverflow
+			return 0, ErrOverflow
 		}
 		val = val*10 + digit
 	}
@@ -109,5 +110,9 @@ func (r *IntercalReader) Input16() (uint16, error) {
 }
 
 func (r *IntercalReader) Input32() (uint32, error) {
-	return r.input(4294967295)
+	val, err := r.input(4294967295)
+	if err == ErrOverflow {
+		err = Err533
+	}
+	return val, err
 }
