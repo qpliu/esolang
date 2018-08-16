@@ -47,7 +47,7 @@ func TestInput(t *testing.T) {
 	testInput16(t, "\n", []uint16{}, Err579)
 	testInput16(t, "", []uint16{}, Err562)
 	testInput16(t, "ONE \n", []uint16{1}, Err562)
-	testInput16(t, " SIX FIVE  FIVE THREE SIX \n", []uint16{}, ErrOverflow)
+	testInput16(t, " SIX FIVE  FIVE THREE SIX \n", []uint16{}, Err275)
 	testInput32(t, " SIX FIVE  FIVE THREE SIX \n", []uint32{65536}, Err562)
 	testInput32(t, " FOUR  TWO NINE FOUR  NINE SIX SEVEN  TWO NINE SIX \n", []uint32{}, Err533)
 }

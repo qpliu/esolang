@@ -98,16 +98,16 @@ func TestTokenizer(t *testing.T) {
 		256,
 	})
 	testTokenizeStrings(t, "DO :1 <- #0$#256", []string{
-		"DO",
+		"DO ",
 		":",
 		"1 ",
 		"<",
-		"-",
+		"- ",
 		"#",
 		"0",
 		"$",
 		"#",
-		"",
+		"256",
 	})
 	testTokenizeTypes(t, "PLEASE NOTE THAT THIS LINE HAS NO EFFECT", []TokenType{
 		TokenPlease,
@@ -117,7 +117,7 @@ func TestTokenizer(t *testing.T) {
 		TokenString,
 	})
 	testTokenizeStrings(t, "PLEASE NOTE THAT THIS LINE HAS NO EFFECT", []string{
-		"PLEASE",
+		"PLEASE ",
 		"NOT",
 		"E THAT THIS L",
 		"IN",

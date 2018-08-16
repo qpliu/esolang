@@ -98,7 +98,7 @@ func (r *IntercalReader) input(limit uint32) (uint32, error) {
 			return 0, err
 		}
 		if val > limit/10 || (val == limit/10 && digit > limit%10) {
-			return 0, ErrOverflow
+			return 0, Err275
 		}
 		val = val*10 + digit
 	}
@@ -111,7 +111,7 @@ func (r *IntercalReader) Input16() (uint16, error) {
 
 func (r *IntercalReader) Input32() (uint32, error) {
 	val, err := r.input(4294967295)
-	if err == ErrOverflow {
+	if err == Err275 {
 		err = Err533
 	}
 	return val, err

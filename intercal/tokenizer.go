@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"os"
 	"sort"
@@ -35,12 +36,24 @@ func NewFileTokenizer(filename string) (*Tokenizer, error) {
 	return NewTokenizer(filename, f), nil
 }
 
+func (t *Tokenizer) Peek() (*Token, error) {
+	if t.pushback != nil {
+		return t.pushback, nil
+	}
+	tok, err := t.Next()
+	if tok != nil {
+		t.Pushback(tok)
+	}
+	return tok, err
+}
+
 func (t *Tokenizer) Next() (*Token, error) {
 	if t.pushback != nil {
 		tok := t.pushback
 		t.pushback = nil
 		return tok, nil
 	}
+	leadingSpaces := bytes.Buffer{}
 	for {
 		if t.index >= len(t.line) {
 			line, err := t.r.ReadString('\n')
@@ -54,9 +67,12 @@ func (t *Tokenizer) Next() (*Token, error) {
 			t.index = 0
 			continue
 		}
-		if t.line[t.index] == ' ' || t.line[t.index] == '\n' {
+		switch t.line[t.index] {
+		case ' ', '\t', '\f', '\n', '\r', '\v':
+			leadingSpaces.WriteByte(t.line[t.index])
 			t.index++
 			continue
+		default:
 		}
 		firstNumber := strings.IndexAny(t.line[t.index:], "0123456789")
 		tokenIndex := firstNumber
@@ -77,7 +93,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				LineNum:     t.linenum,
 				ColNum:      colnum,
 				Type:        TokenString,
-				StringValue: stringValue,
+				StringValue: leadingSpaces.String() + stringValue + t.trailingSpaces(),
 			}, nil
 		}
 		if tableIndex >= 0 {
@@ -88,7 +104,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				LineNum:     t.linenum,
 				ColNum:      colnum,
 				Type:        tokenTable[tableIndex].Type,
-				StringValue: tokenTable[tableIndex].Value,
+				StringValue: leadingSpaces.String() + tokenTable[tableIndex].Value + t.trailingSpaces(),
 			}, nil
 		} else if firstNumber > 0 {
 			colnum := t.index + 1
@@ -99,7 +115,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				LineNum:     t.linenum,
 				ColNum:      colnum,
 				Type:        TokenString,
-				StringValue: stringValue,
+				StringValue: leadingSpaces.String() + stringValue + t.trailingSpaces(),
 			}, nil
 		} else if firstNumber == 0 {
 			linenum := t.linenum
@@ -120,7 +136,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 					}
 				}
 				switch t.line[index] {
-				case ' ', '\n':
+				case ' ', '\t', '\f', '\n', '\r', '\v':
 				case '0':
 					value = value * 10
 				case '1':
@@ -144,15 +160,26 @@ func (t *Tokenizer) Next() (*Token, error) {
 				default:
 					break loop
 				}
+				leadingSpaces.WriteByte(t.line[index])
 				index++
 				if value >= 65536 {
 					return nil, Err017
 				}
 			}
 			t.index = index
-			stringValue := t.line[:index]
-			if linenum == t.linenum {
-				stringValue = t.line[colnum-1 : index]
+			spacesBelongToNextLine := true
+			for i := 0; i < index && spacesBelongToNextLine; i++ {
+				switch t.line[i] {
+				case ' ', '\t', '\f', '\n', '\r', '\v':
+				default:
+					spacesBelongToNextLine = false
+				}
+			}
+			if spacesBelongToNextLine {
+				leadingSpaces.Truncate(leadingSpaces.Len() - index)
+				t.index = 0
+			} else {
+				leadingSpaces.WriteString(t.trailingSpaces())
 			}
 			return &Token{
 				Filename:    t.filename,
@@ -160,7 +187,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 				ColNum:      colnum,
 				Type:        TokenNumber,
 				NumberValue: uint16(value),
-				StringValue: stringValue,
+				StringValue: leadingSpaces.String(),
 			}, nil
 		} else {
 			colnum := t.index + 1
@@ -171,8 +198,24 @@ func (t *Tokenizer) Next() (*Token, error) {
 				LineNum:     t.linenum,
 				ColNum:      colnum,
 				Type:        TokenString,
-				StringValue: stringValue,
+				StringValue: leadingSpaces.String() + stringValue + t.trailingSpaces(),
 			}, nil
+		}
+	}
+}
+
+func (t *Tokenizer) trailingSpaces() string {
+	spaces := bytes.Buffer{}
+	for {
+		if t.index >= len(t.line) {
+			return spaces.String()
+		}
+		switch t.line[t.index] {
+		case ' ', '\t', '\f', '\n', '\r', '\v':
+			spaces.WriteByte(t.line[t.index])
+			t.index++
+		default:
+			return spaces.String()
 		}
 	}
 }
@@ -237,6 +280,7 @@ const (
 	TokenWhirlpool
 	TokenHookworm
 	TokenShark
+	TokenBlotch
 	TokenPlease
 	TokenDo
 	TokenNot
@@ -270,6 +314,7 @@ const (
 	TokenReading
 	TokenOut
 	TokenSub
+	TokenBy
 )
 
 type tokenTableEntry struct {
@@ -320,6 +365,8 @@ var tokenTable = []tokenTableEntry{
 	{"@", TokenWhirlpool},
 	{"-'", TokenHookworm},
 	{"^", TokenShark},
+	{"#\u0008*\u0008[]", TokenBlotch},
+	{"#\u0008I\u0008[]", TokenBlotch},
 
 	{"PLEASE", TokenPlease},
 	{"DO", TokenDo},
@@ -355,6 +402,7 @@ var tokenTable = []tokenTableEntry{
 	{"READING", TokenReading},
 	{"OUT", TokenOut},
 	{"SUB", TokenSub},
+	{"BY", TokenBy},
 }
 
 func init() {
