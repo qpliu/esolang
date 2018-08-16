@@ -18,7 +18,7 @@ var (
 	Err240 = &Error{"240", "An attempt has been made to give an array a dimension of zero.", "", 0}
 	Err241 = &Error{"241", "Invalid dimensioning information was supplied in defining or using an array.", "", 0}
 	Err275 = &Error{"275", "A 32-bit value has been assigned to a 16-bit variable.", "DON'T BYTE OFF MORE THAN YOU CAN CHEW.", 0}
-	Err436 = &Error{"436", "A retrieval has been attempted for an unSTASHed value.", "", 0}
+	Err436 = &Error{"436", "A retrieval has been attempted for an unSTASHed value.", "THROW STICK BEFORE RETRIEVING.", 0}
 	Err533 = &Error{"533", "A WRITE IN statement or interleave (¢) operation has produced a value requiring over 32 bits to represent.", "", 0}
 	Err562 = &Error{"562", "Insufficient data.", "", 0}
 	Err579 = &Error{"579", "Input data is invalid.", "", 0}
@@ -52,12 +52,12 @@ func (e *Error) Error() string {
 	}
 }
 
-func (e *Error) At(statement int) *Error {
+func (e *Error) At(statementIndex int) *Error {
 	return &Error{
 		code:      e.code,
 		message:   e.message,
 		message2:  e.message2,
-		statement: statement,
+		statement: statementIndex + 1,
 	}
 }
 

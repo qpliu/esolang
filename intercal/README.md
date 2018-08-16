@@ -36,3 +36,7 @@ unless it turns out to be too difficult, this implementation will only
 allow 16-bit array subscripts in order to follow the 1973 document,
 which means the parser will be complicated by having to distinguish
 between 16-bit and 32-bit expressions.
+
+It is unclear whether READING OUT or simply READING is the gerund for
+output, so this implementation will accept both.  Similarly for
+WRITING IN versus WRITING for input.

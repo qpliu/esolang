@@ -14,6 +14,6 @@ func testError(t *testing.T, e *Error, expected string) {
 func TestErrors(t *testing.T) {
 	testError(t, Err017, "ICL017I (An expression contains a syntax error.)")
 	testError(t, Err123, "ICL123I (Program has attempted 80 levels of NEXTing.)\nPROGRAM HAS DISAPPEARED INTO THE BLACK LAGOON.\n")
-	testError(t, Err017.At(1), "ICL017I (An expression contains a syntax error.)\n        ON THE WAY TO STATEMENT 0001\n        CORRECT SOURCE AND RESUBMIT\n")
-	testError(t, Err123.At(1), "ICL123I (Program has attempted 80 levels of NEXTing.)\n        ON THE WAY TO STATEMENT 0001\n        CORRECT SOURCE AND RESUBMIT\nPROGRAM HAS DISAPPEARED INTO THE BLACK LAGOON.\n")
+	testError(t, Err017.At(0), "ICL017I (An expression contains a syntax error.)\n        ON THE WAY TO STATEMENT 0001\n        CORRECT SOURCE AND RESUBMIT\n")
+	testError(t, Err123.At(0), "ICL123I (Program has attempted 80 levels of NEXTing.)\n        ON THE WAY TO STATEMENT 0001\n        CORRECT SOURCE AND RESUBMIT\nPROGRAM HAS DISAPPEARED INTO THE BLACK LAGOON.\n")
 }

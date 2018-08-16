@@ -67,33 +67,33 @@ func TestParseList(t *testing.T) {
         PLEASE DO (5) NEXT
     (3) DO (2) NEXT
         PLEASE GIVE UP
-`, `*   1         DO (5) NEXT
+`, `    1         DO (5) NEXT
 *   2     (5) DO FORGET #1
 *   3         PLEASE WRITE IN :1
 *   4         DO .1 <- '⊻":1~'#32768¢#0'"¢#1'~#3
-*   5         DO (1) NEXT
+    5         DO (1) NEXT
 *   6         DO :1 <- "'⊻":1~'#65535¢#0'"¢#65535'
         ~'#0¢#65535'"¢"'⊻":1~'#0¢#65535'"
         ¢#65535'~'#0¢#65535'"
 *   7         DO :2 <- #1
-*   8         PLEASE DO (4) NEXT
+    8         PLEASE DO (4) NEXT
 *   9     (4) DO FORGET #1
 *  10         DO .1 <- "⊻’:1~:2’¢#1"~#3
 *  11         DO :1 <- "'⊻":1~'#65535¢#0'"¢":2~'#65535
         ¢#0'"'~'#0¢#65535'"¢"'⊻":1~'#0
         ¢#65535'"¢":2~'#0¢#65535'"'~'#0¢#65535'"
-*  12         DO (1) NEXT
+   12         DO (1) NEXT
 *  13         DO :2 <- ":2~'#0¢#65535'"
         ¢"'":2~'#65535¢#0'"¢#0'~'#32767¢#1'"
-*  14         DO (4) NEXT
+   14         DO (4) NEXT
 *  15     (2) DO RESUME .1
-*  16     (1) PLEASE DO (2) NEXT
+   16     (1) PLEASE DO (2) NEXT
 *  17         PLEASE FORGET #1
 *  18         DO READ OUT :1
 *  19         PLEASE DO .1 <- '⊻"':1~:1'~#1"¢#1'~#3
-*  20         DO (3) NEXT
-*  21         PLEASE DO (5) NEXT
-*  22     (3) DO (2) NEXT
-*  23         PLEASE GIVE UP
+   20         DO (3) NEXT
+   21         PLEASE DO (5) NEXT
+   22     (3) DO (2) NEXT
+   23         PLEASE GIVE UP
 `, "")
 }

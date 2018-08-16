@@ -181,11 +181,16 @@ func (t *Tokenizer) Next() (*Token, error) {
 			} else {
 				leadingSpaces.WriteString(t.trailingSpaces())
 			}
+			tokenType := TokenNumber
+			if value >= 65536 {
+				tokenType = TokenString
+				value = 0
+			}
 			return &Token{
 				Filename:    t.filename,
 				LineNum:     linenum,
 				ColNum:      colnum,
-				Type:        TokenNumber,
+				Type:        tokenType,
 				NumberValue: uint16(value),
 				StringValue: leadingSpaces.String(),
 			}, nil
@@ -335,6 +340,7 @@ var tokenTable = []tokenTableEntry{
 	{"\"", TokenRabbitEars},
 	{"\".", TokenRabbit},
 	{"\"\u0008.", TokenRabbit},
+	{".\u0008\"", TokenRabbit},
 	{"|", TokenSpike},
 	{"%", TokenDoubleOhSeven},
 	{"-", TokenWorm},
@@ -352,10 +358,13 @@ var tokenTable = []tokenTableEntry{
 	{"\u2228", TokenBook},
 	{"V-", TokenBookworm},
 	{"V\u0008-", TokenBookworm},
+	{"-\u0008V", TokenBookworm},
 	{"\u22bb", TokenBookworm},
+	{"\u2200", TokenBookworm},
 	{"$", TokenBigMoney},
 	{"c/", TokenChange},
 	{"c\u0008/", TokenChange},
+	{"/\u0008c", TokenChange},
 	{"\u00a2", TokenChange},
 	{"~", TokenSqiggle},
 	{"_", TokenFlatWorm},
@@ -363,10 +372,13 @@ var tokenTable = []tokenTableEntry{
 	{"/", TokenSlat},
 	{"\\", TokenBackSlat},
 	{"@", TokenWhirlpool},
-	{"-'", TokenHookworm},
+	{"'\u0008-", TokenHookworm},
+	{"-\u0008'", TokenHookworm},
 	{"^", TokenShark},
 	{"#\u0008*\u0008[]", TokenBlotch},
+	{"*\u0008#\u0008[]", TokenBlotch},
 	{"#\u0008I\u0008[]", TokenBlotch},
+	{"I\u0008#\u0008[]", TokenBlotch},
 
 	{"PLEASE", TokenPlease},
 	{"DO", TokenDo},
