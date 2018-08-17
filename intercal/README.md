@@ -40,3 +40,9 @@ between 16-bit and 32-bit expressions.
 It is unclear whether READING OUT or simply READING is the gerund for
 output, so this implementation will accept both.  Similarly for
 WRITING IN versus WRITING for input.
+
+Section 3.4.2 of the 1973 document says
+```
+#165¢'#203~#358'
+```
+is 34815, which was corrected to 34915 in the 1996 document.

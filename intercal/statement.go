@@ -23,26 +23,50 @@ type StatementType int
 
 const (
 	StatementUnrecognizable StatementType = iota
-	StatementCalculate16
-	StatementCalculate32
-	StatementCalculate16ArrayElement
-	StatementCalculate32ArrayElement
-	StatementCalculate16ArrayDimension
-	StatementCalculate32ArrayDimension
+
+	StatementCalculate
+	StatementCalculateArrayDimension
+	// Operands is Calculation
+
 	StatementNext
+	// Operands is initially uint16, the label
+	// Resolve() changes it to int, the statement index
+
 	StatementForget
 	StatementResume
+	// Operands is Expr
+
 	StatementStash
 	StatementRetrieve
 	StatementIgnore
 	StatementRemember
+	// Operands is []interface{}, containing Var16, Var32, Array16, Array32
+
 	StatementAbstainLabel
+	// Operands is initially uint16, the label
+	// Resolve() changes it to int, the statement index
+
 	StatementAbstainGerundList
+	// Operands is initially []TokenType, a list of gerund tokens
+	// Resolve() changes it to []int, a list of statement indexes
+
 	StatementReinstateLabel
+	// Operands is initially uint16, the label
+	// Resolve() changes it to int, the statement index
+
 	StatementReinstateGerundList
+	// Operands is initially []TokenType, a list of gerund tokens
+	// Resolve() changes it to []int, a list of statement indexes
+
 	StatementGiveUp
+
 	StatementWriteIn
+	// Operands is []interface{}, containing Var16, Var32,
+	// Array16, Array32, ArrayElement
+
 	StatementReadOut
+	// Operands is []interface{}, containing uint16, Var16, Var32,
+	// ArrayElement
 )
 
 const (
@@ -207,21 +231,16 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 	}
 
 	switch s.Tokens[index].Type {
-	case TokenSpot:
-		// Calculate16
-		//...
-		return
-	case TokenTwoSpot:
-		// Calculate32
-		//...
-		return
-	case TokenTail:
-		// Calculate16ArrayElement or Calculate16ArrayDimension
-		//...
-		return
-	case TokenHybrid:
-		// Calculate16ArrayElement or Calculate16ArrayDimension
-		//...
+	case TokenSpot, TokenTwoSpot, TokenTail, TokenHybrid:
+		// Calculate or CalculateArrayDimension
+		statementType, operands, err := s.parseCalculate(index)
+		if err != nil {
+			s.Error = err
+			return
+		}
+		s.Type = statementType
+		s.Operands = operands
+		gerundTable[TokenCalculating] = append(gerundTable[TokenCalculating], s.Index)
 		return
 	case TokenWax:
 		// Next
@@ -233,11 +252,30 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 		gerundTable[TokenNexting] = append(gerundTable[TokenNexting], s.Index)
 		return
 	case TokenForget:
-		//...
+		expr, index, err := s.parseExpr(index, false)
+		if err != nil {
+			s.Error = err
+			return
+		} else if index < len(s.Tokens) {
+			s.Error = Err017
+			return
+		}
+		s.Type = StatementForget
+		s.Operands = expr
+		gerundTable[TokenForgetting] = append(gerundTable[TokenForgetting], s.Index)
 		return
 	case TokenResume:
-		//...
-		return
+		expr, index, err := s.parseExpr(index, false)
+		if err != nil {
+			s.Error = err
+			return
+		} else if index < len(s.Tokens) {
+			s.Error = Err017
+			return
+		}
+		s.Type = StatementResume
+		s.Operands = expr
+		gerundTable[TokenResuming] = append(gerundTable[TokenResuming], s.Index)
 	case TokenStash, TokenRetrieve, TokenIgnore, TokenRemember:
 		list := []interface{}{}
 		statementType := StatementStash
@@ -369,6 +407,191 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 	}
 }
 
+func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Error) {
+	statementType := StatementUnrecognizable
+	var lhs interface{}
+	var rhs []Expr
+	switch s.Tokens[index].Type {
+	case TokenSpot:
+		if index+3 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 || s.Tokens[index+2].Type != TokenAngle || s.Tokens[index+3].Type != TokenWorm {
+			return statementType, nil, nil
+		}
+		expr, newIndex, err := s.parseExpr(index+4, false)
+		if newIndex < len(s.Tokens) || err != nil {
+			return statementType, nil, err
+		}
+		statementType = StatementCalculate
+		lhs = Var16(s.Tokens[index+1].NumberValue)
+		rhs = []Expr{expr}
+	case TokenTwoSpot:
+		if index+3 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 || s.Tokens[index+2].Type != TokenAngle || s.Tokens[index+3].Type != TokenWorm {
+			return statementType, nil, nil
+		}
+		expr, newIndex, err := s.parseExpr(index+4, false)
+		if newIndex < len(s.Tokens) || err != nil {
+			return statementType, nil, err
+		}
+		statementType = StatementCalculate
+		lhs = Var32(s.Tokens[index+1].NumberValue)
+		rhs = []Expr{expr}
+	case TokenTail:
+		if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 {
+			return statementType, nil, nil
+		}
+		if index+3 < len(s.Tokens) && s.Tokens[index+2].Type == TokenAngle && s.Tokens[index+3].Type == TokenWorm {
+			dimensions, err := s.parseDimensions(index + 4)
+			if err != nil {
+				return statementType, nil, err
+			}
+			statementType = StatementCalculateArrayDimension
+			lhs = Array16(s.Tokens[index+1].NumberValue)
+			rhs = dimensions
+		} else {
+			subscripts, newIndex, err := s.parseSubscripts(index)
+			if err != nil || len(subscripts) == 0 {
+				return statementType, nil, err
+			}
+			if newIndex+2 >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenAngle || s.Tokens[newIndex+1].Type != TokenWorm {
+				return statementType, nil, nil
+			}
+			expr, newIndex2, err := s.parseExpr(newIndex+2, false)
+			if newIndex2 < len(s.Tokens) || err != nil {
+				return statementType, nil, err
+			}
+			statementType = StatementCalculate
+			lhs = ArrayElement{Array: Array16(s.Tokens[index+1].NumberValue), Index: subscripts}
+			rhs = []Expr{expr}
+		}
+	case TokenHybrid:
+		if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 {
+			return statementType, nil, nil
+		}
+		if index+3 < len(s.Tokens) && s.Tokens[index+2].Type == TokenAngle && s.Tokens[index+3].Type == TokenWorm {
+			dimensions, err := s.parseDimensions(index + 4)
+			if err != nil {
+				return statementType, nil, err
+			}
+			statementType = StatementCalculateArrayDimension
+			lhs = Array32(s.Tokens[index+1].NumberValue)
+			rhs = dimensions
+		} else {
+			subscripts, newIndex, err := s.parseSubscripts(index)
+			if err != nil || len(subscripts) == 0 {
+				return statementType, nil, err
+			}
+			if newIndex+2 >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenAngle || s.Tokens[newIndex+1].Type != TokenWorm {
+				return statementType, nil, nil
+			}
+			expr, newIndex2, err := s.parseExpr(newIndex+2, false)
+			if newIndex2 < len(s.Tokens) || err != nil {
+				return statementType, nil, err
+			}
+			statementType = StatementCalculate
+			lhs = ArrayElement{Array: Array32(s.Tokens[index+1].NumberValue), Index: subscripts}
+			rhs = []Expr{expr}
+		}
+	default:
+		return statementType, nil, Err774
+	}
+	return statementType, Calculation{LHS: lhs, RHS: rhs}, nil
+}
+
+func (s *Statement) parseExpr(index int, mustBe16 bool) (Expr, int, *Error) {
+	if index >= len(s.Tokens) {
+		return nil, index, Err017
+	}
+	switch s.Tokens[index].Type {
+	case TokenSpot:
+		//...
+		return nil, index, Err774
+	case TokenTwoSpot:
+		//...
+		return nil, index, Err774
+	case TokenTail:
+		//...
+		return nil, index, Err774
+	case TokenHybrid:
+		//...
+		return nil, index, Err774
+	case TokenMesh:
+		//...
+		return nil, index, Err774
+	case TokenSpark:
+		//...
+		return nil, index, Err774
+	case TokenWow:
+		//...
+		return nil, index, Err774
+	case TokenRabbitEars:
+		//...
+		return nil, index, Err774
+	case TokenRabbit:
+		//...
+		return nil, index, Err774
+	default:
+	}
+	//...
+	return nil, index, Err774
+}
+
+func (s *Statement) parseBinaryOp(lhs Expr, index int, mustBe16 bool) (Expr, int, *Error) {
+	if index >= len(s.Tokens) {
+		return lhs, index, nil
+	}
+	switch s.Tokens[index].Type {
+	case TokenChange, TokenBigMoney:
+		if mustBe16 {
+			return lhs, index, nil
+		}
+		rhs, newIndex, err := s.parseExpr(index+1, false)
+		if err != nil {
+			return nil, index, err
+		}
+		return ExprMingle([2]Expr{lhs, rhs}), newIndex, nil
+	case TokenSqiggle:
+		rhs, newIndex, err := s.parseExpr(index+1, false)
+		if err != nil {
+			return nil, index, err
+		}
+		return ExprSelect([2]Expr{lhs, rhs}), newIndex, nil
+	default:
+		return lhs, index, nil
+	}
+}
+
+func (s *Statement) parseSubscripts(index int) ([]Expr, int, *Error) {
+	subscripts := []Expr{}
+	for {
+		expr, newIndex, err := s.parseExpr(index, true)
+		if err != nil {
+			return subscripts, index, nil
+		}
+		subscripts = append(subscripts, expr)
+		index = newIndex
+	}
+}
+
+func (s *Statement) parseDimensions(index int) ([]Expr, *Error) {
+	dimensions := []Expr{}
+	for {
+		if index >= len(s.Tokens) {
+			return nil, Err000
+		}
+		expr, newIndex, err := s.parseExpr(index, false)
+		if err != nil {
+			return nil, err
+		}
+		dimensions = append(dimensions, expr)
+		if newIndex >= len(s.Tokens) {
+			return dimensions, nil
+		}
+		if s.Tokens[newIndex].Type != TokenBy {
+			return nil, Err017
+		}
+		index = newIndex + 1
+	}
+}
+
 func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, gerundTable map[TokenType][]int) {
 	switch s.Type {
 	case StatementNext, StatementAbstainLabel, StatementReinstateLabel:
@@ -412,4 +635,11 @@ func ListStatements(statements []*Statement, out io.Writer) error {
 		}
 	}
 	return nil
+}
+
+type Calculation struct {
+	LHS interface{}
+	// LHS is Var16, Var32, Array16, Array32, or ArrayElement
+
+	RHS []Expr
 }

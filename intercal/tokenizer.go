@@ -248,6 +248,7 @@ type Token struct {
 const (
 	TokenNumber TokenType = iota
 	TokenString
+
 	TokenSpot
 	TokenTwoSpot
 	TokenTail
@@ -286,6 +287,7 @@ const (
 	TokenHookworm
 	TokenShark
 	TokenBlotch
+
 	TokenPlease
 	TokenDo
 	TokenNot
