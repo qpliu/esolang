@@ -128,8 +128,15 @@ func (e ExprConst) ConstValue() (uint32, bool) {
 type ExprMingle [2]Expr
 
 func (e ExprMingle) Eval(state *State) (uint32, error) {
-	//...
-	return 0, Err774
+	l, err := e[0].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	r, err := e[1].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	return OpMingle(l, r), nil
 }
 
 func (e ExprMingle) MustBe16() bool {
@@ -141,23 +148,29 @@ func (e ExprMingle) MustBe32() bool {
 }
 
 func (e ExprMingle) ConstValue() (uint32, bool) {
-	lval, lconst := e[0].ConstValue()
+	l, lconst := e[0].ConstValue()
 	if !lconst {
 		return 0, false
 	}
-	rval, rconst := e[1].ConstValue()
+	r, rconst := e[1].ConstValue()
 	if !rconst {
 		return 0, false
 	}
-	//...
-	return /*...*/ lval + rval, true
+	return OpMingle(l, r), true
 }
 
 type ExprSelect [2]Expr
 
 func (e ExprSelect) Eval(state *State) (uint32, error) {
-	//...
-	return 0, Err774
+	l, err := e[0].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	r, err := e[1].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	return OpSelect(l, r), nil
 }
 
 func (e ExprSelect) MustBe16() bool {
@@ -177,23 +190,33 @@ func (e ExprSelect) MustBe32() bool {
 }
 
 func (e ExprSelect) ConstValue() (uint32, bool) {
-	lval, lconst := e[0].ConstValue()
+	l, lconst := e[0].ConstValue()
 	if !lconst {
 		return 0, false
 	}
-	rval, rconst := e[1].ConstValue()
+	r, rconst := e[1].ConstValue()
 	if !rconst {
 		return 0, false
 	}
-	//...
-	return /*...*/ lval + rval, true
+	return OpSelect(l, r), true
 }
 
 type ExprAnd [1]Expr
 
 func (e ExprAnd) Eval(state *State) (uint32, error) {
-	//...
-	return 0, Err774
+	v, err := e[0].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	if e[0].MustBe16() {
+		return OpAnd16(v), nil
+	} else if e[0].MustBe32() {
+		return OpAnd32(v), nil
+	} else if v < 65536 {
+		return OpAnd16(v), nil
+	} else {
+		return OpAnd32(v), nil
+	}
 }
 
 func (e ExprAnd) MustBe16() bool {
@@ -205,19 +228,37 @@ func (e ExprAnd) MustBe32() bool {
 }
 
 func (e ExprAnd) ConstValue() (uint32, bool) {
-	val, isConst := e[0].ConstValue()
-	if !isConst {
+	v, vconst := e[0].ConstValue()
+	if !vconst {
 		return 0, false
 	}
-	//...
-	return /*...*/ val, true
+	if e[0].MustBe16() {
+		return OpAnd16(v), true
+	} else if e[0].MustBe32() {
+		return OpAnd32(v), true
+	} else if v < 65536 {
+		return OpAnd16(v), true
+	} else {
+		return OpAnd32(v), true
+	}
 }
 
 type ExprOr [1]Expr
 
 func (e ExprOr) Eval(state *State) (uint32, error) {
-	//...
-	return 0, Err774
+	v, err := e[0].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	if e[0].MustBe16() {
+		return OpOr16(v), nil
+	} else if e[0].MustBe32() {
+		return OpOr32(v), nil
+	} else if v < 65536 {
+		return OpOr16(v), nil
+	} else {
+		return OpOr32(v), nil
+	}
 }
 
 func (e ExprOr) MustBe16() bool {
@@ -229,19 +270,37 @@ func (e ExprOr) MustBe32() bool {
 }
 
 func (e ExprOr) ConstValue() (uint32, bool) {
-	val, isConst := e[0].ConstValue()
-	if !isConst {
+	v, vconst := e[0].ConstValue()
+	if !vconst {
 		return 0, false
 	}
-	//...
-	return /*...*/ val, true
+	if e[0].MustBe16() {
+		return OpOr16(v), true
+	} else if e[0].MustBe32() {
+		return OpOr32(v), true
+	} else if v < 65536 {
+		return OpOr16(v), true
+	} else {
+		return OpOr32(v), true
+	}
 }
 
 type ExprXor [1]Expr
 
 func (e ExprXor) Eval(state *State) (uint32, error) {
-	//...
-	return 0, Err774
+	v, err := e[0].Eval(state)
+	if err != nil {
+		return 0, err
+	}
+	if e[0].MustBe16() {
+		return OpXor16(v), nil
+	} else if e[0].MustBe32() {
+		return OpXor32(v), nil
+	} else if v < 65536 {
+		return OpXor16(v), nil
+	} else {
+		return OpXor32(v), nil
+	}
 }
 
 func (e ExprXor) MustBe16() bool {
@@ -253,10 +312,17 @@ func (e ExprXor) MustBe32() bool {
 }
 
 func (e ExprXor) ConstValue() (uint32, bool) {
-	val, isConst := e[0].ConstValue()
-	if !isConst {
+	v, vconst := e[0].ConstValue()
+	if !vconst {
 		return 0, false
 	}
-	//...
-	return /*...*/ val, true
+	if e[0].MustBe16() {
+		return OpXor16(v), true
+	} else if e[0].MustBe32() {
+		return OpXor32(v), true
+	} else if v < 65536 {
+		return OpXor16(v), true
+	} else {
+		return OpXor32(v), true
+	}
 }

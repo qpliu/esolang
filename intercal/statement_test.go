@@ -69,7 +69,7 @@ func TestParseList(t *testing.T) {
         PLEASE GIVE UP
 `, `    1         DO (5) NEXT
 *   2     (5) DO FORGET #1
-*   3         PLEASE WRITE IN :1
+    3         PLEASE WRITE IN :1
 *   4         DO .1 <- '⊻":1~'#32768¢#0'"¢#1'~#3
     5         DO (1) NEXT
 *   6         DO :1 <- "'⊻":1~'#65535¢#0'"¢#65535'
@@ -89,7 +89,7 @@ func TestParseList(t *testing.T) {
 *  15     (2) DO RESUME .1
    16     (1) PLEASE DO (2) NEXT
 *  17         PLEASE FORGET #1
-*  18         DO READ OUT :1
+   18         DO READ OUT :1
 *  19         PLEASE DO .1 <- '⊻"':1~:1'~#1"¢#1'~#3
    20         DO (3) NEXT
    21         PLEASE DO (5) NEXT

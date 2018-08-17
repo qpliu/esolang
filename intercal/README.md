@@ -1,4 +1,4 @@
-ILWNPA is an attempt to implement an interpreter of the programming
+COMPILAC is an attempt to implement an interpreter of the programming
 language as described by
 http://www.muppetlabs.com/~breadbox/intercal/intercal.txt
 with the exception of using Unicode instead of EBCDIC.
@@ -46,3 +46,15 @@ Section 3.4.2 of the 1973 document says
 #165¢'#203~#358'
 ```
 is 34815, which was corrected to 34915 in the 1996 document.
+
+Section 4.4.12 says that the elements in the WRITE IN list are separated
+by intersections.  However, section 4.4.13 does not say that the elements
+in the READ OUT list are separated by anything.  Since the list can
+contain array elements, a separator is needed to prevent ambiguity
+due to the possibility of multidimensional arrays, so this implementation
+will require the list elements for READ OUT to be separated by
+intersections.
+
+Section 4.4.13 also omits arrays from the READ OUT list, so this
+implementation will not support arrays in the READ OUT list despite many
+examples on the internet of READING OUT arrays.
