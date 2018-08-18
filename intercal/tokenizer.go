@@ -138,33 +138,50 @@ func (t *Tokenizer) Next() (*Token, error) {
 				switch t.line[index] {
 				case ' ', '\t', '\f', '\n', '\r', '\v':
 				case '0':
-					value = value * 10
+					if value < 65536 {
+						value = value * 10
+					}
 				case '1':
-					value = value*10 + 1
+					if value < 65536 {
+						value = value*10 + 1
+					}
 				case '2':
-					value = value*10 + 2
+					if value < 65536 {
+						value = value*10 + 2
+					}
 				case '3':
-					value = value*10 + 3
+					if value < 65536 {
+						value = value*10 + 3
+					}
 				case '4':
-					value = value*10 + 4
+					if value < 65536 {
+						value = value*10 + 4
+					}
 				case '5':
-					value = value*10 + 5
+					if value < 65536 {
+						value = value*10 + 5
+					}
 				case '6':
-					value = value*10 + 6
+					if value < 65536 {
+						value = value*10 + 6
+					}
 				case '7':
-					value = value*10 + 7
+					if value < 65536 {
+						value = value*10 + 7
+					}
 				case '8':
-					value = value*10 + 8
+					if value < 65536 {
+						value = value*10 + 8
+					}
 				case '9':
-					value = value*10 + 9
+					if value < 65536 {
+						value = value*10 + 9
+					}
 				default:
 					break loop
 				}
 				leadingSpaces.WriteByte(t.line[index])
 				index++
-				if value >= 65536 {
-					return nil, Err017
-				}
 			}
 			t.index = index
 			spacesBelongToNextLine := true
@@ -243,6 +260,10 @@ type Token struct {
 
 	NumberValue uint16
 	StringValue string
+}
+
+func (t *Token) IsUnaryOp() bool {
+	return t.Type == TokenAmpersand || t.Type == TokenBook || t.Type == TokenBookworm || t.Type == TokenWhat
 }
 
 const (
@@ -337,8 +358,10 @@ var tokenTable = []tokenTableEntry{
 	{"#", TokenMesh},
 	{"=", TokenHalfMesh},
 	{"'", TokenSpark},
+	{"’", TokenSpark},
 	{"`", TokenBackSpark},
 	{"!", TokenWow},
+	{"?", TokenWhat},
 	{"\"", TokenRabbitEars},
 	{"\".", TokenRabbit},
 	{"\"\u0008.", TokenRabbit},

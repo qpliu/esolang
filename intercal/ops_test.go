@@ -34,8 +34,8 @@ func TestOpOr(t *testing.T) {
 }
 
 func TestOpXor(t *testing.T) {
-	testResult(t, "#V77", OpXor16(77), 32875)
-	testResult(t, "\"V#77~'#65535¢#65535'\"", OpXor32(77), 2147483755)
+	testResult(t, "#⊻77", OpXor16(77), 32875)
+	testResult(t, "\"⊻#77~'#65535¢#65535'\"", OpXor32(77), 2147483755)
 }
 
 func TestOps(t *testing.T) {

@@ -50,6 +50,11 @@ func output(w io.Writer, value uint32, digits string, overline string) {
 		return
 	}
 	outputTens(w, digits, overline, indexC, (value/100)%10)
+	if value%1000 > 100 && value%100 == 99 {
+		outputDigit(w, digits, overline, indexI)
+		outputDigit(w, digits, overline, indexC)
+		return
+	}
 	outputTens(w, digits, overline, indexX, (value/10)%10)
 	outputTens(w, digits, overline, indexI, value%10)
 }

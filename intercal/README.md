@@ -58,3 +58,16 @@ intersections.
 Section 4.4.13 also omits arrays from the READ OUT list, so this
 implementation will not support arrays in the READ OUT list despite many
 examples on the internet of READING OUT arrays.
+
+Section 4.4.1 says 16-bit variables can only get 32-bit values if the
+value is less than 65535.  Presumably they can get a 16-bit value equal
+to 65535.  This bizarre restriction remains in the 1996 document, so
+this implementation will enforce it.
+
+This implementation treats a spark or a rabbit-ears that immediately
+follows a binary operator (NOT YET IMPLEMENTED) or is immediately
+followed by a unary operator as the left part of a pair, even if there
+is already a matching open grouper to its left.  This is not
+explicitly stated in section 3.4.3 of the document.  Otherwise, if
+there is a matching open grouper, it will be treated as the right part
+of the pair.
