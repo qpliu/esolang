@@ -32,6 +32,7 @@ func TestOutput(t *testing.T) {
 	testOutput(t, 128, "CXXVIII")
 	testOutput(t, 256, "CCLVI")
 	testOutput(t, 512, "DXII")
+	testOutput(t, 599, "DIC")
 	testOutput(t, 1024, "MXXIV")
 	testOutput(t, 2048, "MMXLVIII")
 	testOutput(t, 3998, "MMMCMXCVIII")

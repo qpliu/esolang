@@ -229,9 +229,42 @@ func TestParseStatements(t *testing.T) {
 	}
 }
 
+func exprEqual(expr1, expr2 Expr) bool {
+	switch e1 := expr1.(type) {
+	case ArrayElement:
+		e2, ok := expr2.(ArrayElement)
+		if !ok || e1.Array != e2.Array || len(e1.Index) != len(e2.Index) {
+			return false
+		}
+		for i := range e1.Index {
+			if !exprEqual(e1.Index[i], e2.Index[i]) {
+				return false
+			}
+		}
+		return true
+	case ExprMingle:
+		e2, ok := expr2.(ExprMingle)
+		return ok && exprEqual(e1[0], e2[0]) && exprEqual(e1[1], e2[1])
+	case ExprSelect:
+		e2, ok := expr2.(ExprSelect)
+		return ok && exprEqual(e1[0], e2[0]) && exprEqual(e1[1], e2[1])
+	case ExprAnd:
+		e2, ok := expr2.(ExprAnd)
+		return ok && exprEqual(e1[0], e2[0])
+	case ExprOr:
+		e2, ok := expr2.(ExprOr)
+		return ok && exprEqual(e1[0], e2[0])
+	case ExprXor:
+		e2, ok := expr2.(ExprXor)
+		return ok && exprEqual(e1[0], e2[0])
+	default:
+		return expr1 == expr2
+	}
+}
+
 func testParseExpr(t *testing.T, src string, expected Expr) {
 	stmts := testParseStatements(t, "PLEASE DON'T FORGET"+src, []StatementType{StatementForget})
-	if expected != stmts[0].Operands {
+	if !exprEqual(stmts[0].Operands.(Expr), expected) {
 		t.Errorf("parse expr failed: %s %v", src, stmts[0].Error)
 	}
 }
@@ -272,7 +305,7 @@ func TestParseExpr(t *testing.T) {
 
 	testParseExpr(t, "'#165$#203'~#358", ExprSelect{ExprMingle{ExprConst(165), ExprConst(203)}, ExprConst(358)})
 	testParseExpr(t, "#165$'#203~#358'", ExprMingle{ExprConst(165), ExprSelect{ExprConst(203), ExprConst(358)}})
-	// testParseBadExpr(t, "#165$#203~#358")
+	testParseBadExpr(t, "#165$#203~#358")
 	testParseExpr(t, "'V#&123'", ExprOr{ExprAnd{ExprConst(123)}})
 	testParseExpr(t, "'V\"&#123\"'", ExprOr{ExprAnd{ExprConst(123)}})
 	testParseExpr(t, "'V'&#123''", ExprOr{ExprAnd{ExprConst(123)}})
@@ -281,9 +314,12 @@ func TestParseExpr(t *testing.T) {
 	testParseExpr(t, "'V.1$.2'", ExprOr{ExprMingle{Var16(1), Var16(2)}})
 	testParseExpr(t, "\"V!1$.2'\"", ExprOr{ExprMingle{Var16(1), Var16(2)}})
 	testParseExpr(t, "\"V.1$!2'\"", ExprOr{ExprMingle{Var16(1), Var16(2)}})
-	// testParseExpr(t, "'V.1$!2''", ExprOr{ExprMingle{Var16(1), Var16(2)}})
+	testParseExpr(t, "'V.1$!2''", ExprOr{ExprMingle{Var16(1), Var16(2)}})
 
-	// ",1 SUB #1 ~ #2"
-	// ",1 SUB ,2 SUB #1 #2 #3"
-	// ",1 SUB ' ,2 SUB ' ,3 SUB #1 ' #2 ' ' #3 '"
+	testParseExpr(t, ",1 SUB #1 ~ #2", ArrayElement{Array16(1), []Expr{ExprSelect{ExprConst(1), ExprConst(2)}}})
+	testParseExpr(t, ",1 SUB ,2 SUB #1 #2 #3", ArrayElement{Array16(1), []Expr{ArrayElement{Array16(2), []Expr{ExprConst(1), ExprConst(2), ExprConst(3)}}}})
+	testParseExpr(t, ",1 SUB ' ,2 SUB ' ,3 SUB #1 ' #2 ' ' #3 '", ArrayElement{Array16(1), []Expr{ArrayElement{Array16(2), []Expr{ArrayElement{Array16(3), []Expr{ExprConst(1)}}, ExprConst(2)}}, ExprConst(3)}})
+
+	testParseExpr(t, "’⊻,1SUB#1#1¢#1’~’#0¢#65535’", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
+	testParseExpr(t, "'?\",1SUB#1#1\"$#1'~'#0$#65535'", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
 }

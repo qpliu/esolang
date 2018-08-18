@@ -275,7 +275,7 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 		gerundTable[TokenNexting] = append(gerundTable[TokenNexting], s.Index)
 		return
 	case TokenForget:
-		expr, newIndex, err := s.parseExpr(index+1, false, TokenString)
+		expr, newIndex, err := s.parseExpr(index+1, false, false, false, TokenString)
 		if err != nil {
 			s.Error = err
 			return
@@ -288,7 +288,7 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 		gerundTable[TokenForgetting] = append(gerundTable[TokenForgetting], s.Index)
 		return
 	case TokenResume:
-		expr, newIndex, err := s.parseExpr(index+1, false, TokenString)
+		expr, newIndex, err := s.parseExpr(index+1, false, false, false, TokenString)
 		if err != nil {
 			s.Error = err
 			return
@@ -562,7 +562,7 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 		if index+3 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 || s.Tokens[index+2].Type != TokenAngle || s.Tokens[index+3].Type != TokenWorm {
 			return StatementUnrecognizable, nil, nil
 		}
-		expr, newIndex, err := s.parseExpr(index+4, false, TokenString)
+		expr, newIndex, err := s.parseExpr(index+4, false, false, false, TokenString)
 		if newIndex < len(s.Tokens) || err != nil {
 			return StatementUnrecognizable, nil, err
 		} else if expr == nil {
@@ -573,7 +573,7 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 		if index+3 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 || s.Tokens[index+2].Type != TokenAngle || s.Tokens[index+3].Type != TokenWorm {
 			return StatementUnrecognizable, nil, nil
 		}
-		expr, newIndex, err := s.parseExpr(index+4, false, TokenString)
+		expr, newIndex, err := s.parseExpr(index+4, false, false, false, TokenString)
 		if newIndex < len(s.Tokens) || err != nil {
 			return StatementUnrecognizable, nil, err
 		} else if expr == nil {
@@ -598,7 +598,7 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 			if newIndex+2 >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenAngle || s.Tokens[newIndex+1].Type != TokenWorm {
 				return StatementUnrecognizable, nil, nil
 			}
-			expr, newIndex2, err := s.parseExpr(newIndex+2, false, TokenString)
+			expr, newIndex2, err := s.parseExpr(newIndex+2, false, false, false, TokenString)
 			if newIndex2 < len(s.Tokens) || err != nil {
 				return StatementUnrecognizable, nil, err
 			} else if expr == nil {
@@ -626,7 +626,7 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 			if newIndex+2 >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenAngle || s.Tokens[newIndex+1].Type != TokenWorm {
 				return StatementUnrecognizable, nil, nil
 			}
-			expr, newIndex2, err := s.parseExpr(newIndex+2, false, TokenString)
+			expr, newIndex2, err := s.parseExpr(newIndex+2, false, false, false, TokenString)
 			if newIndex2 < len(s.Tokens) || err != nil {
 				return StatementUnrecognizable, nil, err
 			} else if expr == nil {
@@ -641,7 +641,7 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 	}
 }
 
-func (s *Statement) parseExpr(index int, mustBe16 bool, openGrouper TokenType) (Expr, int, *Error) {
+func (s *Statement) parseExpr(index int, mustBe16, binaryOpRhs, firstSubscript bool, openGrouper TokenType) (Expr, int, *Error) {
 	if index >= len(s.Tokens) {
 		return nil, index, nil
 	}
@@ -716,7 +716,7 @@ func (s *Statement) parseExpr(index int, mustBe16 bool, openGrouper TokenType) (
 		result = ExprConst(s.Tokens[index].NumberValue)
 		index++
 	case TokenSpark:
-		if openGrouper == TokenSpark && (index+1 >= len(s.Tokens) || !s.Tokens[index+1].IsUnaryOp()) {
+		if openGrouper == TokenSpark && (index+1 >= len(s.Tokens) || !s.Tokens[index+1].IsUnaryOp()) && !binaryOpRhs && !firstSubscript {
 			return nil, index, nil
 		}
 		index++
@@ -724,7 +724,7 @@ func (s *Statement) parseExpr(index int, mustBe16 bool, openGrouper TokenType) (
 			unaryOp = s.Tokens[index]
 			index++
 		}
-		expr, newIndex, err := s.parseExpr(index, mustBe16, TokenSpark)
+		expr, newIndex, err := s.parseExpr(index, mustBe16, false, false, TokenSpark)
 		if err != nil {
 			return nil, index, err
 		} else if expr == nil || newIndex >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenSpark {
@@ -733,7 +733,7 @@ func (s *Statement) parseExpr(index int, mustBe16 bool, openGrouper TokenType) (
 		index = newIndex + 1
 		result = expr
 	case TokenRabbitEars:
-		if openGrouper == TokenRabbitEars && (index+1 >= len(s.Tokens) || !s.Tokens[index+1].IsUnaryOp()) {
+		if openGrouper == TokenRabbitEars && (index+1 >= len(s.Tokens) || !s.Tokens[index+1].IsUnaryOp()) && !binaryOpRhs && !firstSubscript {
 			return nil, index, nil
 		}
 		index++
@@ -741,7 +741,7 @@ func (s *Statement) parseExpr(index int, mustBe16 bool, openGrouper TokenType) (
 			unaryOp = s.Tokens[index]
 			index++
 		}
-		expr, newIndex, err := s.parseExpr(index, mustBe16, TokenRabbitEars)
+		expr, newIndex, err := s.parseExpr(index, mustBe16, false, false, TokenRabbitEars)
 		if err != nil {
 			return nil, index, err
 		} else if expr == nil || newIndex >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenRabbitEars {
@@ -764,7 +764,11 @@ func (s *Statement) parseExpr(index int, mustBe16 bool, openGrouper TokenType) (
 		}
 	}
 
-	return s.parseBinaryOp(result, index, mustBe16, openGrouper)
+	if !binaryOpRhs {
+		return s.parseBinaryOp(result, index, mustBe16, openGrouper)
+	} else {
+		return result, index, nil
+	}
 }
 
 func (s *Statement) parseBinaryOp(lhs Expr, index int, mustBe16 bool, openGrouper TokenType) (Expr, int, *Error) {
@@ -776,7 +780,7 @@ func (s *Statement) parseBinaryOp(lhs Expr, index int, mustBe16 bool, openGroupe
 		if mustBe16 {
 			return lhs, index, nil
 		}
-		rhs, newIndex, err := s.parseExpr(index+1, false, openGrouper)
+		rhs, newIndex, err := s.parseExpr(index+1, false, true, false, openGrouper)
 		if err != nil {
 			return nil, index, err
 		} else if rhs == nil {
@@ -784,7 +788,7 @@ func (s *Statement) parseBinaryOp(lhs Expr, index int, mustBe16 bool, openGroupe
 		}
 		return ExprMingle([2]Expr{lhs, rhs}), newIndex, nil
 	case TokenSqiggle:
-		rhs, newIndex, err := s.parseExpr(index+1, false, openGrouper)
+		rhs, newIndex, err := s.parseExpr(index+1, false, true, false, openGrouper)
 		if err != nil {
 			return nil, index, err
 		} else if rhs == nil {
@@ -799,7 +803,7 @@ func (s *Statement) parseBinaryOp(lhs Expr, index int, mustBe16 bool, openGroupe
 func (s *Statement) parseSubscripts(index int, openGrouper TokenType) ([]Expr, int, *Error) {
 	subscripts := []Expr{}
 	for {
-		expr, newIndex, err := s.parseExpr(index, true, openGrouper)
+		expr, newIndex, err := s.parseExpr(index, true, false, len(subscripts) == 0, openGrouper)
 		if err != nil || expr == nil {
 			return subscripts, index, nil
 		}
@@ -819,7 +823,7 @@ func (s *Statement) parseDimensions(index int) ([]Expr, *Error) {
 		if index >= len(s.Tokens) {
 			return nil, Err000
 		}
-		expr, newIndex, err := s.parseExpr(index, false, TokenString)
+		expr, newIndex, err := s.parseExpr(index, false, false, false, TokenString)
 		if err != nil {
 			return nil, err
 		} else if expr == nil {

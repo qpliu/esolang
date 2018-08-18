@@ -30,7 +30,8 @@ type Expr interface {
 }
 
 type LValue interface {
-	Gets(state *State, val uint32, is16 bool)
+	Gets(state *State, value uint32, is16 bool) *Error
+	Ignored(state *State) bool
 }
 
 type Stashable interface {
@@ -38,10 +39,11 @@ type Stashable interface {
 	Retrieve(state *State) *Error
 	Ignore(state *State)
 	Remember(state *State)
+	Ignored(state *State) bool
 }
 
 type Dimensionable interface {
-	Dimension(state *State, dimensions []int)
+	Dimension(state *State, dimensions []int) *Error
 }
 
 type ReadOutable interface {
@@ -49,70 +51,167 @@ type ReadOutable interface {
 }
 
 type WriteInable interface {
-	WriteIn(state *State, r *IntercalReader) error
+	WriteIn(state *State, r *IntercalReader) *Error
 }
 
 type Array16 uint16
 
 func (v Array16) Stash(state *State) {
-	//...
+	val := state.Array16(v)
+	if val.Ignored {
+		return
+	}
+	val.Stash = append(val.Stash, ArrayValue{
+		Dimensions: val.Value.Dimensions,
+		Values:     append([]uint32{}, val.Value.Values...),
+	})
 }
 
 func (v Array16) Retrieve(state *State) *Error {
-	//...
+	val := state.Array16(v)
+	if val.Ignored {
+		return nil
+	}
+	if len(val.Stash) == 0 {
+		return Err436
+	}
+	val.Value = val.Stash[len(val.Stash)-1]
+	val.Stash = val.Stash[:len(val.Stash)-1]
 	return nil
 }
 
 func (v Array16) Ignore(state *State) {
-	//...
+	state.Array16(v).Ignored = true
 }
 
 func (v Array16) Remember(state *State) {
-	//...
+	state.Array16(v).Ignored = false
 }
 
-func (a Array16) Dimension(state *State, dimensions []int) {
-	//...
+func (v Array16) Ignored(state *State) bool {
+	return state.Array16(v).Ignored
 }
 
-func (a Array16) WriteIn(state *State, r *IntercalReader) error {
-	//...
+func (v Array16) Dimension(state *State, dimensions []int) *Error {
+	val := state.Array16(v)
+	if val.Ignored {
+		return nil
+	}
+	if len(dimensions) == 0 {
+		return Err436
+	}
+	size := 1
+	for _, dim := range dimensions {
+		size *= dim
+	}
+	if size == 0 {
+		return Err436
+	}
+	val.Value.Dimensions = dimensions
+	val.Value.Values = make([]uint32, size)
+	return nil
+}
+
+func (v Array16) WriteIn(state *State, r *IntercalReader) *Error {
+	val := state.Array16(v)
+	if val.Ignored {
+		return nil
+	}
+	for i := range val.Value.Values {
+		n, err := r.Input16()
+		if err != nil {
+			if e, ok := err.(*Error); ok {
+				return e
+			} else {
+				return Err562
+			}
+		}
+		val.Value.Values[i] = uint32(n)
+	}
 	return nil
 }
 
 type Array32 uint16
 
 func (v Array32) Stash(state *State) {
-	//...
+	val := state.Array32(v)
+	if val.Ignored {
+		return
+	}
+	val.Stash = append(val.Stash, ArrayValue{
+		Dimensions: val.Value.Dimensions,
+		Values:     append([]uint32{}, val.Value.Values...),
+	})
 }
 
 func (v Array32) Retrieve(state *State) *Error {
-	//...
+	val := state.Array32(v)
+	if val.Ignored {
+		return nil
+	}
+	if len(val.Stash) == 0 {
+		return Err436
+	}
+	val.Value = val.Stash[len(val.Stash)-1]
+	val.Stash = val.Stash[:len(val.Stash)-1]
 	return nil
 }
 
 func (v Array32) Ignore(state *State) {
-	//...
+	state.Array32(v).Ignored = true
 }
 
 func (v Array32) Remember(state *State) {
-	//...
+	state.Array32(v).Ignored = false
 }
 
-func (a Array32) Dimension(state *State, dimensions []int) {
-	//...
+func (v Array32) Ignored(state *State) bool {
+	return state.Array32(v).Ignored
 }
 
-func (a Array32) WriteIn(state *State, r *IntercalReader) error {
-	//...
+func (v Array32) Dimension(state *State, dimensions []int) *Error {
+	val := state.Array32(v)
+	if val.Ignored {
+		return nil
+	}
+	if len(dimensions) == 0 {
+		return Err436
+	}
+	size := 1
+	for _, dim := range dimensions {
+		size *= dim
+	}
+	if size == 0 {
+		return Err436
+	}
+	val.Value.Dimensions = dimensions
+	val.Value.Values = make([]uint32, size)
+	return nil
+}
+
+func (v Array32) WriteIn(state *State, r *IntercalReader) *Error {
+	val := state.Array32(v)
+	if val.Ignored {
+		return nil
+	}
+	for i := range val.Value.Values {
+		n, err := r.Input32()
+		if err != nil {
+			if e, ok := err.(*Error); ok {
+				return e
+			} else {
+				return Err562
+			}
+		}
+		val.Value.Values[i] = n
+	}
 	return nil
 }
 
 type Var16 uint16
 
 func (v Var16) Eval(state *State) (uint32, bool, *Error) {
-	//...
-	return 0, true, Err774
+	return state.Var16(v).Value, true, nil
 }
 
 func (v Var16) MustBe16() bool {
@@ -127,41 +226,76 @@ func (v Var16) ConstValue() (uint32, bool, bool) {
 	return 0, true, false
 }
 
-func (v Var16) Gets(state *State, val uint32, is16 bool) {
-	//...
+func (v Var16) Gets(state *State, value uint32, is16 bool) *Error {
+	val := state.Var16(v)
+	if val.Ignored {
+		return nil
+	}
+	if !is16 && value >= 65535 {
+		return Err275
+	}
+	val.Value = value & 65535
+	return nil
 }
 
 func (v Var16) Stash(state *State) {
-	//...
+	val := state.Var16(v)
+	if val.Ignored {
+		return
+	}
+	val.Stash = append(val.Stash, val.Value)
 }
 
 func (v Var16) Retrieve(state *State) *Error {
-	//...
+	val := state.Var16(v)
+	if val.Ignored {
+		return nil
+	}
+	if len(val.Stash) == 0 {
+		return Err436
+	}
+	val.Value = val.Stash[len(val.Stash)-1]
+	val.Stash = val.Stash[:len(val.Stash)-1]
 	return nil
 }
 
 func (v Var16) Ignore(state *State) {
-	//...
+	state.Var16(v).Ignored = true
 }
 
 func (v Var16) Remember(state *State) {
-	//...
+	state.Var16(v).Ignored = false
+}
+
+func (v Var16) Ignored(state *State) bool {
+	return state.Var16(v).Ignored
 }
 
 func (v Var16) ReadOut(state *State, w io.Writer) {
-	//...
+	Output(w, state.Var16(v).Value)
 }
 
-func (v Var16) WriteIn(state *State, r *IntercalReader) error {
-	//...
+func (v Var16) WriteIn(state *State, r *IntercalReader) *Error {
+	val := state.Var16(v)
+	if val.Ignored {
+		return nil
+	}
+	n, err := r.Input16()
+	if err != nil {
+		if e, ok := err.(*Error); ok {
+			return e
+		} else {
+			return Err562
+		}
+	}
+	val.Value = uint32(n)
 	return nil
 }
 
 type Var32 uint16
 
 func (v Var32) Eval(state *State) (uint32, bool, *Error) {
-	//...
-	return 0, false, Err774
+	return state.Var32(v).Value, true, nil
 }
 
 func (v Var32) MustBe16() bool {
@@ -176,38 +310,71 @@ func (v Var32) ConstValue() (uint32, bool, bool) {
 	return 0, false, false
 }
 
-func (v Var32) Gets(state *State, val uint32, is16 bool) {
-	//...
+func (v Var32) Gets(state *State, value uint32, is16 bool) *Error {
+	val := state.Var32(v)
+	if val.Ignored {
+		return nil
+	}
+	val.Value = value
+	return nil
 }
 
 func (v Var32) Stash(state *State) {
-	//...
+	val := state.Var32(v)
+	if val.Ignored {
+		return
+	}
+	val.Stash = append(val.Stash, val.Value)
 }
 
 func (v Var32) Retrieve(state *State) *Error {
-	//...
+	val := state.Var32(v)
+	if val.Ignored {
+		return nil
+	}
+	if len(val.Stash) == 0 {
+		return Err436
+	}
+	val.Value = val.Stash[len(val.Stash)-1]
+	val.Stash = val.Stash[:len(val.Stash)-1]
 	return nil
 }
 
 func (v Var32) Ignore(state *State) {
-	//...
+	state.Var32(v).Ignored = true
 }
 
 func (v Var32) Remember(state *State) {
-	//...
+	state.Var32(v).Ignored = false
+}
+
+func (v Var32) Ignored(state *State) bool {
+	return state.Var32(v).Ignored
 }
 
 func (v Var32) ReadOut(state *State, w io.Writer) {
-	//...
+	Output(w, state.Var32(v).Value)
 }
 
-func (v Var32) WriteIn(state *State, r *IntercalReader) error {
-	//...
+func (v Var32) WriteIn(state *State, r *IntercalReader) *Error {
+	val := state.Var32(v)
+	if val.Ignored {
+		return nil
+	}
+	n, err := r.Input32()
+	if err != nil {
+		if e, ok := err.(*Error); ok {
+			return e
+		} else {
+			return Err562
+		}
+	}
+	val.Value = n
 	return nil
 }
 
 type ArrayElement struct {
-	Array interface{}
+	Array Stashable
 	// Array is Array16 or Array32
 
 	Index []Expr
@@ -244,15 +411,20 @@ func (e ArrayElement) ConstValue() (uint32, bool, bool) {
 	return 0, e.MustBe16(), false
 }
 
-func (e ArrayElement) Gets(state *State, val uint32, is16 bool) {
+func (e ArrayElement) Gets(state *State, value uint32, is16 bool) *Error {
 	//...
+	return nil
+}
+
+func (e ArrayElement) Ignored(state *State) bool {
+	return e.Array.Ignored(state)
 }
 
 func (e ArrayElement) ReadOut(state *State, w io.Writer) {
 	//...
 }
 
-func (e ArrayElement) WriteIn(state *State, r *IntercalReader) error {
+func (e ArrayElement) WriteIn(state *State, r *IntercalReader) *Error {
 	//...
 	return nil
 }
