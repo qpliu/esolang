@@ -47,11 +47,12 @@ type Dimensionable interface {
 }
 
 type ReadOutable interface {
-	ReadOut(state *State, w io.Writer)
+	ReadOut(state *State, w io.Writer) *Error
 }
 
 type WriteInable interface {
 	WriteIn(state *State, r *IntercalReader) *Error
+	Ignored(state *State) bool
 }
 
 type Array16 uint16
@@ -98,14 +99,14 @@ func (v Array16) Dimension(state *State, dimensions []int) *Error {
 		return nil
 	}
 	if len(dimensions) == 0 {
-		return Err436
+		return Err241
 	}
 	size := 1
 	for _, dim := range dimensions {
 		size *= dim
 	}
 	if size == 0 {
-		return Err436
+		return Err240
 	}
 	val.Value.Dimensions = dimensions
 	val.Value.Values = make([]uint32, size)
@@ -175,14 +176,14 @@ func (v Array32) Dimension(state *State, dimensions []int) *Error {
 		return nil
 	}
 	if len(dimensions) == 0 {
-		return Err436
+		return Err241
 	}
 	size := 1
 	for _, dim := range dimensions {
 		size *= dim
 	}
 	if size == 0 {
-		return Err436
+		return Err240
 	}
 	val.Value.Dimensions = dimensions
 	val.Value.Values = make([]uint32, size)
@@ -231,7 +232,10 @@ func (v Var16) Gets(state *State, value uint32, is16 bool) *Error {
 	if val.Ignored {
 		return nil
 	}
-	if !is16 && value >= 65535 {
+	if !is16 && value >= 65536 {
+		return Err275
+	}
+	if !is16 && value == 65535 {
 		return Err275
 	}
 	val.Value = value & 65535
@@ -271,8 +275,9 @@ func (v Var16) Ignored(state *State) bool {
 	return state.Var16(v).Ignored
 }
 
-func (v Var16) ReadOut(state *State, w io.Writer) {
+func (v Var16) ReadOut(state *State, w io.Writer) *Error {
 	Output(w, state.Var16(v).Value)
+	return nil
 }
 
 func (v Var16) WriteIn(state *State, r *IntercalReader) *Error {
@@ -295,7 +300,7 @@ func (v Var16) WriteIn(state *State, r *IntercalReader) *Error {
 type Var32 uint16
 
 func (v Var32) Eval(state *State) (uint32, bool, *Error) {
-	return state.Var32(v).Value, true, nil
+	return state.Var32(v).Value, false, nil
 }
 
 func (v Var32) MustBe16() bool {
@@ -352,8 +357,9 @@ func (v Var32) Ignored(state *State) bool {
 	return state.Var32(v).Ignored
 }
 
-func (v Var32) ReadOut(state *State, w io.Writer) {
+func (v Var32) ReadOut(state *State, w io.Writer) *Error {
 	Output(w, state.Var32(v).Value)
+	return nil
 }
 
 func (v Var32) WriteIn(state *State, r *IntercalReader) *Error {
@@ -380,13 +386,48 @@ type ArrayElement struct {
 	Index []Expr
 }
 
-func (e ArrayElement) Eval(state *State) (uint32, bool, *Error) {
-	//...
-	return 0, e.MustBe16(), Err774
+func (v ArrayElement) arrayValue(state *State) *ArrayVar {
+	switch array := v.Array.(type) {
+	case Array16:
+		return state.Array16(array)
+	case Array32:
+		return state.Array32(array)
+	default:
+		panic("ArrayElement")
+	}
 }
 
-func (e ArrayElement) MustBe16() bool {
-	switch e.Array.(type) {
+func (v ArrayElement) arrayIndex(state *State, val *ArrayVar) (int, *Error) {
+	if len(val.Value.Dimensions) == 0 || len(val.Value.Dimensions) != len(v.Index) {
+		return 0, Err241
+	}
+	index := 0
+	step := 1
+	for i := range v.Index {
+		sub, _, err := v.Index[i].Eval(state)
+		if err != nil {
+			return 0, err
+		}
+		if sub == 0 || int(sub) > val.Value.Dimensions[i] {
+			return 0, Err241
+		}
+		index += step * int(sub-1)
+		step *= val.Value.Dimensions[i]
+	}
+	return index, nil
+}
+
+func (v ArrayElement) Eval(state *State) (uint32, bool, *Error) {
+	val := v.arrayValue(state)
+	index, err := v.arrayIndex(state, val)
+	if err != nil {
+		return 0, v.MustBe16(), err
+	}
+	return val.Value.Values[index], v.MustBe16(), nil
+}
+
+func (v ArrayElement) MustBe16() bool {
+	switch v.Array.(type) {
 	case Array16:
 		return true
 	case Array32:
@@ -396,8 +437,8 @@ func (e ArrayElement) MustBe16() bool {
 	}
 }
 
-func (e ArrayElement) MustBe32() bool {
-	switch e.Array.(type) {
+func (v ArrayElement) MustBe32() bool {
+	switch v.Array.(type) {
 	case Array16:
 		return false
 	case Array32:
@@ -407,25 +448,73 @@ func (e ArrayElement) MustBe32() bool {
 	}
 }
 
-func (e ArrayElement) ConstValue() (uint32, bool, bool) {
-	return 0, e.MustBe16(), false
+func (v ArrayElement) ConstValue() (uint32, bool, bool) {
+	return 0, v.MustBe16(), false
 }
 
-func (e ArrayElement) Gets(state *State, value uint32, is16 bool) *Error {
-	//...
+func (v ArrayElement) Gets(state *State, value uint32, is16 bool) *Error {
+	val := v.arrayValue(state)
+	if val.Ignored {
+		return nil
+	}
+	if !is16 && v.MustBe16() && value >= 65536 {
+		return Err275
+	}
+	if !is16 && v.MustBe16() && value == 65535 {
+		return Err275
+	}
+	index, err := v.arrayIndex(state, val)
+	if err != nil {
+		return err
+	}
+	if v.MustBe16() {
+		value &= 65535
+	}
+	val.Value.Values[index] = value
 	return nil
 }
 
-func (e ArrayElement) Ignored(state *State) bool {
-	return e.Array.Ignored(state)
+func (v ArrayElement) Ignored(state *State) bool {
+	return v.Array.Ignored(state)
 }
 
-func (e ArrayElement) ReadOut(state *State, w io.Writer) {
-	//...
+func (v ArrayElement) ReadOut(state *State, w io.Writer) *Error {
+	value, _, err := v.Eval(state)
+	if err != nil {
+		return err
+	}
+	Output(w, value)
+	return nil
 }
 
-func (e ArrayElement) WriteIn(state *State, r *IntercalReader) *Error {
-	//...
+func (v ArrayElement) WriteIn(state *State, r *IntercalReader) *Error {
+	if v.Ignored(state) {
+		return nil
+	}
+	val := v.arrayValue(state)
+	if val.Ignored {
+		return nil
+	}
+	index, err := v.arrayIndex(state, val)
+	if err != nil {
+		return err
+	}
+	var value uint32
+	var errInput error
+	if v.MustBe16() {
+		n, err := r.Input16()
+		value, errInput = uint32(n), err
+	} else {
+		value, errInput = r.Input32()
+	}
+	if errInput != nil {
+		if e, ok := errInput.(*Error); ok {
+			return e
+		} else {
+			return Err562
+		}
+	}
+	val.Value.Values[index] = value
 	return nil
 }
 
@@ -447,8 +536,9 @@ func (e ExprConst) ConstValue() (uint32, bool, bool) {
 	return uint32(e), true, true
 }
 
-func (e ExprConst) ReadOut(state *State, w io.Writer) {
+func (e ExprConst) ReadOut(state *State, w io.Writer) *Error {
 	Output(w, uint32(e))
+	return nil
 }
 
 type ExprMingle [2]Expr

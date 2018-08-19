@@ -194,7 +194,7 @@ func TestParseStatements(t *testing.T) {
 	}
 
 	stmts = testParseStatements(t, "(1) DON'T ABSTAIN FROM (1)", []StatementType{StatementAbstainLabel})
-	if _, ok := stmts[0].Operands.(int); !ok {
+	if _, ok := stmts[0].Operands.([]int); !ok {
 		t.Errorf("unexpected operand: %s", stmts[0].String())
 	}
 
@@ -204,7 +204,7 @@ func TestParseStatements(t *testing.T) {
 	}
 
 	stmts = testParseStatements(t, "(1) DO REINSTATE (1)", []StatementType{StatementReinstateLabel})
-	if _, ok := stmts[0].Operands.(int); !ok {
+	if _, ok := stmts[0].Operands.([]int); !ok {
 		t.Errorf("unexpected operand: %s", stmts[0].String())
 	}
 

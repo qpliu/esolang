@@ -1,0 +1,4 @@
+PLEASE :1 <- #1009
+DO .1 <- :1
+DO READ OUT .1
+DO GIVE UP

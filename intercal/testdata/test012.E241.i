@@ -1,0 +1,3 @@
+DO ,1 <- #1
+DO ,1 SUB #1 #1 <- #1
+PLEASE GIVE UP

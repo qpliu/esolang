@@ -27,6 +27,8 @@ var (
 	Err633 = &Error{"633", "Execution has passed beyond the last statement of the program.", "", 0}
 	Err774 = &Error{"774", "A compiler error has occurred (see section 8.1).", "", 0}
 	Err778 = &Error{"778", "An unexplainable compiler error has occurred (see J. Lyon or B. Woods).", "", 0}
+
+	ErrGiveUp = &Error{"", "", "", 0}
 )
 
 type Error struct {
@@ -58,6 +60,15 @@ func (e *Error) At(statementIndex int) *Error {
 		message:   e.message,
 		message2:  e.message2,
 		statement: statementIndex + 1,
+	}
+}
+
+func (e *Error) AtStmt(stmt *Statement) *Error {
+	return &Error{
+		code:      e.code,
+		message:   e.message,
+		message2:  stmt.String(),
+		statement: stmt.Index + 1,
 	}
 }
 

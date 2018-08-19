@@ -61,7 +61,8 @@ intersections.
 
 Section 4.4.13 also omits arrays from the READ OUT list, so this
 implementation will not support arrays in the READ OUT list despite many
-examples on the internet of READING OUT arrays.
+examples on the internet of READING OUT arrays.  Apparently, that is
+for binary or text I/O in newer implementations.
 
 Section 4.4.1 says 16-bit variables can only get 32-bit values if the
 value is less than 65535.  Presumably they can get a 16-bit value equal

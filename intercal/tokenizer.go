@@ -12,13 +12,15 @@ import (
 type Tokenizer struct {
 	r *bufio.Reader
 
+	f         *os.File
+	filenames []string
+	fileIndex int
+
 	filename string
 
 	line    string
 	linenum int
 	index   int
-
-	pushback *Token
 }
 
 func NewTokenizer(filename string, r io.Reader) *Tokenizer {
@@ -28,39 +30,47 @@ func NewTokenizer(filename string, r io.Reader) *Tokenizer {
 	}
 }
 
-func NewFileTokenizer(filename string) (*Tokenizer, error) {
-	f, err := os.Open(filename)
+func NewFileTokenizer(filenames []string) (*Tokenizer, error) {
+	f, err := os.Open(filenames[0])
 	if err != nil {
 		return nil, err
 	}
-	return NewTokenizer(filename, f), nil
-}
-
-func (t *Tokenizer) Peek() (*Token, error) {
-	if t.pushback != nil {
-		return t.pushback, nil
-	}
-	tok, err := t.Next()
-	if tok != nil {
-		t.Pushback(tok)
-	}
-	return tok, err
+	return &Tokenizer{
+		r:         bufio.NewReader(f),
+		f:         f,
+		filenames: filenames,
+		fileIndex: 0,
+		filename:  filenames[0],
+	}, nil
 }
 
 func (t *Tokenizer) Next() (*Token, error) {
-	if t.pushback != nil {
-		tok := t.pushback
-		t.pushback = nil
-		return tok, nil
-	}
 	leadingSpaces := bytes.Buffer{}
 	for {
 		if t.index >= len(t.line) {
 			line, err := t.r.ReadString('\n')
 			t.line = line
 			if err != nil {
-				if line == "" || err != io.EOF {
+				if err != io.EOF {
 					return nil, err
+				}
+				if line == "" {
+					if t.f != nil {
+						t.f.Close()
+					}
+					t.fileIndex++
+					if t.fileIndex >= len(t.filenames) {
+						return nil, err
+					}
+					f, err := os.Open(t.filenames[t.fileIndex])
+					if err != nil {
+						return nil, err
+					}
+					t.r = bufio.NewReader(f)
+					t.f = f
+					t.filename = t.filenames[t.fileIndex]
+					t.linenum = 0
+					continue
 				}
 			}
 			t.linenum++
@@ -240,13 +250,6 @@ func (t *Tokenizer) trailingSpaces() string {
 			return spaces.String()
 		}
 	}
-}
-
-func (t *Tokenizer) Pushback(tok *Token) {
-	if t.pushback != nil {
-		panic("Multiple pushback")
-	}
-	t.pushback = tok
 }
 
 type TokenType int

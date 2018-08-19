@@ -46,7 +46,7 @@ const (
 
 	StatementAbstainLabel
 	// Operands is initially uint16, the label
-	// Resolve() changes it to int, the statement index
+	// Resolve() changes it to single element []int, the statement index
 
 	StatementAbstainGerundList
 	// Operands is initially []TokenType, a list of gerund tokens
@@ -54,7 +54,7 @@ const (
 
 	StatementReinstateLabel
 	// Operands is initially uint16, the label
-	// Resolve() changes it to int, the statement index
+	// Resolve() changes it to single element []int, the statement index
 
 	StatementReinstateGerundList
 	// Operands is initially []TokenType, a list of gerund tokens
@@ -88,7 +88,7 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				return nil, err
 			} else {
 				if len(tokens) > 0 {
-					statements = append(statements, &Statement{Tokens: tokens})
+					statements = append(statements, &Statement{Tokens: tokens, Chance: 100})
 				}
 				labelTable := make(map[uint16]int)
 				gerundTable := make(map[TokenType][]int)
@@ -112,13 +112,13 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 		case TokenPlease:
 			if state == mkStmtStateWaxNumberWane && len(tokens) > 3 {
 				newTokens := []*Token{tokens[len(tokens)-3], tokens[len(tokens)-2], tokens[len(tokens)-1], token}
-				statements = append(statements, &Statement{Tokens: tokens[:len(tokens)-3]})
+				statements = append(statements, &Statement{Tokens: tokens[:len(tokens)-3], Chance: 100})
 				tokens = newTokens
 			} else if state == mkStmtStateWaxNumberWane && len(tokens) == 3 {
 				tokens = append(tokens, token)
 			} else {
 				if len(tokens) > 0 {
-					statements = append(statements, &Statement{Tokens: tokens})
+					statements = append(statements, &Statement{Tokens: tokens, Chance: 100})
 				}
 				tokens = []*Token{token}
 			}
@@ -216,7 +216,6 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 	{
 		haveNot := false
 		haveChance := false
-		s.Chance = 100
 		for {
 			if index >= len(s.Tokens) {
 				return
@@ -845,11 +844,14 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, 
 	case StatementNext, StatementAbstainLabel, StatementReinstateLabel:
 		targetLabel := s.Operands.(uint16)
 		if targetIndex, ok := labelTable[targetLabel]; ok {
-			s.Operands = targetIndex
-			if s.Type == StatementReinstateLabel {
-				if statements[targetIndex].Type == StatementGiveUp {
+			if s.Type == StatementNext {
+				s.Operands = targetIndex
+			} else {
+				if s.Type == StatementReinstateLabel && statements[targetIndex].Type == StatementGiveUp {
 					// Attempting to REINSTATE a GIVE UP statement by line label will have no effect.  Since this REINSTATE statement is not ABSTAINED FROM when it is executing, switch its target to itself.
-					s.Operands = s.Index
+					s.Operands = []int{s.Index}
+				} else {
+					s.Operands = []int{targetIndex}
 				}
 			}
 		} else {
