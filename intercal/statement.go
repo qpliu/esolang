@@ -12,6 +12,8 @@ type Statement struct {
 	Label  uint16
 	Chance uint16
 	Not    bool
+	Please bool
+	Thank  bool
 
 	Type     StatementType
 	Operands interface{}
@@ -71,6 +73,7 @@ const (
 
 const (
 	mkStmtStateOther = iota
+	mkStmtStateFromOrReinstate
 	mkStmtStateWax
 	mkStmtStateWaxNumber
 	mkStmtStateWaxNumberWane
@@ -81,6 +84,7 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 	statements := []*Statement{}
 	tokens := []*Token{}
 	state := mkStmtStateOther
+	thank := false
 	for {
 		token, err := t.Next()
 		if err != nil {
@@ -88,7 +92,8 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				return nil, err
 			} else {
 				if len(tokens) > 0 {
-					statements = append(statements, &Statement{Tokens: tokens, Chance: 100})
+					statements = append(statements, &Statement{Tokens: tokens, Chance: 100, Thank: thank})
+					thank = false
 				}
 				labelTable := make(map[uint16]int)
 				gerundTable := make(map[TokenType][]int)
@@ -112,13 +117,15 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 		case TokenPlease:
 			if state == mkStmtStateWaxNumberWane && len(tokens) > 3 {
 				newTokens := []*Token{tokens[len(tokens)-3], tokens[len(tokens)-2], tokens[len(tokens)-1], token}
-				statements = append(statements, &Statement{Tokens: tokens[:len(tokens)-3], Chance: 100})
+				statements = append(statements, &Statement{Tokens: tokens[:len(tokens)-3], Chance: 100, Thank: thank})
 				tokens = newTokens
+				thank = false
 			} else if state == mkStmtStateWaxNumberWane && len(tokens) == 3 {
 				tokens = append(tokens, token)
 			} else {
 				if len(tokens) > 0 {
-					statements = append(statements, &Statement{Tokens: tokens, Chance: 100})
+					statements = append(statements, &Statement{Tokens: tokens, Chance: 100, Thank: thank})
+					thank = false
 				}
 				tokens = []*Token{token}
 			}
@@ -129,7 +136,11 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 			}
 		case TokenWax:
 			tokens = append(tokens, token)
-			state = mkStmtStateWax
+			if state != mkStmtStateFromOrReinstate {
+				state = mkStmtStateWax
+			} else {
+				state = mkStmtStateOther
+			}
 		case TokenNumber:
 			tokens = append(tokens, token)
 			if state == mkStmtStateWax {
@@ -154,6 +165,12 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				NumberValue: 0,
 				StringValue: "",
 			})
+		case TokenFrom, TokenReinstate:
+			tokens = append(tokens, token)
+			state = mkStmtStateFromOrReinstate
+		case TokenThank:
+			tokens = append(tokens, token)
+			thank = true
 		default:
 			tokens = append(tokens, token)
 			state = mkStmtStateOther
@@ -202,6 +219,7 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 	if s.Tokens[index].Type == TokenDo {
 		index++
 	} else if s.Tokens[index].Type == TokenPlease {
+		s.Please = true
 		index++
 		if index >= len(s.Tokens) {
 			return
@@ -227,7 +245,7 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 			} else if !haveChance && s.Tokens[index].Type == TokenDoubleOhSeven {
 				haveChance = true
 				index++
-				if index >= len(s.Tokens) && s.Tokens[index].Type != TokenNumber {
+				if index >= len(s.Tokens) || s.Tokens[index].Type != TokenNumber {
 					return
 				}
 				s.Chance = s.Tokens[index].NumberValue
@@ -246,10 +264,6 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 		//     PLEASE %8000 (8000) NEXT (8000) DOOR
 		// will result in
 		//     PROGRAM HAS DISAPPEARED INTO THE BLACK LAGOON.
-	}
-
-	if index >= len(s.Tokens) {
-		return
 	}
 
 	switch s.Tokens[index].Type {
@@ -589,7 +603,7 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 				return StatementUnrecognizable, nil, err
 			}
 			return StatementCalculateArrayDimension, Dimensioning{LHS: Array16(s.Tokens[index+1].NumberValue), RHS: dimensions}, nil
-		} else if index+2 <= len(s.Tokens) && s.Tokens[index+2].Type == TokenSub {
+		} else if index+2 < len(s.Tokens) && s.Tokens[index+2].Type == TokenSub {
 			subscripts, newIndex, err := s.parseSubscripts(index+3, TokenString)
 			if err != nil || len(subscripts) == 0 {
 				return StatementUnrecognizable, nil, err
@@ -617,8 +631,8 @@ func (s *Statement) parseCalculate(index int) (StatementType, interface{}, *Erro
 				return StatementUnrecognizable, nil, err
 			}
 			return StatementCalculateArrayDimension, Dimensioning{LHS: Array32(s.Tokens[index+1].NumberValue), RHS: dimensions}, nil
-		} else if index+2 <= len(s.Tokens) && s.Tokens[index+2].Type == TokenSub {
-			subscripts, newIndex, err := s.parseSubscripts(index, TokenString)
+		} else if index+2 < len(s.Tokens) && s.Tokens[index+2].Type == TokenSub {
+			subscripts, newIndex, err := s.parseSubscripts(index+3, TokenString)
 			if err != nil || len(subscripts) == 0 {
 				return StatementUnrecognizable, nil, err
 			}
@@ -809,7 +823,7 @@ func (s *Statement) parseSubscripts(index int, openGrouper TokenType) ([]Expr, i
 		subscripts = append(subscripts, expr)
 		index = newIndex
 		if (openGrouper == TokenSpark || openGrouper == TokenRabbitEars) && index < len(s.Tokens) && s.Tokens[index].Type == openGrouper {
-			if index+1 < len(s.Tokens) || !s.Tokens[index+1].IsUnaryOp() {
+			if index+1 < len(s.Tokens) && !s.Tokens[index+1].IsUnaryOp() {
 				return subscripts, index, nil
 			}
 		}
@@ -848,8 +862,8 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, 
 				s.Operands = targetIndex
 			} else {
 				if s.Type == StatementReinstateLabel && statements[targetIndex].Type == StatementGiveUp {
-					// Attempting to REINSTATE a GIVE UP statement by line label will have no effect.  Since this REINSTATE statement is not ABSTAINED FROM when it is executing, switch its target to itself.
-					s.Operands = []int{s.Index}
+					// Attempting to REINSTATE a GIVE UP statement by line label will have no effect.
+					s.Operands = []int{}
 				} else {
 					s.Operands = []int{targetIndex}
 				}

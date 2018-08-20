@@ -79,6 +79,9 @@ func (r *IntercalReader) inputDigit(buf *bytes.Buffer) (uint32, error) {
 }
 
 func (r *IntercalReader) input(limit uint32) (uint32, error) {
+	if r == nil {
+		return 0, Err562
+	}
 	var buf bytes.Buffer
 	val, err := r.inputDigit(&buf)
 	if err == eol {

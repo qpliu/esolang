@@ -1,0 +1,23 @@
+DO .1 <- #10
+DO :1 <- #100
+DO ,1 <- #3
+DO ,1SUB#1 <- #1
+DO ,1SUB#2 <- #2
+DO ,1SUB#3 <- #3
+DO ;1 <- #2
+DO ;1SUB#1 <- #1000
+DO ;1SUB#2 <- #2000
+PLEASE STASH .1 + :1 + ,1 + ;1
+DO .1 <- #20
+DO :1 <- #200
+DO ,1 <- #2
+DO ,1SUB#1 <- #4
+DO ,1SUB#2 <- #4
+DO ;1 <- #1
+DO ;1SUB#1 <- #3000
+DO READ OUT .1 + :1 + ,1SUB#1 + ;1SUB#1
+PLEASE RETRIEVE ;1 + ,1
+DO READ OUT .1 + :1 + ,1SUB#3 + ;1SUB#2
+PLEASE RETRIEVE :1 + .1
+DO READ OUT .1 + :1 + ,1SUB#3 + ;1SUB#2
+PLEASE GIVE UP PLEASE PLEASE

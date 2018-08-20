@@ -10,7 +10,9 @@ const (
 
 	indexI = 0
 	indexX = 2
+	indexL = 3
 	indexC = 4
+	indexD = 5
 	indexM = 6
 
 	zeroOverline = "\u203e\n"
@@ -44,15 +46,37 @@ func output(w io.Writer, value uint32, digits string, overline string) {
 		return
 	}
 	outputTens(w, digits, overline, indexM, value/1000)
-	if value > 1000 && value%1000 == 999 {
+	if value%1000 == 999 {
 		outputDigit(w, digits, overline, indexI)
 		outputDigit(w, digits, overline, indexM)
 		return
 	}
+	if value%1000 >= 990 {
+		outputDigit(w, digits, overline, indexX)
+		outputDigit(w, digits, overline, indexM)
+		outputTens(w, digits, overline, indexI, value%10)
+		return
+	}
+	if value%1000 == 499 {
+		outputDigit(w, digits, overline, indexI)
+		outputDigit(w, digits, overline, indexD)
+		return
+	}
+	if value%1000 >= 490 && value%1000 < 500 {
+		outputDigit(w, digits, overline, indexX)
+		outputDigit(w, digits, overline, indexD)
+		outputTens(w, digits, overline, indexI, value%10)
+		return
+	}
 	outputTens(w, digits, overline, indexC, (value/100)%10)
-	if value%1000 > 100 && value%100 == 99 {
+	if value%100 == 99 {
 		outputDigit(w, digits, overline, indexI)
 		outputDigit(w, digits, overline, indexC)
+		return
+	}
+	if value%100 == 49 {
+		outputDigit(w, digits, overline, indexI)
+		outputDigit(w, digits, overline, indexL)
 		return
 	}
 	outputTens(w, digits, overline, indexX, (value/10)%10)

@@ -1,0 +1,5 @@
+DO ,1 <- #2 BY #2
+DO WRITE IN ,1
+DO ;1 <- #2
+DO WRITE IN ;1
+DO GIVE UP

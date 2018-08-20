@@ -78,6 +78,15 @@ func (s *State) Run(input *IntercalReader, output io.Writer) *Error {
 			s.StatementIndex = stmt.Index + 1
 			continue
 		}
+		if stmt.Please {
+			thank := false
+			for i := stmt.Index + 1; i < stmt.Index+10 && i < len(s.Statements); i++ {
+				thank = thank || s.Statements[i].Thank
+			}
+			if !thank && s.Random.Intn(100) == 0 {
+				return Err774.At(stmt.Index)
+			}
+		}
 		chance := stmt.Chance
 		for {
 			if chance == 0 || (chance < 100 && uint16(s.Random.Intn(100)) >= chance) {
@@ -108,6 +117,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 	case StatementCalculate:
 		calc := stmt.Operands.(Calculation)
 		if calc.LHS.Ignored(s) {
+			s.StatementIndex = stmt.Index + 1
 			return nil
 		}
 		val, is16, err := calc.RHS.Eval(s)

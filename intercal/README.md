@@ -100,3 +100,11 @@ arrays, it will be a 0-dimensional array, so evaluating any element
 will result in error 241, and STASHING an undimensioned array will stash
 a 0-dimensional array.  After an array is dimensioned or redimensioned,
 all array elements contain 0.
+
+The C-INTERCAL documentation says that spaces cannot be added inside a
+decimal number in an INTERCAL program.  This restriction is not in the
+1973 document or the 1996 document, so this implementation allows spaces
+inside numbers.
+
+Since section 4.4.11 says that PLEASE GIVE UP has the effect of a PLEASE
+RESUME #80, this implementation will never produce error 632.

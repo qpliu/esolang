@@ -1,0 +1,11 @@
+    DO .1 <- #1
+    PLEASE ABSTAIN FROM CALCULATING
+    DO (1) NEXT
+    DO .1 <- #2
+    DO (1) NEXT
+    PLEASE REINSTATE (3)
+(3) DO .1 <- #3
+    DO (1) NEXT
+    PLEASE GIVE UP
+(1) DO READ OUT .1
+    DO RESUME #1
