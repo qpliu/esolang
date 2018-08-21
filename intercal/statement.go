@@ -173,7 +173,11 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 			thank = true
 		default:
 			tokens = append(tokens, token)
-			state = mkStmtStateOther
+			if state == mkStmtStateWax {
+				state = mkStmtStateWaxNumber
+			} else {
+				state = mkStmtStateOther
+			}
 		}
 	}
 }

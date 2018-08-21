@@ -18,7 +18,7 @@ func testInput16(t *testing.T, input string, values []uint16, endErr error) {
 	value, err := r.Input16()
 	if err == nil {
 		t.Errorf("expected error=%s, got %d", endErr.Error(), value)
-	} else if err != endErr {
+	} else if err.Error() != endErr.Error() {
 		t.Errorf("expected error=%s, got error=%s", endErr.Error(), err.Error())
 	}
 }
@@ -36,14 +36,14 @@ func testInput32(t *testing.T, input string, values []uint32, endErr error) {
 	value, err := r.Input32()
 	if err == nil {
 		t.Errorf("expected error=%s, got %d", endErr.Error(), value)
-	} else if err != endErr {
+	} else if err.Error() != endErr.Error() {
 		t.Errorf("expected error=%s, got error=%s", endErr.Error(), err.Error())
 	}
 }
 
 func TestInput(t *testing.T) {
 	testInput16(t, "OH\nZERO\nONE\nTWO\nTHREE\nFOUR\nFIVE\nSIX\nSEVEN\nEIGHT\nNINE\nONE FIVE\nTWO FIVE FIVE\nTHREE TWO SEVEN SIX SEVEN\n", []uint16{0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 255, 32767}, Err562)
-	testInput16(t, "OCHO CINCO\n", []uint16{}, Err579)
+	testInput16(t, "OCHO CINCO\n", []uint16{}, Err579.WithMessage("WHAT BASE AND/OR LANGUAGE INCLUDES OCHO?"))
 	testInput16(t, "\n", []uint16{}, Err579)
 	testInput16(t, "", []uint16{}, Err562)
 	testInput16(t, "ONE \n", []uint16{1}, Err562)

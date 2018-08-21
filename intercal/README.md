@@ -108,3 +108,9 @@ inside numbers.
 
 Since section 4.4.11 says that PLEASE GIVE UP has the effect of a PLEASE
 RESUME #80, this implementation will never produce error 632.
+
+Since the errors in section 7 does not include the actual error messages,
+and the messages for errors other than 000, 123, 275, and 436 are not
+documented, the error messages are taken from the C-INTERCAL documentation,
+with the exception of error 579 when WRITING IN an empty line, which is
+"WHAT YOU WRITE DOES NOT COUNT." in this implementation.

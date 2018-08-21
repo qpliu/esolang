@@ -1,0 +1,2 @@
+DO ;1 <- #1
+DO WRITE IN ;1SUB#1
