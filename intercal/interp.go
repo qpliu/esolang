@@ -84,7 +84,7 @@ func (s *State) Run(input *IntercalReader, output io.Writer) *Error {
 				thank = thank || s.Statements[i].Thank
 			}
 			if !thank && s.Random.Intn(100) == 0 {
-				return Err774.At(stmt.Index)
+				return Err774.At(s, stmt)
 			}
 		}
 		chance := stmt.Chance
@@ -96,7 +96,7 @@ func (s *State) Run(input *IntercalReader, output io.Writer) *Error {
 				break
 			}
 			if stmt.Error != nil {
-				return stmt.Error.At(stmt.Index)
+				return stmt.Error.At(s, stmt)
 			}
 			if err := s.runStmt(stmt, input, output); err != nil {
 				if err == ErrGiveUp {
@@ -122,10 +122,10 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 		}
 		val, is16, err := calc.RHS.Eval(s)
 		if err != nil {
-			return err.At(stmt.Index)
+			return err.At(s, stmt)
 		}
 		if err := calc.LHS.Gets(s, val, is16); err != nil {
-			return err.At(stmt.Index)
+			return err.At(s, stmt)
 		}
 		s.StatementIndex = stmt.Index + 1
 		return nil
@@ -136,19 +136,19 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 		for _, e := range dim.RHS {
 			v, _, err := e.Eval(s)
 			if err != nil {
-				return err.At(stmt.Index)
+				return err.At(s, stmt)
 			}
 			dims = append(dims, int(v))
 		}
 		if err := dim.LHS.Dimension(s, dims); err != nil {
-			return err.At(stmt.Index)
+			return err.At(s, stmt)
 		}
 		s.StatementIndex = stmt.Index + 1
 		return nil
 
 	case StatementNext:
 		if len(s.NEXTingStack) >= 79 {
-			return Err123.At(stmt.Index)
+			return Err123.At(s, stmt)
 		}
 		s.NEXTingStack = append(s.NEXTingStack, stmt.Index+1)
 		s.StatementIndex = stmt.Operands.(int)
@@ -157,7 +157,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 	case StatementForget:
 		val, _, err := stmt.Operands.(Expr).Eval(s)
 		if err != nil {
-			return err.At(stmt.Index)
+			return err.At(s, stmt)
 		}
 		newlen := len(s.NEXTingStack) - int(val)
 		if newlen < 0 {
@@ -170,10 +170,10 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 	case StatementResume:
 		val, _, err := stmt.Operands.(Expr).Eval(s)
 		if err != nil {
-			return err.At(stmt.Index)
+			return err.At(s, stmt)
 		}
 		if val == 0 {
-			return Err621.At(stmt.Index)
+			return Err621.At(s, stmt)
 		}
 		newlen := len(s.NEXTingStack) - int(val)
 		if newlen < 0 {
@@ -193,7 +193,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 	case StatementRetrieve:
 		for _, v := range stmt.Operands.([]Stashable) {
 			if err := v.Retrieve(s); err != nil {
-				return err.At(stmt.Index)
+				return err.At(s, stmt)
 			}
 		}
 		s.StatementIndex = stmt.Index + 1
@@ -236,7 +236,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 				continue
 			}
 			if err := v.WriteIn(s, input); err != nil {
-				return err.At(stmt.Index)
+				return err.At(s, stmt)
 			}
 		}
 		s.StatementIndex = stmt.Index + 1
@@ -245,13 +245,13 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 	case StatementReadOut:
 		for _, v := range stmt.Operands.([]ReadOutable) {
 			if err := v.ReadOut(s, output); err != nil {
-				return err.At(stmt.Index)
+				return err.At(s, stmt)
 			}
 		}
 		s.StatementIndex = stmt.Index + 1
 		return nil
 
 	default:
-		return Err000.AtStmt(stmt)
+		return Err000.At(s, stmt)
 	}
 }

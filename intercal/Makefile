@@ -1,14 +1,21 @@
 COMPILAC: COMPILAC.go errors.go expr.go input.go interp.go ops.go output.go statement.go tokenizer.go
 	go build $^
 
+INTERLAC: INTERLAC.go codegen.go errors.go expr.go input.go interp.go ops.go output.go runtime.go statement.go tokenizer.go
+	go build $^
+
+runtime.go: runtime.ll
+	(echo 'package main;const RUNTIME=`'; cat $^; echo '`') > $@
+
 clean:
 	go clean
-	$(RM) coverage.out coverage2.out src _
+	$(RM) coverage.out coverage2.out runtime.go src _
 
 test:
 	go fmt && go vet && go test -cover
 
 cover:
+	$(RM) _ src
 	ln -s . _
 	ln -s . src
 	go test -coverprofile=coverage.out

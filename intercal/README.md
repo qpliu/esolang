@@ -14,6 +14,11 @@ I will try to avoid looking at other implementations until the
 implementation is reasonably complete so that it will be based on
 the documents rather than how another implementation did it.
 
+Known Bugs
+----------
+The expression parser fails to parse some (many or most) complicated
+expressions.
+
 Notes
 -----
 Since the famous politeness checker was undocumented, it will not be
@@ -114,3 +119,60 @@ and the messages for errors other than 000, 123, 275, and 436 are not
 documented, the error messages are taken from the C-INTERCAL documentation,
 with the exception of error 579 when WRITING IN an empty line, which is
 "WHAT YOU WRITE DOES NOT COUNT." in this implementation.
+
+Since section 7.1 does not say what the second of an error message is
+when there is no next statement, this implementation will have "ON THE
+WAY TO STATEMENT nnnn" in those cases so that it still follows the
+format.
+
+Compiler
+--------
+INTERLAC is an attempt to implement a compiler.
+
+## Notes on compiler implementation
+Use the COMPILAC parser.
+
+Generate LLVM assembly.  Don't want to deal with LLVM bindings.
+
+All code generation goes into @main.  There may be other runtime functions.
+
+Global variables include an ABSTAIN array [n x i1], a NEXT stack [79 x i8*],
+a NEXT stack pointer i8, one for each variable and array referenced in
+the program, a buffer [5 x i8] for WRITE IN.  These don't have to be globals.
+They could be allocaed in @main (or, for WRITE IN, in the runtime function).
+
+Each statement will have an entry LLVM label that will be used by the NEXT
+stack and other statements.  All other LLVM labels in the statement will
+be private to the statement.  The statement code has the abstain check and
+the chance check if necessary.
+
+Use blockaddress for NEXT and indirectbr for RESUME.
+
+Variables will have type { i1, variable_data* }, where the flag is the IGNORE
+flag.  variable_data is a linked list for STASH/RETRIEVE and has type
+{ variable_data*, u32 }.
+
+Arrays will have type { i1, array_data* }, where the flag is the IGNORE
+flag.  array_data is a linked list for STASH/RETRIEVE and has type
+{ array_data*, u32, [n x u32], [0 x u32] }, where the second element is the
+number of dimensions, the third element is the dimensions (n is the maximum
+number of dimensions determined at compile time), and the fourth element is
+the array values.  It may be possible to have an array_data typedef for
+each array variable, each with its own maximum number of dimensions.
+
+Run-time values will have type { i2, u32 }, where the first value is the
+type tag where 0 is for 16-bit values, 1 is for 32 bit values, and 2
+is for most error codes, and 3 is for error code 579 that requires
+special processing.
+
+For error code 579, to avoid buffering a potentially unlimited number of
+characters for the error message, the bytes (after the first 5, which
+are buffered) will be copied byte by byte from the input file to the output
+file.
+
+An alternative to using a [5 x i8] buffer for WRITE IN could be having a
+big mess of branches on reading each character.  It wouldn't be that
+horrible, being hand-written LLVM assembly for the runtime library.
+
+Have a [n x i8] constant for the program listing, written at the start of
+execution.  Calculate offsets into it for error code 000 messages.
