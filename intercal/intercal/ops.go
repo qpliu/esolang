@@ -1,4 +1,4 @@
-package main
+package intercal
 
 func OpMingle(l, r uint32) uint32 {
 	return ((l & 0x8000) << 16) |

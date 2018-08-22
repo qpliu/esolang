@@ -1,26 +1,30 @@
-COMPILAC: COMPILAC.go errors.go expr.go input.go interp.go ops.go output.go statement.go tokenizer.go
-	go build $^
+all: COMPILAC INTERLAC
 
-INTERLAC: INTERLAC.go codegen.go errors.go expr.go input.go interp.go ops.go output.go runtime.go statement.go tokenizer.go
-	go build $^
+COMPILAC: runtime
+	go build COMPILAC.go
 
-runtime.go: runtime.ll
-	(echo 'package main;const RUNTIME=`'; cat $^; echo '`') > $@
+INTERLAC: runtime
+	go build INTERLAC.go
+
+intercal/runtime.go: intercal/runtime.ll
+	(echo 'package intercal;const RUNTIME=`'; cat $^; echo '`') > $@
+
+runtime: intercal/runtime.go
 
 clean:
 	go clean
-	$(RM) coverage.out coverage2.out runtime.go src _
+	$(RM) coverage.out coverage2.out intercal/runtime.go src _
 
 test:
-	go fmt && go vet && go test -cover
+	go fmt && go vet && go test -cover ./intercal
 
 cover:
 	$(RM) _ src
 	ln -s . _
 	ln -s . src
-	go test -coverprofile=coverage.out
-	sed -e 's/^\(_[/]\).*[/]/\1/g' < coverage.out > coverage2.out
+	go test ./intercal -coverprofile=coverage.out
+	sed -e 's/^\(_[/]\).*[/]intercal/\1intercal/g' < coverage.out > coverage2.out
 	GOPATH=$(PWD) go tool cover -html=coverage2.out
 	$(RM) _ src coverage.out coverage2.out
 
-.PHONY: clean test cover
+.PHONY: clean test cover runtime
