@@ -21,13 +21,13 @@ func main() {
 
 	tokenizer, err := intercal.NewFileTokenizer(os.Args[srcFileIndex:])
 	if err != nil {
-		println(err.Error())
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 		os.Exit(1)
 	}
 
 	statements, err := intercal.Parse(tokenizer)
 	if err != nil {
-		println(err.Error())
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 		os.Exit(1)
 	}
 
@@ -35,7 +35,8 @@ func main() {
 	_, _ = statements, exeFile
 
 	if _, err := os.Stdout.Write([]byte(RUNTIME)); err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
+		os.Exit(1)
 	}
 
 	intercal.CodeGen(statements, os.Stdout)

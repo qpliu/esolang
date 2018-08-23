@@ -125,6 +125,12 @@ when there is no next statement, this implementation will have "ON THE
 WAY TO STATEMENT nnnn" in those cases so that it still follows the
 format.
 
+In section 4.4.7, the document says inputting into an IGNOREd variable
+also has no effect.  This implementation interprets having no effect as
+not receiving the input, so that it gets received by the next not IGNOREd
+variable that is inputted into, as opposed to taking and discarding the
+input and having to decide how to handle erroneous input.
+
 Compiler
 --------
 INTERLAC is an attempt to implement a compiler.
@@ -175,4 +181,6 @@ big mess of branches on reading each character.  It wouldn't be that
 horrible, being hand-written LLVM assembly for the runtime library.
 
 Have a [n x i8] constant for the program listing, written at the start of
-execution.  Calculate offsets into it for error code 000 messages.
+execution.  Calculate offsets into it for error code 000 messages.  Also
+calculate offsets into it for line numbers for the ON THE WAY TO STATEMENT
+nnnn part of error messages.
