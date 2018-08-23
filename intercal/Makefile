@@ -1,22 +1,22 @@
 all: COMPILAC INTERLAC
 
-COMPILAC: runtime
+COMPILAC:
 	go build COMPILAC.go
 
 INTERLAC: runtime
-	go build INTERLAC.go
+	go build INTERLAC.go runtime.go
 
-intercal/runtime.go: intercal/runtime.ll
-	(echo 'package intercal;const RUNTIME=`'; cat $^; echo '`') > $@
+runtime.go: intercal/runtime.ll
+	(echo 'package main;const RUNTIME=`'; cat $^; echo '`') > $@
 
-runtime: intercal/runtime.go
+runtime: runtime.go
 
 clean:
 	go clean
-	$(RM) coverage.out coverage2.out intercal/runtime.go src _
+	$(RM) coverage.out coverage2.out runtime.go src _
 
 test:
-	go fmt && go vet && go test -cover ./intercal
+	go fmt ./... && go vet ./... && go test -cover ./intercal
 
 cover:
 	$(RM) _ src

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"./intercal"
@@ -8,7 +9,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 || (os.Args[1] == "-o" && len(os.Args) < 3) {
-		println("Usage:", os.Args[0], "[-o EXEFILE] SRCFILE [SRCFILE...]")
+		fmt.Fprintf(os.Stderr, "Usage: %s [-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
 		os.Exit(1)
 	}
 	srcFileIndex := 1
@@ -32,4 +33,10 @@ func main() {
 
 	//...
 	_, _ = statements, exeFile
+
+	if _, err := os.Stdout.Write([]byte(RUNTIME)); err != nil {
+		return err
+	}
+
+	intercal.CodeGen(statements, os.Stdout)
 }

@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func testParseList(t *testing.T, src, expectedListing string, errorCode string) {
+func testParseList(t *testing.T, src, expectedListing string, errorCode int) {
 	statements, err := Parse(NewTokenizer("()", bytes.NewBufferString(src)))
 	if err != nil {
-		if errorCode == "" {
+		if errorCode == -1 {
 			t.Errorf("unexpected error=%s", err.Error())
 			return
 		} else if e, ok := err.(*Error); !ok {
@@ -34,11 +34,11 @@ func testParseList(t *testing.T, src, expectedListing string, errorCode string) 
 func TestParseList(t *testing.T) {
 	testParseList(t, `PLEASE NOTE THIS LINE HAS NO EFFECT
 `, `*   1 PLEASE NOTE THIS LINE HAS NO EFFECT
-`, "")
+`, 0)
 	testParseList(t, `PLEASE NOTE THIS LINE DOES NOTHING
 `, `*   1 PLEASE NOTE THIS LINE 
 *   2 DOES NOTHING
-`, "")
+`, -1)
 	testParseList(t, `        DO (5) NEXT
    (5) DO FORGET #1
        PLEASE WRITE IN :1
@@ -95,7 +95,7 @@ func TestParseList(t *testing.T) {
    21        PLEASE DO (5) NEXT
    22    (3) DO (2) NEXT
    23        PLEASE GIVE UP
-`, "")
+`, -1)
 }
 
 func testParseStatements(t *testing.T, src string, expected []StatementType) []*Statement {

@@ -75,7 +75,12 @@ define {i4,i32} @read_digit() {
 
   check__N:
     %check__charisN = icmp eq i8 %check__char, 78
-    br i1 %check__charisE, label %read_N_, label %error__
+    br i1 %check__charisN, label %read_N_, label %error__char
+
+  error__char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    ; store i8 %check__char, i8* %buf ; redundant
+    br label %error_invalid_char
 
 
   read_O_:
@@ -104,7 +109,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 79, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_O_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -162,7 +167,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 78, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_ON_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -222,7 +227,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 90, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_Z_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -256,7 +261,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 69, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_ZE_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -294,7 +299,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 82, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_ZER_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -362,13 +367,225 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 84, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_T_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 84, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 %check_T_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_TW_:
+    %count_TW_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_TW_ = icmp eq i32 %count_TW_, 1
+    br i1 %countis1_TW_, label %check_TW_, label %error_TW_
+
+  check_TW_:
+    %check_TW_char = load i8, i8* %buf
+    %check_TW_charisspace = icmp eq i8 %check_TW_char, 32
+    br i1 %check_TW_charisspace, label %error_TW_, label %check_TW_newline
+
+  check_TW_newline:
+    %check_TW_charisnewline = icmp eq i8 %check_TW_char, 10
+    br i1 %check_TW_charisnewline, label %error_TW_, label %check_TW_O
+
+  check_TW_O:
+    %check_TW_charisO = icmp eq i8 %check_TW_char, 79
+    br i1 %check_TW_charisO, label %read_TWO_, label %error_TW_char
+
+  error_TW_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 87, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_TW_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 87, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_TW_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_TWO_:
+    %count_TWO_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_TWO_ = icmp eq i32 %count_TWO_, 1
+    br i1 %countis1_TWO_, label %check_TWO_, label %ret_digit_newline
+
+  check_TWO_:
+    %check_TWO_char = load i8, i8* %buf
+    %check_TWO_charisspace = icmp eq i8 %check_TWO_char, 32
+    br i1 %check_TWO_charisspace, label %ret_digit_space, label %check_TWO_newline
+
+  check_TWO_newline:
+    %check_TWO_charisnewline = icmp eq i8 %check_TWO_char, 10
+    br i1 %check_TWO_charisnewline, label %ret_digit_newline, label %error_TWO_char
+
+  error_TWO_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 87, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 79, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_TWO_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_TH_:
+    %count_TH_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_TH_ = icmp eq i32 %count_TH_, 1
+    br i1 %countis1_TH_, label %check_TH_, label %error_TH_
+
+  check_TH_:
+    %check_TH_char = load i8, i8* %buf
+    %check_TH_charisspace = icmp eq i8 %check_TH_char, 32
+    br i1 %check_TH_charisspace, label %error_TH_, label %check_TH_newline
+
+  check_TH_newline:
+    %check_TH_charisnewline = icmp eq i8 %check_TH_char, 10
+    br i1 %check_TH_charisnewline, label %error_TH_, label %check_TH_R
+
+  check_TH_R:
+    %check_TH_charisR = icmp eq i8 %check_TH_char, 82
+    br i1 %check_TH_charisR, label %read_THR_, label %error_TH_char
+
+  error_TH_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_TH_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_TH_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_THR_:
+    %count_THR_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_THR_ = icmp eq i32 %count_THR_, 1
+    br i1 %countis1_THR_, label %check_THR_, label %error_THR_
+
+  check_THR_:
+    %check_THR_char = load i8, i8* %buf
+    %check_THR_charisspace = icmp eq i8 %check_THR_char, 32
+    br i1 %check_THR_charisspace, label %error_THR_, label %check_THR_newline
+
+  check_THR_newline:
+    %check_THR_charisnewline = icmp eq i8 %check_THR_char, 10
+    br i1 %check_THR_charisnewline, label %error_THR_, label %check_THR_E
+
+  check_THR_E:
+    %check_THR_charisE = icmp eq i8 %check_THR_char, 69
+    br i1 %check_THR_charisE, label %read_THRE_, label %error_THR_char
+
+  error_THR_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 82, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_THR_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 82, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_THR_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_THRE_:
+    %count_THRE_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_THRE_ = icmp eq i32 %count_THRE_, 1
+    br i1 %countis1_THRE_, label %check_THRE_, label %error_THRE_
+
+  check_THRE_:
+    %check_THRE_char = load i8, i8* %buf
+    %check_THRE_charisspace = icmp eq i8 %check_THRE_char, 32
+    br i1 %check_THRE_charisspace, label %error_THRE_, label %check_THRE_newline
+
+  check_THRE_newline:
+    %check_THRE_charisnewline = icmp eq i8 %check_THRE_char, 10
+    br i1 %check_THRE_charisnewline, label %error_THRE_, label %check_THRE_E
+
+  check_THRE_E:
+    %check_THRE_charisE = icmp eq i8 %check_THRE_char, 69
+    br i1 %check_THRE_charisE, label %read_THREE_, label %error_THRE_char
+
+  error_THRE_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 82, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_THRE_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 82, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_THRE_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_THREE_:
+    %count_THREE_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_THREE_ = icmp eq i32 %count_THREE_, 1
+    br i1 %countis1_THREE_, label %check_THREE_, label %ret_digit_newline
+
+  check_THREE_:
+    %check_THREE_char = load i8, i8* %buf
+    %check_THREE_charisspace = icmp eq i8 %check_THREE_char, 32
+    br i1 %check_THREE_charisspace, label %ret_digit_space, label %check_THREE_newline
+
+  check_THREE_newline:
+    %check_THREE_charisnewline = icmp eq i8 %check_THREE_char, 10
+    br i1 %check_THREE_charisnewline, label %ret_digit_newline, label %error_THREE_char
+
+  error_THREE_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 82, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    ; store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_THREE_char, i8* %buf
     br label %error_invalid_char
 
 
@@ -398,13 +615,221 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 70, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_F_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 70, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 %check_F_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_FO_:
+    %count_FO_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_FO_ = icmp eq i32 %count_FO_, 1
+    br i1 %countis1_FO_, label %check_FO_, label %error_FO_
+
+  check_FO_:
+    %check_FO_char = load i8, i8* %buf
+    %check_FO_charisspace = icmp eq i8 %check_FO_char, 32
+    br i1 %check_FO_charisspace, label %error_FO_, label %check_FO_newline
+
+  check_FO_newline:
+    %check_FO_charisnewline = icmp eq i8 %check_FO_char, 10
+    br i1 %check_FO_charisnewline, label %error_FO_, label %check_FO_U
+
+  check_FO_U:
+    %check_FO_charisU = icmp eq i8 %check_FO_char, 85
+    br i1 %check_FO_charisU, label %read_FOU_, label %error_FO_char
+
+  error_FO_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 79, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_FO_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 79, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_FO_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_FOU_:
+    %count_FOU_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_FOU_ = icmp eq i32 %count_FOU_, 1
+    br i1 %countis1_FOU_, label %check_FOU_, label %error_FOU_
+
+  check_FOU_:
+    %check_FOU_char = load i8, i8* %buf
+    %check_FOU_charisspace = icmp eq i8 %check_FOU_char, 32
+    br i1 %check_FOU_charisspace, label %error_FOU_, label %check_FOU_newline
+
+  check_FOU_newline:
+    %check_FOU_charisnewline = icmp eq i8 %check_FOU_char, 10
+    br i1 %check_FOU_charisnewline, label %error_FOU_, label %check_FOU_R
+
+  check_FOU_R:
+    %check_FOU_charisR = icmp eq i8 %check_FOU_char, 82
+    br i1 %check_FOU_charisR, label %read_FOUR_, label %error_FOU_char
+
+  error_FOU_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 79, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 85, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_FOU_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 79, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 85, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_FOU_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_FOUR_:
+    %count_FOUR_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_FOUR_ = icmp eq i32 %count_FOUR_, 1
+    br i1 %countis1_FOUR_, label %check_FOUR_, label %ret_digit_newline
+
+  check_FOUR_:
+    %check_FOUR_char = load i8, i8* %buf
+    %check_FOUR_charisspace = icmp eq i8 %check_FOUR_char, 32
+    br i1 %check_FOUR_charisspace, label %ret_digit_space, label %check_FOUR_newline
+
+  check_FOUR_newline:
+    %check_FOUR_charisnewline = icmp eq i8 %check_FOUR_char, 10
+    br i1 %check_FOUR_charisnewline, label %ret_digit_newline, label %error_FOUR_char
+
+  error_FOUR_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 79, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 85, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 82, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_FOUR_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_FI_:
+    %count_FI_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_FI_ = icmp eq i32 %count_FI_, 1
+    br i1 %countis1_FI_, label %check_FI_, label %error_FI_
+
+  check_FI_:
+    %check_FI_char = load i8, i8* %buf
+    %check_FI_charisspace = icmp eq i8 %check_FI_char, 32
+    br i1 %check_FI_charisspace, label %error_FI_, label %check_FI_newline
+
+  check_FI_newline:
+    %check_FI_charisnewline = icmp eq i8 %check_FI_char, 10
+    br i1 %check_FI_charisnewline, label %error_FI_, label %check_FI_V
+
+  check_FI_V:
+    %check_FI_charisV = icmp eq i8 %check_FI_char, 86
+    br i1 %check_FI_charisV, label %read_FIV_, label %error_FI_char
+
+  error_FI_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_FI_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_FI_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_FIV_:
+    %count_FIV_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_FIV_ = icmp eq i32 %count_FIV_, 1
+    br i1 %countis1_FIV_, label %check_FIV_, label %error_FIV_
+
+  check_FIV_:
+    %check_FIV_char = load i8, i8* %buf
+    %check_FIV_charisspace = icmp eq i8 %check_FIV_char, 32
+    br i1 %check_FIV_charisspace, label %error_FIV_, label %check_FIV_newline
+
+  check_FIV_newline:
+    %check_FIV_charisnewline = icmp eq i8 %check_FIV_char, 10
+    br i1 %check_FIV_charisnewline, label %error_FIV_, label %check_FIV_E
+
+  check_FIV_E:
+    %check_FIV_charisE = icmp eq i8 %check_FIV_char, 69
+    br i1 %check_FIV_charisE, label %read_FIVE_, label %error_FIV_char
+
+  error_FIV_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_FIV_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_FIV_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_FIVE_:
+    %count_FIVE_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_FIVE_ = icmp eq i32 %count_FIVE_, 1
+    br i1 %countis1_FIVE_, label %check_FIVE_, label %ret_digit_newline
+
+  check_FIVE_:
+    %check_FIVE_char = load i8, i8* %buf
+    %check_FIVE_charisspace = icmp eq i8 %check_FIVE_char, 32
+    br i1 %check_FIVE_charisspace, label %ret_digit_space, label %check_FIVE_newline
+
+  check_FIVE_newline:
+    %check_FIVE_charisnewline = icmp eq i8 %check_FIVE_char, 10
+    br i1 %check_FIVE_charisnewline, label %ret_digit_newline, label %error_FIVE_char
+
+  error_FIVE_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 70, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_FIVE_char, i8* %buf
     br label %error_invalid_char
 
 
@@ -434,13 +859,225 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 83, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_S_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 83, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 %check_S_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_SI_:
+    %count_SI_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_SI_ = icmp eq i32 %count_SI_, 1
+    br i1 %countis1_SI_, label %check_SI_, label %error_SI_
+
+  check_SI_:
+    %check_SI_char = load i8, i8* %buf
+    %check_SI_charisspace = icmp eq i8 %check_SI_char, 32
+    br i1 %check_SI_charisspace, label %error_SI_, label %check_SI_newline
+
+  check_SI_newline:
+    %check_SI_charisnewline = icmp eq i8 %check_SI_char, 10
+    br i1 %check_SI_charisnewline, label %error_SI_, label %check_SI_X
+
+  check_SI_X:
+    %check_SI_charisX = icmp eq i8 %check_SI_char, 88
+    br i1 %check_SI_charisX, label %read_SIX_, label %error_SI_char
+
+  error_SI_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_SI_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_SI_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_SIX_:
+    %count_SIX_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_SIX_ = icmp eq i32 %count_SIX_, 1
+    br i1 %countis1_SIX_, label %check_SIX_, label %ret_digit_newline
+
+  check_SIX_:
+    %check_SIX_char = load i8, i8* %buf
+    %check_SIX_charisspace = icmp eq i8 %check_SIX_char, 32
+    br i1 %check_SIX_charisspace, label %ret_digit_space, label %check_SIX_newline
+
+  check_SIX_newline:
+    %check_SIX_charisnewline = icmp eq i8 %check_SIX_char, 10
+    br i1 %check_SIX_charisnewline, label %ret_digit_newline, label %error_SIX_char
+
+  error_SIX_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 88, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_SIX_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_SE_:
+    %count_SE_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_SE_ = icmp eq i32 %count_SE_, 1
+    br i1 %countis1_SE_, label %check_SE_, label %error_SE_
+
+  check_SE_:
+    %check_SE_char = load i8, i8* %buf
+    %check_SE_charisspace = icmp eq i8 %check_SE_char, 32
+    br i1 %check_SE_charisspace, label %error_SE_, label %check_SE_newline
+
+  check_SE_newline:
+    %check_SE_charisnewline = icmp eq i8 %check_SE_char, 10
+    br i1 %check_SE_charisnewline, label %error_SE_, label %check_SE_V
+
+  check_SE_V:
+    %check_SE_charisV = icmp eq i8 %check_SE_char, 86
+    br i1 %check_SE_charisV, label %read_SEV_, label %error_SE_char
+
+  error_SE_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_SE_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_SE_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_SEV_:
+    %count_SEV_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_SEV_ = icmp eq i32 %count_SEV_, 1
+    br i1 %countis1_SEV_, label %check_SEV_, label %error_SEV_
+
+  check_SEV_:
+    %check_SEV_char = load i8, i8* %buf
+    %check_SEV_charisspace = icmp eq i8 %check_SEV_char, 32
+    br i1 %check_SEV_charisspace, label %error_SEV_, label %check_SEV_newline
+
+  check_SEV_newline:
+    %check_SEV_charisnewline = icmp eq i8 %check_SEV_char, 10
+    br i1 %check_SEV_charisnewline, label %error_SEV_, label %check_SEV_E
+
+  check_SEV_E:
+    %check_SEV_charisE = icmp eq i8 %check_SEV_char, 69
+    br i1 %check_SEV_charisE, label %read_SEVE_, label %error_SEV_char
+
+  error_SEV_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_SEV_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_SEV_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_SEVE_:
+    %count_SEVE_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_SEVE_ = icmp eq i32 %count_SEVE_, 1
+    br i1 %countis1_SEVE_, label %check_SEVE_, label %error_SEVE_
+
+  check_SEVE_:
+    %check_SEVE_char = load i8, i8* %buf
+    %check_SEVE_charisspace = icmp eq i8 %check_SEVE_char, 32
+    br i1 %check_SEVE_charisspace, label %error_SEVE_, label %check_SEVE_newline
+
+  check_SEVE_newline:
+    %check_SEVE_charisnewline = icmp eq i8 %check_SEVE_char, 10
+    br i1 %check_SEVE_charisnewline, label %error_SEVE_, label %check_SEVE_N
+
+  check_SEVE_N:
+    %check_SEVE_charisN = icmp eq i8 %check_SEVE_char, 78
+    br i1 %check_SEVE_charisN, label %read_SEVEN_, label %error_SEVE_char
+
+  error_SEVE_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_SEVE_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_SEVE_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_SEVEN_:
+    %count_SEVEN_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_SEVEN_ = icmp eq i32 %count_SEVEN_, 1
+    br i1 %countis1_SEVEN_, label %check_SEVEN_, label %ret_digit_newline
+
+  check_SEVEN_:
+    %check_SEVEN_char = load i8, i8* %buf
+    %check_SEVEN_charisspace = icmp eq i8 %check_SEVEN_char, 32
+    br i1 %check_SEVEN_charisspace, label %ret_digit_space, label %check_SEVEN_newline
+
+  check_SEVEN_newline:
+    %check_SEVEN_charisnewline = icmp eq i8 %check_SEVEN_char, 10
+    br i1 %check_SEVEN_charisnewline, label %ret_digit_newline, label %error_SEVEN_char
+
+  error_SEVEN_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 83, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 86, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 78, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_SEVEN_char, i8* %buf
     br label %error_invalid_char
 
 
@@ -466,13 +1103,163 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 69, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_E_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 69, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 %check_E_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_EI_:
+    %count_EI_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_EI_ = icmp eq i32 %count_EI_, 1
+    br i1 %countis1_EI_, label %check_EI_, label %error_EI_
+
+  check_EI_:
+    %check_EI_char = load i8, i8* %buf
+    %check_EI_charisspace = icmp eq i8 %check_EI_char, 32
+    br i1 %check_EI_charisspace, label %error_EI_, label %check_EI_newline
+
+  check_EI_newline:
+    %check_EI_charisnewline = icmp eq i8 %check_EI_char, 10
+    br i1 %check_EI_charisnewline, label %error_EI_, label %check_EI_G
+
+  check_EI_G:
+    %check_EI_charisG = icmp eq i8 %check_EI_char, 71
+    br i1 %check_EI_charisG, label %read_EIG_, label %error_EI_char
+
+  error_EI_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_EI_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_EI_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_EIG_:
+    %count_EIG_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_EIG_ = icmp eq i32 %count_EIG_, 1
+    br i1 %countis1_EIG_, label %check_EIG_, label %error_EIG_
+
+  check_EIG_:
+    %check_EIG_char = load i8, i8* %buf
+    %check_EIG_charisspace = icmp eq i8 %check_EIG_char, 32
+    br i1 %check_EIG_charisspace, label %error_EIG_, label %check_EIG_newline
+
+  check_EIG_newline:
+    %check_EIG_charisnewline = icmp eq i8 %check_EIG_char, 10
+    br i1 %check_EIG_charisnewline, label %error_EIG_, label %check_EIG_H
+
+  check_EIG_H:
+    %check_EIG_charisH = icmp eq i8 %check_EIG_char, 72
+    br i1 %check_EIG_charisH, label %read_EIGH_, label %error_EIG_char
+
+  error_EIG_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 71, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_EIG_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 71, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_EIG_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_EIGH_:
+    %count_EIGH_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_EIGH_ = icmp eq i32 %count_EIGH_, 1
+    br i1 %countis1_EIGH_, label %check_EIGH_, label %error_EIGH_
+
+  check_EIGH_:
+    %check_EIGH_char = load i8, i8* %buf
+    %check_EIGH_charisspace = icmp eq i8 %check_EIGH_char, 32
+    br i1 %check_EIGH_charisspace, label %error_EIGH_, label %check_EIGH_newline
+
+  check_EIGH_newline:
+    %check_EIGH_charisnewline = icmp eq i8 %check_EIGH_char, 10
+    br i1 %check_EIGH_charisnewline, label %error_EIGH_, label %check_EIGH_T
+
+  check_EIGH_T:
+    %check_EIGH_charisT = icmp eq i8 %check_EIGH_char, 84
+    br i1 %check_EIGH_charisT, label %read_EIGHT_, label %error_EIGH_char
+
+  error_EIGH_:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 71, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    br label %ret_invalid
+
+  error_EIGH_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 71, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_EIGH_char, i8* %buf
+    br label %error_invalid_char
+
+
+  read_EIGHT_:
+    %count_EIGHT_ = call i32 @read(i32 0, i8* %buf, i32 1)
+    %countis1_EIGHT_ = icmp eq i32 %count_EIGHT_, 1
+    br i1 %countis1_EIGHT_, label %check_EIGHT_, label %ret_digit_newline
+
+  check_EIGHT_:
+    %check_EIGHT_char = load i8, i8* %buf
+    %check_EIGHT_charisspace = icmp eq i8 %check_EIGHT_char, 32
+    br i1 %check_EIGHT_charisspace, label %ret_digit_space, label %check_EIGHT_newline
+
+  check_EIGHT_newline:
+    %check_EIGHT_charisnewline = icmp eq i8 %check_EIGHT_char, 10
+    br i1 %check_EIGHT_charisnewline, label %ret_digit_newline, label %error_EIGHT_char
+
+  error_EIGHT_char:
+    call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
+    store i8 69, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 73, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 71, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 72, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 84, i8* %buf
+    call i32 @write(i32 1, i8* %buf, i32 1)
+    store i8 %check_EIGHT_char, i8* %buf
     br label %error_invalid_char
 
 
@@ -498,7 +1285,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
     store i8 78, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_N_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -532,7 +1319,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 73, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_NI_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -570,7 +1357,7 @@ define {i4,i32} @read_digit() {
     call i32 @write(i32 1, i8* %buf, i32 1)
     store i8 78, i8* %buf
     call i32 @write(i32 1, i8* %buf, i32 1)
-    br label %error_invalid
+    br label %ret_invalid
 
   error_NIN_char:
     call i32 @write(i32 1, i8* getelementptr([43 x i8], [43 x i8]* @read_digit_error, i32 0, i32 0), i32 43)
@@ -619,7 +1406,7 @@ define {i4,i32} @read_digit() {
 
   ret_digit_newline:
     %ret_digit_newline_value = phi i32 [0, %read_OH_], [0, %check_OH_newline], [0, %read_ZERO_], [0, %check_ZERO_newline], [1, %read_ONE_], [1, %check_ONE_newline], [2, %read_TWO_], [2, %check_TWO_newline], [3, %read_THREE_], [3, %check_THREE_newline], [4, %read_FOUR_], [4, %check_FOUR_newline], [5, %read_FIVE_], [5, %check_FIVE_newline], [6, %read_SIX_], [6, %check_SIX_newline], [7, %read_SEVEN_], [7, %check_SEVEN_newline], [8, %read_EIGHT_], [8, %check_EIGHT_newline], [9, %read_NINE_], [9, %check_NINE_newline]
-    %ret_digit_newline_struct = insertvalue {i4,i32} insertvalue({i4,i32} zeroinitializer, i4 1, 0), i32 %ret_digit_space_value, 1
+    %ret_digit_newline_struct = insertvalue {i4,i32} insertvalue({i4,i32} zeroinitializer, i4 1, 0), i32 %ret_digit_newline_value, 1
     ret {i4,i32} %ret_digit_newline_struct
 
   ret_newline:
