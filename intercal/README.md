@@ -28,7 +28,7 @@ In section 4.4.1 of the 1973 document says
   to invert the least significant bit of the first element of 16-bit
   2-dimensional array number 1, one could write:
 ```
-    ,1SUB#1#1 <- ’⊻,1SUB#1#1¢#1’~’#0¢#65535’
+    ,1SUB#1#1 <- ’∀,1SUB#1#1¢#1’~’#0¢#65535’
 ```
 and the code in the 1996 revision was changed to
 ```
@@ -118,7 +118,8 @@ Since the errors in section 7 does not include the actual error messages,
 and the messages for errors other than 000, 123, 275, and 436 are not
 documented, the error messages are taken from the C-INTERCAL documentation,
 with the exception of error 579 when WRITING IN an empty line, which is
-"WHAT YOU WRITE DOES NOT COUNT." in this implementation.
+"WHAT YOU WRITE DOES NOT COUNT." in this implementation.  Perhaps an
+empty line should result in error 562 instead.
 
 Since section 7.1 does not say what the second of an error message is
 when there is no next statement, this implementation will have "ON THE
@@ -130,6 +131,14 @@ also has no effect.  This implementation interprets having no effect as
 not receiving the input, so that it gets received by the next not IGNOREd
 variable that is inputted into, as opposed to taking and discarding the
 input and having to decide how to handle erroneous input.
+
+The INTERCAL System Library described in sections 5 and 6 is not
+included with this implementation.  It's probably a copyright violation
+to include it.  An optimized INTERCAL System Library implementation
+would behave differently from an INTERCAL implementation when ABSTAIN or
+IGNORE are used or when operating close to the RESUME stack limit.
+Perhaps a future version of this implementation will include such an
+optimized INTERCAL System Library.
 
 Compiler
 --------

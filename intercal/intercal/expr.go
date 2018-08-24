@@ -24,6 +24,7 @@ type ArrayVar struct {
 
 type Expr interface {
 	Eval(state *State) (uint32, bool, *Error) // result, is 16 bit, error
+	ConstValue() (uint32, bool, bool)         // result, is 16 bit, has const value
 }
 
 type LValue interface {
@@ -212,6 +213,10 @@ func (v Var16) Eval(state *State) (uint32, bool, *Error) {
 	return state.Var16(v).Value, true, nil
 }
 
+func (v Var16) ConstValue() (uint32, bool, bool) {
+	return 0, true, false
+}
+
 func (v Var16) Gets(state *State, value uint32, is16 bool) *Error {
 	val := state.Var16(v)
 	if val.Ignored {
@@ -286,6 +291,10 @@ type Var32 uint16
 
 func (v Var32) Eval(state *State) (uint32, bool, *Error) {
 	return state.Var32(v).Value, false, nil
+}
+
+func (v Var32) ConstValue() (uint32, bool, bool) {
+	return 0, true, false
 }
 
 func (v Var32) Gets(state *State, value uint32, is16 bool) *Error {
@@ -396,6 +405,10 @@ func (v ArrayElement) Eval(state *State) (uint32, bool, *Error) {
 	return val.Value.Values[index], v.is16(), nil
 }
 
+func (v ArrayElement) ConstValue() (uint32, bool, bool) {
+	return 0, v.is16(), false
+}
+
 func (v ArrayElement) is16() bool {
 	switch v.Array.(type) {
 	case Array16:
@@ -479,6 +492,10 @@ func (e ExprConst) Eval(state *State) (uint32, bool, *Error) {
 	return uint32(e), true, nil
 }
 
+func (e ExprConst) ConstValue() (uint32, bool, bool) {
+	return uint32(e), true, true
+}
+
 func (e ExprConst) ReadOut(state *State, w io.Writer) *Error {
 	Output(w, uint32(e))
 	return nil
@@ -495,7 +512,19 @@ func (e ExprMingle) Eval(state *State) (uint32, bool, *Error) {
 	if err != nil {
 		return 0, false, err
 	}
+	if l >= 65536 || r >= 65536 {
+		return 0, false, Err533
+	}
 	return OpMingle(l, r), false, nil
+}
+
+func (e ExprMingle) ConstValue() (uint32, bool, bool) {
+	l, _, lIsConst := e[0].ConstValue()
+	r, _, rIsConst := e[1].ConstValue()
+	if !lIsConst || l >= 65536 || !rIsConst || r >= 65536 {
+		return 0, true, false
+	}
+	return OpMingle(l, r), true, true
 }
 
 type ExprSelect [2]Expr
@@ -512,6 +541,15 @@ func (e ExprSelect) Eval(state *State) (uint32, bool, *Error) {
 	return OpSelect(l, r), bits.OnesCount32(r) <= 16, nil
 }
 
+func (e ExprSelect) ConstValue() (uint32, bool, bool) {
+	l, _, lIsConst := e[0].ConstValue()
+	r, _, rIsConst := e[1].ConstValue()
+	if !lIsConst || !rIsConst {
+		return 0, true, false
+	}
+	return OpSelect(l, r), bits.OnesCount32(r) <= 16, true
+}
+
 type ExprAnd [1]Expr
 
 func (e ExprAnd) Eval(state *State) (uint32, bool, *Error) {
@@ -523,6 +561,18 @@ func (e ExprAnd) Eval(state *State) (uint32, bool, *Error) {
 		return OpAnd16(v), true, nil
 	} else {
 		return OpAnd32(v), false, nil
+	}
+}
+
+func (e ExprAnd) ConstValue() (uint32, bool, bool) {
+	v, is16, isConst := e[0].ConstValue()
+	if !isConst {
+		return 0, is16, false
+	}
+	if is16 {
+		return OpAnd16(v), true, true
+	} else {
+		return OpAnd32(v), false, true
 	}
 }
 
@@ -540,6 +590,18 @@ func (e ExprOr) Eval(state *State) (uint32, bool, *Error) {
 	}
 }
 
+func (e ExprOr) ConstValue() (uint32, bool, bool) {
+	v, is16, isConst := e[0].ConstValue()
+	if !isConst {
+		return 0, is16, false
+	}
+	if is16 {
+		return OpOr16(v), true, true
+	} else {
+		return OpOr32(v), false, true
+	}
+}
+
 type ExprXor [1]Expr
 
 func (e ExprXor) Eval(state *State) (uint32, bool, *Error) {
@@ -551,5 +613,17 @@ func (e ExprXor) Eval(state *State) (uint32, bool, *Error) {
 		return OpXor16(v), true, nil
 	} else {
 		return OpXor32(v), false, nil
+	}
+}
+
+func (e ExprXor) ConstValue() (uint32, bool, bool) {
+	v, is16, isConst := e[0].ConstValue()
+	if !isConst {
+		return 0, is16, false
+	}
+	if is16 {
+		return OpXor16(v), true, true
+	} else {
+		return OpXor32(v), false, true
 	}
 }

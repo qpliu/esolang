@@ -1807,4 +1807,267 @@ define void @output_digit(i8* %ptr_digit, i1 %overline) {
     ret void
 }
 
+define %val @op_mingle(%val %l, %val %r) {
+    %ltag = extractvalue %val %l, 0
+    %lval = extractvalue %val %l, 1
+    %rtag = extractvalue %val %r, 0
+    %rval = extractvalue %val %r, 1
+
+    %liserror = icmp uge i2 %ltag, 2
+    br i1 %liserror, label %ret_lerror, label %check_rerror
+
+  ret_lerror:
+    ret %val %l
+
+  check_rerror:
+    %riserror = icmp uge i2 %rtag, 2
+    br i1 %riserror, label %ret_rerror, label %check_loverflow
+
+  ret_rerror:
+    ret %val %r
+
+  check_loverflow:
+    %loverflow = icmp uge i32 %lval, 65536
+    br i1 %loverflow, label %ret_overflow, label %check_roverflow
+
+  ret_overflow:
+    ret %val insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 533,1)
+
+  check_roverflow:
+    %roverflow = icmp uge i32 %rval, 65536
+    br i1 %roverflow, label %ret_overflow, label %compute_result
+
+  compute_result:
+    %l_8000 = and i32 %lval, shl(i32 1,i32 15)
+    %l_4000 = and i32 %lval, shl(i32 1,i32 14)
+    %l_2000 = and i32 %lval, shl(i32 1,i32 13)
+    %l_1000 = and i32 %lval, shl(i32 1,i32 12)
+    %l_800  = and i32 %lval, shl(i32 1,i32 11)
+    %l_400  = and i32 %lval, shl(i32 1,i32 10)
+    %l_200  = and i32 %lval, shl(i32 1,i32 9)
+    %l_100  = and i32 %lval, shl(i32 1,i32 8)
+    %l_80   = and i32 %lval, shl(i32 1,i32 7)
+    %l_40   = and i32 %lval, shl(i32 1,i32 6)
+    %l_20   = and i32 %lval, shl(i32 1,i32 5)
+    %l_10   = and i32 %lval, shl(i32 1,i32 4)
+    %l_8    = and i32 %lval, shl(i32 1,i32 3)
+    %l_4    = and i32 %lval, shl(i32 1,i32 2)
+    %l_2    = and i32 %lval, shl(i32 1,i32 1)
+    %l_1    = and i32 %lval, shl(i32 1,i32 0)
+
+    %r_8000 = and i32 %rval, shl(i32 1,i32 15)
+    %r_4000 = and i32 %rval, shl(i32 1,i32 14)
+    %r_2000 = and i32 %rval, shl(i32 1,i32 13)
+    %r_1000 = and i32 %rval, shl(i32 1,i32 12)
+    %r_800  = and i32 %rval, shl(i32 1,i32 11)
+    %r_400  = and i32 %rval, shl(i32 1,i32 10)
+    %r_200  = and i32 %rval, shl(i32 1,i32 9)
+    %r_100  = and i32 %rval, shl(i32 1,i32 8)
+    %r_80   = and i32 %rval, shl(i32 1,i32 7)
+    %r_40   = and i32 %rval, shl(i32 1,i32 6)
+    %r_20   = and i32 %rval, shl(i32 1,i32 5)
+    %r_10   = and i32 %rval, shl(i32 1,i32 4)
+    %r_8    = and i32 %rval, shl(i32 1,i32 3)
+    %r_4    = and i32 %rval, shl(i32 1,i32 2)
+    %r_2    = and i32 %rval, shl(i32 1,i32 1)
+    %r_1    = and i32 %rval, shl(i32 1,i32 0)
+
+    %l_8000_80000000 = shl i32 %l_8000, 16
+    %l_4000_20000000 = shl i32 %l_4000, 15
+    %l_2000__8000000 = shl i32 %l_2000, 14
+    %l_1000__2000000 = shl i32 %l_1000, 13
+    %l__800___800000 = shl i32 %l_800,  12
+    %l__400___200000 = shl i32 %l_400,  11
+    %l__200____80000 = shl i32 %l_200,  10
+    %l__100____20000 = shl i32 %l_100,  9
+    %l___80_____8000 = shl i32 %l_80,   8
+    %l___40_____2000 = shl i32 %l_40,   7
+    %l___20______800 = shl i32 %l_20,   6
+    %l___10______200 = shl i32 %l_10,   5
+    %l____8_______80 = shl i32 %l_8,    4
+    %l____4_______20 = shl i32 %l_4,    3
+    %l____2________8 = shl i32 %l_2,    2
+    %l____1________2 = shl i32 %l_1,    1
+
+    %r_8000_40000000 = shl i32 %r_8000, 15
+    %r_4000_10000000 = shl i32 %r_4000, 14
+    %r_2000__4000000 = shl i32 %r_2000, 13
+    %r_1000__1000000 = shl i32 %r_1000, 12
+    %r__800___400000 = shl i32 %r_800,  11
+    %r__400___100000 = shl i32 %r_400,  10
+    %r__200____40000 = shl i32 %r_200,  9
+    %r__100____10000 = shl i32 %r_100,  8
+    %r___80_____4000 = shl i32 %r_80,   7
+    %r___40_____1000 = shl i32 %r_40,   6
+    %r___20______400 = shl i32 %r_20,   5
+    %r___10______100 = shl i32 %r_10,   4
+    %r____8_______40 = shl i32 %r_8,    3
+    %r____4_______10 = shl i32 %r_4,    2
+    %r____2________4 = shl i32 %r_2,    1
+    %r____1________1 = shl i32 %r_1,    0
+
+    %result_c0000000 = or i32 %l_8000_80000000, %r_8000_40000000
+    %result_30000000 = or i32 %l_4000_20000000, %r_4000_10000000
+    %result_0c000000 = or i32 %l_2000__8000000, %r_2000__4000000
+    %result_03000000 = or i32 %l_1000__2000000, %r_1000__1000000
+    %result_00c00000 = or i32 %l__800___800000, %r__800___400000
+    %result_00300000 = or i32 %l__400___200000, %r__400___100000
+    %result_000c0000 = or i32 %l__200____80000, %r__200____40000
+    %result_00030000 = or i32 %l__100____20000, %r__100____10000
+    %result_0000c000 = or i32 %l___80_____8000, %r___80_____4000
+    %result_00003000 = or i32 %l___40_____2000, %r___40_____1000
+    %result_00000c00 = or i32 %l___20______800, %r___20______400
+    %result_00000300 = or i32 %l___10______200, %r___10______100
+    %result_000000c0 = or i32 %l____8_______80, %r____8_______40
+    %result_00000030 = or i32 %l____4_______20, %r____4_______10
+    %result_0000000c = or i32 %l____2________8, %r____2________4
+    %result_00000003 = or i32 %l____1________2, %r____1________1
+
+    %result_f0000000 = or i32 %result_c0000000, %result_30000000
+    %result_0f000000 = or i32 %result_0c000000, %result_03000000
+    %result_00f00000 = or i32 %result_00c00000, %result_00300000
+    %result_000f0000 = or i32 %result_000c0000, %result_00030000
+    %result_0000f000 = or i32 %result_0000c000, %result_00003000
+    %result_00000f00 = or i32 %result_00000c00, %result_00000300
+    %result_000000f0 = or i32 %result_000000c0, %result_00000030
+    %result_0000000f = or i32 %result_0000000c, %result_00000003
+
+    %result_ff000000 = or i32 %result_f0000000, %result_0f000000
+    %result_00ff0000 = or i32 %result_00f00000, %result_000f0000
+    %result_0000ff00 = or i32 %result_0000f000, %result_00000f00
+    %result_000000ff = or i32 %result_000000f0, %result_0000000f
+
+    %result_ffff0000 = or i32 %result_ff000000, %result_00ff0000
+    %result_0000ffff = or i32 %result_0000ff00, %result_000000ff
+
+    %result_ffffffff = or i32 %result_ffff0000, %result_0000ffff
+    %result = insertvalue %val insertvalue(%val zeroinitializer,i2 1,0), i32 %result_ffffffff, 1
+    ret %val %result
+}
+
+define %val @op_select(%val %l, %val %r) {
+    %ltag = extractvalue %val %l, 0
+    %lval = extractvalue %val %l, 1
+    %rtag = extractvalue %val %r, 0
+    %rval = extractvalue %val %r, 1
+
+    %liserror = icmp uge i2 %ltag, 2
+    br i1 %liserror, label %ret_lerror, label %check_rerror
+
+  ret_lerror:
+    ret %val %l
+
+  check_rerror:
+    %riserror = icmp uge i2 %rtag, 2
+    br i1 %riserror, label %ret_rerror, label %compute_result_loop
+
+  ret_rerror:
+    ret %val %r
+
+  compute_result_loop:
+    %mask = phi i32 [2147483648, %check_rerror], [%next_mask, %next_result_loop]
+    %result = phi i32 [0, %check_rerror], [%next_result, %next_result_loop]
+    %bitcount = phi i32 [0, %check_rerror], [%next_bitcount, %next_result_loop]
+    %next_mask = lshr i32 %mask, 1
+    %rbit = and i32 %mask, %rval
+    %rbit0 = icmp eq i32 %rbit, 0
+    br i1 %rbit0, label %next_result_loop, label %add_result_bit
+
+  add_result_bit:
+    %shift_result = shl i32 %result, 1
+    %bitcount1 = add i32 %bitcount, 1
+    %lbit = and i32 %mask, %lval
+    %lbit0 = icmp eq i32 %lbit, 0
+    br i1 %lbit0, label %next_result_loop, label %add_result_bit1
+
+  add_result_bit1:
+    %shift_result1 = or i32 %shift_result, 1
+    br label %next_result_loop
+
+  next_result_loop:
+    %next_result = phi i32 [%result, %compute_result_loop], [%shift_result, %add_result_bit], [%shift_result1, %add_result_bit1]
+    %next_bitcount = phi i32 [%bitcount, %compute_result_loop], [%bitcount1, %add_result_bit], [%bitcount1, %add_result_bit1]
+    %done = icmp eq i32 %next_mask, 0
+    br i1 %done, label %ret_result, label %compute_result_loop
+
+  ret_result:
+    %is16 = icmp ule i32 %next_bitcount, 16
+    %res_tag = select i1 %is16, i2 0, i2 1
+    %res1 = insertvalue %val zeroinitializer, i2 %res_tag, 0
+    %res = insertvalue %val %res1, i32 %next_result, 1
+    ret %val %res
+}
+
+define %val @op_and(%val %arg) {
+    %tag = extractvalue %val %arg, 0
+    %v = extractvalue %val %arg, 1
+
+    %iserror = icmp uge i2 %tag, 2
+    br i1 %iserror, label %ret_error, label %compute_result
+
+  ret_error:
+    ret %val %arg
+
+  compute_result:
+    %shiftval = lshr i32 %v, 1
+    %is16 = icmp eq i2 %tag, 0
+    %bit0 = and i32 %v, 1
+    %shl_count = select i1 %is16, i32 15, i32 31
+    %high_bit = shl i32 %bit0, %shl_count
+    %rval = or i32 %shiftval, %high_bit
+    %result_val = and i32 %v, %rval
+    %result_tag = select i1 %is16, i2 0, i2 1
+    %result1 = insertvalue %val zeroinitializer, i2 %result_tag, 0
+    %result = insertvalue %val %result1, i32 %result_val, 1
+    ret %val %result
+}
+
+define %val @op_or(%val %arg) {
+    %tag = extractvalue %val %arg, 0
+    %v = extractvalue %val %arg, 1
+
+    %iserror = icmp uge i2 %tag, 2
+    br i1 %iserror, label %ret_error, label %compute_result
+
+  ret_error:
+    ret %val %arg
+
+  compute_result:
+    %shiftval = lshr i32 %v, 1
+    %is16 = icmp eq i2 %tag, 0
+    %bit0 = and i32 %v, 1
+    %shl_count = select i1 %is16, i32 15, i32 31
+    %high_bit = shl i32 %bit0, %shl_count
+    %rval = or i32 %shiftval, %high_bit
+    %result_val = or i32 %v, %rval
+    %result_tag = select i1 %is16, i2 0, i2 1
+    %result1 = insertvalue %val zeroinitializer, i2 %result_tag, 0
+    %result = insertvalue %val %result1, i32 %result_val, 1
+    ret %val %result
+}
+
+define %val @op_xor(%val %arg) {
+    %tag = extractvalue %val %arg, 0
+    %v = extractvalue %val %arg, 1
+
+    %iserror = icmp uge i2 %tag, 2
+    br i1 %iserror, label %ret_error, label %compute_result
+
+  ret_error:
+    ret %val %arg
+
+  compute_result:
+    %shiftval = lshr i32 %v, 1
+    %is16 = icmp eq i2 %tag, 0
+    %bit0 = and i32 %v, 1
+    %shl_count = select i1 %is16, i32 15, i32 31
+    %high_bit = shl i32 %bit0, %shl_count
+    %rval = or i32 %shiftval, %high_bit
+    %result_val = xor i32 %v, %rval
+    %result_tag = select i1 %is16, i2 0, i2 1
+    %result1 = insertvalue %val zeroinitializer, i2 %result_tag, 0
+    %result = insertvalue %val %result1, i32 %result_val, 1
+    ret %val %result
+}
+
 ;...

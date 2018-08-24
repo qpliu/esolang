@@ -322,4 +322,5 @@ func TestParseExpr(t *testing.T) {
 
 	testParseExpr(t, "’⊻,1SUB#1#1¢#1’~’#0¢#65535’", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
 	testParseExpr(t, "'?\",1SUB#1#1\"$#1'~'#0$#65535'", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
+	testParseExpr(t, "’∀,1SUB#1#1¢#1’~’#0¢#65535’", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
 }
