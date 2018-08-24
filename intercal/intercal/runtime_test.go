@@ -27,9 +27,9 @@ func testRuntime(t *testing.T, srcFile string) {
 		}
 		inFile := fmt.Sprintf("%s.%03d.in", srcFile, i)
 		if _, err := os.Stat(inFile); err != nil {
-			cmd = fmt.Sprintf("%s | diff -u %s -", tmpFile, outFile)
+			cmd = fmt.Sprintf("%s 2>&1 | diff -u %s -", tmpFile, outFile)
 		} else {
-			cmd = fmt.Sprintf("%s < %s | diff -u %s -", tmpFile, inFile, outFile)
+			cmd = fmt.Sprintf("%s < %s 2>&1 | diff -u %s -", tmpFile, inFile, outFile)
 		}
 		if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
 			t.Errorf("error=%s, %s", err.Error(), cmd)
