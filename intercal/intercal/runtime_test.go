@@ -36,6 +36,8 @@ func testRuntime(t *testing.T, srcFile string) {
 			continue
 		}
 	}
+	os.Remove(tmpFile)
+	os.Remove(tmpFile + ".s")
 }
 
 func TestRuntime(t *testing.T) {

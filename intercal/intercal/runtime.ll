@@ -2100,13 +2100,13 @@ define void @finish_fatal_error(i8* %message, i32 %message_len, i8* %stmt_number
     br i1 %message_isnull, label %end_message, label %start_message
 
   start_message:
-    call i32 @write(i32 1, i8* %message, i32 %message_len)
+    call i32 @write(i32 2, i8* %message, i32 %message_len)
     br label %end_message
 
   end_message:
-    call i32 @write(i32 1, i8* getelementptr([26 x i8], [26 x i8]* @error_message_on_the_way, i32 0, i32 0), i32 26)
-    call i32 @write(i32 1, i8* %stmt_number, i32 %stmt_number_len)
-    call i32 @write(i32 1, i8* getelementptr([30 x i8], [30 x i8]* @error_message_correct_source, i32 0, i32 0), i32 30)
+    call i32 @write(i32 2, i8* getelementptr([26 x i8], [26 x i8]* @error_message_on_the_way, i32 0, i32 0), i32 26)
+    call i32 @write(i32 2, i8* %stmt_number, i32 %stmt_number_len)
+    call i32 @write(i32 2, i8* getelementptr([30 x i8], [30 x i8]* @error_message_correct_source, i32 0, i32 0), i32 30)
     call void @exit(i32 1) noreturn
     ret void
 }

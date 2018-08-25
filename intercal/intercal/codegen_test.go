@@ -9,6 +9,11 @@ import (
 )
 
 func testCodeGen(t *testing.T, srcFile string) {
+	outFile := filepath.Join("testdata", srcFile) + ".codegen.out"
+	if _, err := os.Stat(outFile); err != nil {
+		return
+	}
+
 	tokenizer, err := NewFileTokenizer([]string{filepath.Join("testdata", srcFile)})
 	if err != nil {
 		t.Errorf("parse %s: %s", srcFile, err.Error())
@@ -46,11 +51,6 @@ func testCodeGen(t *testing.T, srcFile string) {
 		return
 	}
 
-	outFile := filepath.Join("testdata", srcFile) + ".codegen.out"
-	if _, err := os.Stat(outFile); err != nil {
-		return
-	}
-
 	inFile := filepath.Join("testdata", srcFile) + ".in"
 	if _, err := os.Stat(outFile); err != nil {
 		cmd = fmt.Sprintf("%s 2>&1 | diff -q %s -", tmpFile, outFile)
@@ -62,6 +62,10 @@ func testCodeGen(t *testing.T, srcFile string) {
 		t.Errorf("%s", cmd)
 		return
 	}
+
+	os.Remove(tmpFile)
+	os.Remove(tmpFile + ".ll")
+	os.Remove(tmpFile + ".s")
 }
 
 func TestCodeGen(t *testing.T) {
