@@ -156,6 +156,17 @@ func CodeGen(statements []*Statement, w io.Writer) error {
 	return nil
 }
 
+func nextIndex(stmt *Statement, statements []*Statement) int {
+	switch stmt.Type {
+	case StatementNext:
+		return stmt.Operands.(int)
+	case StatementResume:
+		return len(statements)
+	default:
+		return stmt.Index + 1
+	}
+}
+
 func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingIndexes [2]int, listingSize int) error {
 	if _, err := fmt.Fprintf(w, "  stmt%d:\n", stmt.Index); err != nil {
 		return err
@@ -173,7 +184,7 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			label1 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
 			label2 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
 			labelCounter += 3
-			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 9)\n    br i1 %s, label %%%s, label %%%s\n  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 774,1),i32 %d) noreturn\n    ret void\n  %s:\n", ident1, ident1, label1, label2, label1, stmt.Index, label2); err != nil {
+			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 9)\n    br i1 %s, label %%%s, label %%%s\n  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 774,1),i32 %d) noreturn\n    ret void\n  %s:\n", ident1, ident1, label1, label2, label1, nextIndex(stmt, statements), label2); err != nil {
 				return err
 			}
 		}
@@ -252,6 +263,76 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 	}
 
 	switch stmt.Type {
+	case StatementNext:
+		stackptrIdent := fmt.Sprintf("%%stackptr%d.%d", stmt.Index, labelCounter)
+		stackptrCheckIdent := fmt.Sprintf("%%stackptrcheck%d.%d", stmt.Index, labelCounter+1)
+		stackptrOverflowLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
+		stackptrOkLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+3)
+		labelCounter += 4
+		if _, err := fmt.Fprintf(w, "    ;NEXT\n    %s = load i32, i32* @stackptr\n    %s = icmp uge i32 %s, 79\n    br i1 %s, label %%%s, label %%%s\n", stackptrIdent, stackptrCheckIdent, stackptrIdent, stackptrCheckIdent, stackptrOverflowLabel, stackptrOkLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 123,1),i32 %d)\n    br label %%%s\n", stackptrOverflowLabel, nextIndex(stmt, statements), redoLabel); err != nil {
+			return err
+		}
+		nextStackptrIdent := fmt.Sprintf("%%nextstackptr%d.%d", stmt.Index, labelCounter)
+		stackentryptrIdent := fmt.Sprintf("%%stackentryptr%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = add i32 %s, 1\n    store i32 %s, i32* @stackptr\n    %s = getelementptr [79 x i8*], [79 x i8*]* @stack, i32 0, i32 %s\n    store i8* blockaddress(@main,%%stmt%d), i8** %s\n    br label %%%s\n", stackptrOkLabel, nextStackptrIdent, stackptrIdent, nextStackptrIdent, stackentryptrIdent, stackptrIdent, stmt.Index+1, stackentryptrIdent, redoLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+
+	case StatementForget:
+		if _, err := fmt.Fprintf(w, "    ;FORGET\n"); err != nil {
+			return err
+		}
+		argValIdent := ""
+		if newLabelCounter, exprIdent, err := codeGenExpr(w, stmt, stmt.Operands.(Expr), labelCounter); err != nil {
+			return err
+		} else {
+			labelCounter = newLabelCounter
+			argValIdent = exprIdent
+		}
+		if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", argValIdent, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+		argIdent := fmt.Sprintf("%%arg%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s, 1\n", argIdent, argValIdent); err != nil {
+			return err
+		}
+		stackptrIdent := fmt.Sprintf("%%stackptr%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "    %s = load i32, i32* @stackptr\n", stackptrIdent); err != nil {
+			return err
+		}
+
+		stackptrCheckIdent := fmt.Sprintf("%%stackptrcheck%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s, %s\n", stackptrCheckIdent, argIdent, stackptrIdent); err != nil {
+			return err
+		}
+
+		stackptrUnderflowLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+		stackptrOkLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+		nextStackptrIdent := fmt.Sprintf("%%nextstackptr%d.%d", stmt.Index, labelCounter+2)
+		labelCounter += 3
+		if _, err := fmt.Fprintf(w, "    br i1 %s, label %%%s, label %%%s\n", stackptrCheckIdent, stackptrUnderflowLabel, stackptrOkLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    store i32 0,i32* @stackptr\n    br label %%%s\n", stackptrUnderflowLabel, redoLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = sub i32 %s, %s\n    store i32 %s,i32* @stackptr\n    br label %%%s\n", stackptrOkLabel, nextStackptrIdent, stackptrIdent, argIdent, nextStackptrIdent, redoLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+
 	case StatementAbstainLabel, StatementAbstainGerundList, StatementReinstateLabel, StatementReinstateGerundList:
 		flag := 1
 		if stmt.Type == StatementReinstateLabel || stmt.Type == StatementReinstateGerundList {
@@ -290,4 +371,27 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		}
 	}
 	return nil
+}
+
+func codeGenExpr(w io.Writer, stmt *Statement, expr Expr, labelCounter int) (int, string, error) {
+	if val, is16, isConst := expr.ConstValue(); isConst {
+		ident := fmt.Sprintf("%%expr.%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		tag := 0
+		if !is16 {
+			tag = 1
+		}
+		if _, err := fmt.Fprintf(w, "    %s = select i1 1, %%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 %d,0),i32 %d,1), %%val zeroinitializer\n", ident, tag, val); err != nil {
+			return 0, "", nil
+		}
+		return labelCounter, ident, nil
+	}
+
+	//...
+	ident := fmt.Sprintf("%%expr.%d.%d", stmt.Index, labelCounter)
+	labelCounter++
+	if _, err := fmt.Fprintf(w, "    %s = select i1 1, %%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1), %%val zeroinitializer\n", ident); err != nil {
+		return 0, "", nil
+	}
+	return labelCounter, ident, nil
 }

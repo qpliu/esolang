@@ -20,7 +20,7 @@ declare i32 @llvm.ctpop.i32(i32)
 %val = type {i2,i32}
 
 @stack = global [79 x i8*] zeroinitializer
-@stackptr = global i8 0
+@stackptr = global i32 0
 
 @read_digit_error = private constant [43 x i8] c"ICL579I WHAT BASE AND/OR LANGUAGE INCLUDES "
 
