@@ -12,12 +12,12 @@ func testRuntime(t *testing.T, srcFile string) {
 	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("runtime_test.%s.%d", filepath.Base(srcFile), os.Getpid()))
 	cmd := fmt.Sprintf("cat runtime.ll %s | llc > %s.s", srcFile, tmpFile)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
-		t.Errorf("%s: error=%s", cmd, err.Error())
+		t.Errorf("%s", cmd)
 		return
 	}
 	cmd = fmt.Sprintf("cc -o %s %s.s", tmpFile, tmpFile)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
-		t.Errorf("%s: error=%s", cmd, err.Error())
+		t.Errorf("%s", cmd)
 		return
 	}
 	for i := 1; ; i++ {
@@ -27,12 +27,12 @@ func testRuntime(t *testing.T, srcFile string) {
 		}
 		inFile := fmt.Sprintf("%s.%03d.in", srcFile, i)
 		if _, err := os.Stat(inFile); err != nil {
-			cmd = fmt.Sprintf("%s 2>&1 | diff -u %s -", tmpFile, outFile)
+			cmd = fmt.Sprintf("%s 2>&1 | diff -q %s -", tmpFile, outFile)
 		} else {
-			cmd = fmt.Sprintf("%s < %s 2>&1 | diff -u %s -", tmpFile, inFile, outFile)
+			cmd = fmt.Sprintf("%s < %s 2>&1 | diff -q %s -", tmpFile, inFile, outFile)
 		}
 		if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
-			t.Errorf("error=%s, %s", err.Error(), cmd)
+			t.Errorf("%s", cmd)
 			continue
 		}
 	}

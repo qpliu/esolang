@@ -118,13 +118,13 @@ Since the errors in section 7 does not include the actual error messages,
 and the messages for errors other than 000, 123, 275, and 436 are not
 documented, the error messages are taken from the C-INTERCAL documentation,
 with the exception of error 579 when WRITING IN an empty line, which is
-"WHAT YOU WRITE DOES NOT COUNT." in this implementation.  Perhaps an
-empty line should result in error 562 instead.
+"WHAT YOU WRITE DOES NOT COUNT" in this implementation.  On second
+thought, an empty line shall result in error 562, instead of inventing
+messages that are not in any of the documents.
 
-Since section 7.1 does not say what the second of an error message is
+Since section 7.1 does not say what the second line of an error message is
 when there is no next statement, this implementation will have "ON THE
-WAY TO STATEMENT nnnn" in those cases so that it still follows the
-format.
+WAY TO STATEMENT nnnn" in those cases so that it still follows the format.
 
 In section 4.4.7, the document says inputting into an IGNOREd variable
 also has no effect.  This implementation interprets having no effect as

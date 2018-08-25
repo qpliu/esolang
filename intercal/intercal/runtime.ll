@@ -1562,7 +1562,7 @@ define %val @input32() {
     %err = phi %val [insertvalue(%val insertvalue(%val zeroinitializer,i2 3,0),i32 579,1),%check_tag3],
                    [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 533,1),%next_digit_maybe],
                    [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 533,1),%next_digit_maybe2],
-                   [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 579,1),%read_eol],
+                   [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 562,1),%read_eol],
                    [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 562,1),%read_eof]
     ret %val %err
 
@@ -2070,4 +2070,43 @@ define %val @op_xor(%val %arg) {
     ret %val %result
 }
 
-;...
+define i1 @random_check(i32 %per1000) {
+  entry:
+    br label %loop
+
+  loop:
+    %count = phi i32 [0, %entry], [%next_count, %check_retry]
+    %r = call i32 @random()
+    %r1024 = and i32 %r, 1023
+    %r1024_ge1000 = icmp uge i32 %r1024, 1000
+    br i1 %r1024_ge1000, label %check_retry, label %ret_result
+
+  check_retry:
+    %next_count = add i32 %count, 1
+    %next_count_gt1000 = icmp ugt i32 %next_count, 1000
+    br i1 %next_count_gt1000, label %ret_result, label %loop
+
+  ret_result:
+    %result = icmp ult i32 %r1024, %per1000
+    ret i1 %result
+}
+
+@error_message_000_prefix = private constant [8 x i8] c"ICL000I "
+@error_message_on_the_way = private constant [26 x i8] c"\0A\09ON THE WAY TO STATEMENT "
+@error_message_correct_source = private constant [30 x i8] c"\0A\09CORRECT SOURCE AND RESUBMIT\0A"
+
+define void @finish_fatal_error(i8* %message, i32 %message_len, i8* %stmt_number, i32 %stmt_number_len) noreturn {
+    %message_isnull = icmp eq i8* %message, null
+    br i1 %message_isnull, label %end_message, label %start_message
+
+  start_message:
+    call i32 @write(i32 1, i8* %message, i32 %message_len)
+    br label %end_message
+
+  end_message:
+    call i32 @write(i32 1, i8* getelementptr([26 x i8], [26 x i8]* @error_message_on_the_way, i32 0, i32 0), i32 26)
+    call i32 @write(i32 1, i8* %stmt_number, i32 %stmt_number_len)
+    call i32 @write(i32 1, i8* getelementptr([30 x i8], [30 x i8]* @error_message_correct_source, i32 0, i32 0), i32 30)
+    call void @exit(i32 1) noreturn
+    ret void
+}

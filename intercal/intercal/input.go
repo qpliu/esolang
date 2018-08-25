@@ -85,9 +85,7 @@ func (r *IntercalReader) input(limit uint32, overflowErr error) (uint32, error) 
 	}
 	var buf bytes.Buffer
 	val, err := r.inputDigit(&buf)
-	if err == eol {
-		return 0, Err579
-	} else if err == io.EOF {
+	if err == eol || err == io.EOF {
 		return 0, Err562
 	} else if err != nil {
 		return 0, err
@@ -97,7 +95,7 @@ func (r *IntercalReader) input(limit uint32, overflowErr error) (uint32, error) 
 		if err == eol {
 			return uint32(val), nil
 		} else if err == io.EOF {
-			return 0, Err579
+			return 0, Err562
 		} else if err != nil {
 			return 0, err
 		}

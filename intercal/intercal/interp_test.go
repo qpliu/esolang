@@ -63,7 +63,7 @@ func TestInterp(t *testing.T) {
 		return
 	}
 	for _, name := range names {
-		if filepath.Ext(name) == ".i" || filepath.Ext(name) == ".I" {
+		if filepath.Ext(name) == ".i" {
 			testSrcFile(t, name)
 		}
 	}

@@ -21,7 +21,7 @@ var (
 	Err436 = &Error{436, "A retrieval has been attempted for an unSTASHed value.", "THROW STICK BEFORE RETRIEVING", nil, 0}
 	Err533 = &Error{533, "A WRITE IN statement or interleave (¢) operation has produced a value requiring over 32 bits to represent.", "YOU WANT MAYBE WE SHOULD IMPLEMENT 64-BIT VARIABLES?", nil, 0}
 	Err562 = &Error{562, "Insufficient data.", "I DO NOT COMPUTE", nil, 0}
-	Err579 = &Error{579, "Input data is invalid.", "WHAT YOU WRITE DOES NOT COUNT", nil, 0}
+	Err579 = &Error{579, "Input data is invalid.", "", nil, 0}
 	Err621 = &Error{621, "The expression of a RESUME statement evaluated to #0.", "ERROR TYPE 621 ENCOUNTERED", nil, 0}
 	Err632 = &Error{632, "Program execution was terminated via a RESUME statement instead of GIVE UP.", "THE NEXT STACK RUPTURES.  ALL DIE.  OH, THE EMBARRASSMENT!", nil, 0}
 	Err633 = &Error{633, "Execution has passed beyond the last statement of the program.", "PROGRAM FELL OFF THE EDGE", nil, 0}
@@ -67,19 +67,19 @@ type Error struct {
 func (e *Error) Error() string {
 	if e.next == 0 {
 		if e.message != "" {
-			return fmt.Sprintf("ICL%03dI %s\n        ON THE WAY TO STATEMENT nnnn\n        CORRECT SOURCE AND RESUBMIT", e.code, e.message)
+			return fmt.Sprintf("ICL%03dI %s\n\tON THE WAY TO STATEMENT nnnn\n\tCORRECT SOURCE AND RESUBMIT", e.code, e.message)
 		} else if e.statement != nil {
-			return fmt.Sprintf("ICL%03dI %s\n        ON THE WAY TO STATEMENT nnnn\n        CORRECT SOURCE AND RESUBMIT", e.code, e.statement.String())
+			return fmt.Sprintf("ICL%03dI %s\n\tON THE WAY TO STATEMENT nnnn\n\tCORRECT SOURCE AND RESUBMIT", e.code, e.statement.String())
 		} else {
-			return fmt.Sprintf("ICL%03dI\n        ON THE WAY TO STATEMENT nnnn\n        CORRECT SOURCE AND RESUBMIT", e.code)
+			return fmt.Sprintf("ICL%03dI\n\tON THE WAY TO STATEMENT nnnn\n\tCORRECT SOURCE AND RESUBMIT", e.code)
 		}
 	} else {
 		if e.message != "" {
-			return fmt.Sprintf("ICL%03dI %s\n        ON THE WAY TO STATEMENT %04d\n        CORRECT SOURCE AND RESUBMIT", e.code, e.message, e.next)
+			return fmt.Sprintf("ICL%03dI %s\n\tON THE WAY TO STATEMENT %04d\n\tCORRECT SOURCE AND RESUBMIT", e.code, e.message, e.next)
 		} else if e.statement != nil {
-			return fmt.Sprintf("ICL%03dI %s\n        ON THE WAY TO STATEMENT %04d\n        CORRECT SOURCE AND RESUBMIT", e.code, e.statement.String(), e.next)
+			return fmt.Sprintf("ICL%03dI %s\n\tON THE WAY TO STATEMENT %04d\n\tCORRECT SOURCE AND RESUBMIT", e.code, e.statement.String(), e.next)
 		} else {
-			return fmt.Sprintf("ICL%03dI\n        ON THE WAY TO STATEMENT %04d\n        CORRECT SOURCE AND RESUBMIT", e.code, e.next)
+			return fmt.Sprintf("ICL%03dI\n\tON THE WAY TO STATEMENT %04d\n\tCORRECT SOURCE AND RESUBMIT", e.code, e.next)
 		}
 	}
 }
@@ -122,4 +122,8 @@ func (e *Error) WithMessage(message string) *Error {
 
 func (e *Error) Code() int {
 	return e.code
+}
+
+func (e *Error) Message() string {
+	return e.message
 }
