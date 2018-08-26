@@ -177,7 +177,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 		}
 		newlen := len(s.NEXTingStack) - int(val)
 		if newlen < 0 {
-			return ErrGiveUp
+			return Err632
 		}
 		s.StatementIndex = s.NEXTingStack[newlen]
 		s.NEXTingStack = s.NEXTingStack[:newlen]

@@ -355,6 +355,102 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 
+	case StatementResume:
+		if _, err := fmt.Fprintf(w, "    ;RESUME\n"); err != nil {
+			return err
+		}
+		argValIdent := ""
+		if newLabelCounter, exprIdent, err := codeGenExpr(w, stmt, stmt.Operands.(Expr), labelCounter); err != nil {
+			return err
+		} else {
+			labelCounter = newLabelCounter
+			argValIdent = exprIdent
+		}
+		if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", argValIdent, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+		argIdent := fmt.Sprintf("%%arg%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s, 1\n", argIdent, argValIdent); err != nil {
+			return err
+		}
+
+		argiszeroIdent := fmt.Sprintf("%%argiszero%d.%d", stmt.Index, labelCounter)
+		argiszeroLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+		argisnotzeroLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
+		labelCounter += 3
+		if _, err := fmt.Fprintf(w, "    %s = icmp eq i32 %s, 0\n", argiszeroIdent, argIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br i1 %s, label %%%s, label %%%s\n", argiszeroIdent, argiszeroLabel, argisnotzeroLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 621,1),i32 %d)\n    br label %%%s\n", argiszeroLabel, nextIndex(stmt, statements), redoLabel); err != nil {
+			return err
+		}
+
+		if _, err := fmt.Fprintf(w, "  %s:\n", argisnotzeroLabel); err != nil {
+			return err
+		}
+		stackptrIdent := fmt.Sprintf("%%stackptr%d.%d", stmt.Index, labelCounter)
+		checkunderflowIdent := fmt.Sprintf("%%checkunderflow%d.%d", stmt.Index, labelCounter+1)
+		underflowLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
+		nounderflowLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+3)
+		labelCounter += 4
+		if _, err := fmt.Fprintf(w, "    %s = load i32, i32* @stackptr\n", stackptrIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = icmp ugt i32 %s, %s\n", checkunderflowIdent, argIdent, stackptrIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br i1 %s, label %%%s, label %%%s\n", checkunderflowIdent, underflowLabel, nounderflowLabel); err != nil {
+			return err
+		}
+
+		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 632,1),i32 %d)\n    br label %%%s\n", underflowLabel, nextIndex(stmt, statements), redoLabel); err != nil {
+			return err
+		}
+
+		newstackptrIdent := fmt.Sprintf("%%newstackptr%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = sub i32 %s, %s\n", nounderflowLabel, newstackptrIdent, stackptrIdent, argIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    store i32 %s, i32* @stackptr\n", newstackptrIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s", redoLabel); err != nil {
+			return err
+		}
+
+		if _, err := fmt.Fprintf(w, "  %s:\n", redoDoneLabel); err != nil {
+			return err
+		}
+		finalstackptrIdent := fmt.Sprintf("%%finalstackptr%d.%d", stmt.Index, labelCounter)
+		finalstackentryptrIdent := fmt.Sprintf("%%finalstackentryptr%d.%d", stmt.Index, labelCounter+1)
+		nextStmtIdent := fmt.Sprintf("%%nextstmt%d.%d", stmt.Index, labelCounter+2)
+		labelCounter += 3
+		if _, err := fmt.Fprintf(w, "    %s = load i32, i32* @stackptr\n", finalstackptrIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr [79 x i8*], [79 x i8*]* @stack,i32 0,i32 %s\n", finalstackentryptrIdent, finalstackptrIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = load i8*, i8** %s\n", nextStmtIdent, finalstackentryptrIdent); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    indirectbr i8* %s, [", nextStmtIdent); err != nil {
+			return err
+		}
+		for i := range statements {
+			if _, err := fmt.Fprintf(w, "label %%stmt%d,", i); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintf(w, "label %%stmt%d]\n", len(statements)); err != nil {
+			return err
+		}
+
 	case StatementAbstainLabel, StatementAbstainGerundList, StatementReinstateLabel, StatementReinstateGerundList:
 		flag := 1
 		if stmt.Type == StatementReinstateLabel || stmt.Type == StatementReinstateGerundList {

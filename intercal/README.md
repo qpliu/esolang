@@ -112,7 +112,11 @@ decimal number in an INTERCAL program.  This restriction is not in the
 inside numbers.
 
 Since section 4.4.11 says that PLEASE GIVE UP has the effect of a PLEASE
-RESUME #80, this implementation will never produce error 632.
+RESUME #80, this implementation will never produce error 632.  On second
+thought, this implementation will produce error 632 when terminating via
+a resume statement, and PLEASE GIVE UP will be different than PLEASE
+RESUME #80, as the former will terminate without an error and the latter
+will terminate with error 632.
 
 Since the errors in section 7 does not include the actual error messages,
 and the messages for errors other than 000, 123, 275, and 436 are not
