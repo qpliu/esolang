@@ -453,6 +453,44 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 
+	case StatementIgnore, StatementRemember:
+		flag := 1
+		if stmt.Type == StatementIgnore {
+			if _, err := fmt.Fprintf(w, "    ;IGNORE\n"); err != nil {
+				return err
+			}
+		} else {
+			flag = 0
+			if _, err := fmt.Fprintf(w, "    ;REMEMBER\n"); err != nil {
+				return err
+			}
+		}
+		for _, operand := range stmt.Operands.([]Stashable) {
+			switch v := operand.(type) {
+			case Var16:
+				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%vrbl* @onespot%d,i32 0,i32 0)\n", flag, v); err != nil {
+					return err
+				}
+			case Var32:
+				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%vrbl* @twospot%d,i32 0,i32 0)\n", flag, v); err != nil {
+					return err
+				}
+			case Array16:
+				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%arr_vrbl* @tail%d,i32 0,i32 0)\n", flag, v); err != nil {
+					return err
+				}
+			case Array32:
+				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%arr_vrbl* @hybrid%d,i32 0,i32 0)\n", flag, v); err != nil {
+					return err
+				}
+			default:
+				panic("Ignore/Remember")
+			}
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n    br label %%stmt%d\n", redoLabel, redoDoneLabel, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+
 	case StatementAbstainLabel, StatementAbstainGerundList, StatementReinstateLabel, StatementReinstateGerundList:
 		flag := 1
 		if stmt.Type == StatementReinstateLabel || stmt.Type == StatementReinstateGerundList {
@@ -533,9 +571,82 @@ func codeGenExpr(w io.Writer, stmt *Statement, expr Expr, labelCounter int) (int
 		return labelCounter, ident, nil
 	}
 
-	//...
 	ident := fmt.Sprintf("%%expr.%d.%d", stmt.Index, labelCounter)
 	labelCounter++
+	switch e := expr.(type) {
+	case Var16:
+		//...
+
+	case Var32:
+		//...
+
+	case ArrayElement:
+		//...
+
+	case ExprConst:
+		panic("ExprConst")
+
+	case ExprMingle:
+		labelCounter2, leftIdent, err := codeGenExpr(w, stmt, e[0], labelCounter)
+		if err != nil {
+			return 0, "", err
+		}
+		labelCounter3, rightIdent, err := codeGenExpr(w, stmt, e[1], labelCounter2)
+		if err != nil {
+			return 0, "", err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = call %%val @op_mingle(%%val %s,%%val %s)\n", ident, leftIdent, rightIdent); err != nil {
+			return 0, "", err
+		}
+		return labelCounter3, ident, nil
+
+	case ExprSelect:
+		labelCounter2, leftIdent, err := codeGenExpr(w, stmt, e[0], labelCounter)
+		if err != nil {
+			return 0, "", err
+		}
+		labelCounter3, rightIdent, err := codeGenExpr(w, stmt, e[1], labelCounter2)
+		if err != nil {
+			return 0, "", err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = call %%val @op_select(%%val %s,%%val %s)\n", ident, leftIdent, rightIdent); err != nil {
+			return 0, "", err
+		}
+		return labelCounter3, ident, nil
+
+	case ExprAnd:
+		newLabelCounter, operandIdent, err := codeGenExpr(w, stmt, e[0], labelCounter)
+		if err != nil {
+			return 0, "", err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = call %%val @op_and(%%val %s)\n", ident, operandIdent); err != nil {
+			return 0, "", err
+		}
+		return newLabelCounter, ident, nil
+
+	case ExprOr:
+		newLabelCounter, operandIdent, err := codeGenExpr(w, stmt, e[0], labelCounter)
+		if err != nil {
+			return 0, "", err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = call %%val @op_or(%%val %s)\n", ident, operandIdent); err != nil {
+			return 0, "", err
+		}
+		return newLabelCounter, ident, nil
+
+	case ExprXor:
+		newLabelCounter, operandIdent, err := codeGenExpr(w, stmt, e[0], labelCounter)
+		if err != nil {
+			return 0, "", err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = call %%val @op_xor(%%val %s)\n", ident, operandIdent); err != nil {
+			return 0, "", err
+		}
+		return newLabelCounter, ident, nil
+
+	default:
+		panic("Expr")
+	}
 	if _, err := fmt.Fprintf(w, "    %s = select i1 1, %%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1), %%val zeroinitializer\n", ident); err != nil {
 		return 0, "", nil
 	}
