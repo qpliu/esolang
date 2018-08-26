@@ -195,9 +195,8 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		ident1 := fmt.Sprintf("%%abstainptr%d.%d", stmt.Index, labelCounter)
 		ident2 := fmt.Sprintf("%%abstain%d.%d", stmt.Index, labelCounter+1)
 		label1 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
-		label2 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+3)
-		labelCounter += 4
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1], [%d x i1]* @abstain_flags,i32 0,i32 %d\n    %s = load i1, i1* %s\n    br i1 %s, label %%%s, label %%%s\n  %s:\n    br label %%stmt%d\n  %s:\n", ident1, len(statements)+1, len(statements)+1, stmt.Index, ident2, ident1, ident2, label1, label2, label1, stmt.Index+1, label2); err != nil {
+		labelCounter += 3
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1], [%d x i1]* @abstain_flags,i32 0,i32 %d\n    %s = load i1, i1* %s\n    br i1 %s, label %%stmt%d, label %%%s\n  %s:\n", ident1, len(statements)+1, len(statements)+1, stmt.Index, ident2, ident1, ident2, stmt.Index+1, label1, label1); err != nil {
 			return err
 		}
 	}
@@ -246,13 +245,36 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 
-		//... treat everything as %100 for now
 		countLimitIdent := fmt.Sprintf("%%countcheck%d.%d", stmt.Index, labelCounter)
-		labelCounter++
-		if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s, 1\n    br i1 %s, label %%%s, label %%%s\n  %s:\n", countLimitIdent, countIdent, countLimitIdent, startStmtLabel, redoDoneLabel, startStmtLabel); err != nil {
+		randomCheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+		if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s, %d\n    br i1 %s, label %%%s, label %%%s\n  %s:\n", countLimitIdent, countIdent, stmt.Chance/100, countLimitIdent, startStmtLabel, randomCheckLabel, randomCheckLabel); err != nil {
 			return err
 		}
 
+		if stmt.Chance%100 == 0 {
+			if _, err := fmt.Fprintf(w, "    br label %%%s\n", redoDoneLabel); err != nil {
+				return err
+			}
+		} else {
+			issecondRandomCheckIdent := fmt.Sprintf("%%issecondrandomcheck%d.%d", stmt.Index, labelCounter)
+			firstRandomCheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+			labelCounter += 2
+			if _, err := fmt.Fprintf(w, "    %s = icmp ugt i32 %s, %d\n    br i1 %s, label %%%s, label %%%s\n  %s:\n", issecondRandomCheckIdent, countIdent, stmt.Chance/100, issecondRandomCheckIdent, redoDoneLabel, firstRandomCheckLabel, firstRandomCheckLabel); err != nil {
+				return err
+			}
+			randomCheckResult := fmt.Sprintf("%%randomcheck%d.%d", stmt.Index, labelCounter)
+			labelCounter++
+			doneLabel := redoDoneLabel
+			if stmt.Chance <= 100 {
+				doneLabel = fmt.Sprintf("stmt%d", stmt.Index+1)
+			}
+			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 %d)\n    br i1 %s, label %%%s, label %%%s\n", randomCheckResult, 10*(stmt.Chance%100), randomCheckResult, startStmtLabel, doneLabel); err != nil {
+			}
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n", startStmtLabel); err != nil {
+			return err
+		}
 	}
 
 	if stmt.Error != nil {
@@ -359,6 +381,32 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "  %s:\n    call void @exit(i32 0) noreturn\n    br label %%stmt%d\n", redoDoneLabel, stmt.Index+1); err != nil {
+			return err
+		}
+
+	case StatementReadOut:
+		if _, err := fmt.Fprintf(w, "    ;READ OUT\n"); err != nil {
+			return err
+		}
+		for _, arg := range stmt.Operands.([]ReadOutable) {
+			newLabelCounter, exprIdent, err := codeGenExpr(w, stmt, arg, labelCounter)
+			if err != nil {
+				return err
+			}
+			labelCounter = newLabelCounter
+			if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", exprIdent, nextIndex(stmt, statements)); err != nil {
+				return err
+			}
+			valIdent := fmt.Sprintf("%%val%d.%d", stmt.Index, labelCounter)
+			labelCounter++
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s, 1\n    call void @output(i32 %s)\n", valIdent, exprIdent, valIdent); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s\n", redoLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, nextIndex(stmt, statements)); err != nil {
 			return err
 		}
 

@@ -52,7 +52,7 @@ func testCodeGen(t *testing.T, srcFile string) {
 	}
 
 	inFile := filepath.Join("testdata", srcFile) + ".in"
-	if _, err := os.Stat(outFile); err != nil {
+	if _, err := os.Stat(inFile); err != nil {
 		cmd = fmt.Sprintf("%s 2>&1 | diff -q %s -", tmpFile, outFile)
 	} else {
 		cmd = fmt.Sprintf("%s < %s 2>&1 | diff -q %s -", tmpFile, inFile, outFile)

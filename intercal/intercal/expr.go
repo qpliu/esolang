@@ -45,6 +45,7 @@ type Dimensionable interface {
 }
 
 type ReadOutable interface {
+	Expr
 	ReadOut(state *State, w io.Writer) *Error
 }
 
