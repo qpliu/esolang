@@ -19,6 +19,14 @@ declare i32 @llvm.ctpop.i32(i32)
 ; tag=3 used for error 000 and 579
 %val = type {i2,i32}
 
+; ignore flag, value linked-list
+%vrbl = type {i1,%vrbl_val*}
+%vrbl_val = type {%vrbl_val*,i32}
+
+%arr_vrbl = type {i1,%arr_val*}
+; in the [0 x i32], 0 is n, the number of dimensions, 1..n are the dimensions, n+1... are the values
+%arr_val = type {%arr_val*,[0 x i32]}
+
 @stack = global [79 x i8*] zeroinitializer
 @stackptr = global i32 0
 

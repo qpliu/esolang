@@ -135,8 +135,10 @@ func CodeGen(statements []*Statement, w io.Writer) error {
 		}
 	}
 
-	//...
-	//... globals for variables and arrays
+	// globals for variables and arrays
+	if err := codeGenVariables(w, statements); err != nil {
+		return err
+	}
 
 	// void @main()
 	if _, err := fmt.Fprintf(w, "define void @main() {\n    call i32 @write(i32 1, i8* getelementptr([%d x i8],[%d x i8]* @program_listing,i32 0,i32 0),i32 %d)\n    %%random_seed = call i32 @time(i8* null)\n    call void @srandom(i32 %%random_seed)\n    br label %%stmt0\n", listingSize+4, listingSize+4, listingSize); err != nil {
@@ -538,4 +540,178 @@ func codeGenExpr(w io.Writer, stmt *Statement, expr Expr, labelCounter int) (int
 		return 0, "", nil
 	}
 	return labelCounter, ident, nil
+}
+
+func codeGenVariables(w io.Writer, statements []*Statement) error {
+	onespots := make(map[Var16]bool)
+	twospots := make(map[Var32]bool)
+	tails := make(map[Array16]bool)
+	hybrids := make(map[Array32]bool)
+	for _, stmt := range statements {
+		collectStmtVariables(stmt, onespots, twospots, tails, hybrids)
+	}
+	for v, _ := range onespots {
+		if _, err := fmt.Fprintf(w, "@onespot%d = global %%vrbl zeroinitializer\n", v); err != nil {
+			return err
+		}
+	}
+	for v, _ := range twospots {
+		if _, err := fmt.Fprintf(w, "@twospot%d = global %%vrbl zeroinitializer\n", v); err != nil {
+			return err
+		}
+	}
+	for v, _ := range tails {
+		if _, err := fmt.Fprintf(w, "@tail%d = global %%arr_vrbl zeroinitializer\n", v); err != nil {
+			return err
+		}
+	}
+	for v, _ := range hybrids {
+		if _, err := fmt.Fprintf(w, "@hybrid%d = global %%arr_vrbl zeroinitializer\n", v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func collectStmtVariables(stmt *Statement, onespots map[Var16]bool, twospots map[Var32]bool, tails map[Array16]bool, hybrids map[Array32]bool) {
+	switch stmt.Type {
+	case StatementCalculate:
+		calculation := stmt.Operands.(Calculation)
+		switch lhs := calculation.LHS.(type) {
+		case Var16:
+			onespots[lhs] = true
+		case Var32:
+			twospots[lhs] = true
+		case ArrayElement:
+			switch arr := lhs.Array.(type) {
+			case Array16:
+				tails[arr] = true
+			case Array32:
+				hybrids[arr] = true
+			default:
+				panic("Calculate")
+			}
+			for _, expr := range lhs.Index {
+				collectExprVariables(expr, onespots, twospots, tails, hybrids)
+			}
+		default:
+			panic("Calculate")
+		}
+		collectExprVariables(calculation.RHS, onespots, twospots, tails, hybrids)
+	case StatementCalculateArrayDimension:
+		dim := stmt.Operands.(Dimensioning)
+		switch lhs := dim.LHS.(type) {
+		case Array16:
+			tails[lhs] = true
+		case Array32:
+			hybrids[lhs] = true
+		default:
+			panic("ArrayDimension")
+		}
+		for _, expr := range dim.RHS {
+			collectExprVariables(expr, onespots, twospots, tails, hybrids)
+		}
+	case StatementForget, StatementResume:
+		collectExprVariables(stmt.Operands.(Expr), onespots, twospots, tails, hybrids)
+	case StatementStash, StatementRetrieve, StatementIgnore, StatementRemember:
+		for _, arg := range stmt.Operands.([]Stashable) {
+			switch v := arg.(type) {
+			case Var16:
+				onespots[v] = true
+			case Var32:
+				twospots[v] = true
+			case Array16:
+				tails[v] = true
+			case Array32:
+				hybrids[v] = true
+			default:
+				panic("Stash")
+			}
+		}
+	case StatementWriteIn:
+		for _, arg := range stmt.Operands.([]WriteInable) {
+			switch v := arg.(type) {
+			case Var16:
+				onespots[v] = true
+			case Var32:
+				twospots[v] = true
+			case ArrayElement:
+				switch arr := v.Array.(type) {
+				case Array16:
+					tails[arr] = true
+				case Array32:
+					hybrids[arr] = true
+				default:
+					panic("WriteIn")
+				}
+				for _, expr := range v.Index {
+					collectExprVariables(expr, onespots, twospots, tails, hybrids)
+				}
+			case Array16:
+				tails[v] = true
+			case Array32:
+				hybrids[v] = true
+			default:
+				panic("WriteIn")
+			}
+		}
+	case StatementReadOut:
+		for _, arg := range stmt.Operands.([]ReadOutable) {
+			switch v := arg.(type) {
+			case Var16:
+				onespots[v] = true
+			case Var32:
+				twospots[v] = true
+			case ArrayElement:
+				switch arr := v.Array.(type) {
+				case Array16:
+					tails[arr] = true
+				case Array32:
+					hybrids[arr] = true
+				default:
+					panic("ReadOut")
+				}
+				for _, expr := range v.Index {
+					collectExprVariables(expr, onespots, twospots, tails, hybrids)
+				}
+			case ExprConst:
+			default:
+				panic("ReadOut")
+			}
+		}
+	}
+}
+
+func collectExprVariables(expr Expr, onespots map[Var16]bool, twospots map[Var32]bool, tails map[Array16]bool, hybrids map[Array32]bool) {
+	switch e := expr.(type) {
+	case Var16:
+		onespots[e] = true
+	case Var32:
+		twospots[e] = true
+	case ArrayElement:
+		switch arr := e.Array.(type) {
+		case Array16:
+			tails[arr] = true
+		case Array32:
+			hybrids[arr] = true
+		default:
+			panic("Expr")
+		}
+		for _, expr := range e.Index {
+			collectExprVariables(expr, onespots, twospots, tails, hybrids)
+		}
+	case ExprConst:
+	case ExprMingle:
+		collectExprVariables(e[0], onespots, twospots, tails, hybrids)
+		collectExprVariables(e[1], onespots, twospots, tails, hybrids)
+	case ExprSelect:
+		collectExprVariables(e[0], onespots, twospots, tails, hybrids)
+		collectExprVariables(e[1], onespots, twospots, tails, hybrids)
+	case ExprAnd:
+		collectExprVariables(e[0], onespots, twospots, tails, hybrids)
+	case ExprOr:
+		collectExprVariables(e[0], onespots, twospots, tails, hybrids)
+	case ExprXor:
+		collectExprVariables(e[0], onespots, twospots, tails, hybrids)
+	}
 }
