@@ -29,6 +29,10 @@ type Expr interface {
 
 type LValue interface {
 	Gets(state *State, value uint32, is16 bool) *Error
+	Ignoredable
+}
+
+type Ignoredable interface {
 	Ignored(state *State) bool
 }
 
@@ -37,11 +41,12 @@ type Stashable interface {
 	Retrieve(state *State) *Error
 	Ignore(state *State)
 	Remember(state *State)
-	Ignored(state *State) bool
+	Ignoredable
 }
 
 type Dimensionable interface {
 	Dimension(state *State, dimensions []int) *Error
+	Ignoredable
 }
 
 type ReadOutable interface {
@@ -51,7 +56,7 @@ type ReadOutable interface {
 
 type WriteInable interface {
 	WriteIn(state *State, r *IntercalReader) *Error
-	Ignored(state *State) bool
+	Ignoredable
 }
 
 type Array16 uint16

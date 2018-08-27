@@ -287,6 +287,32 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 	}
 
 	switch stmt.Type {
+	case StatementCalculate:
+		if _, err := fmt.Fprintf(w, "    ;CALCULATE\n"); err != nil {
+			return err
+		}
+		calc := stmt.Operands.(Calculation)
+		if newLabelCounter, ignoredIdent, err := codeGenCheckIgnored(w, stmt, calc.LHS, labelCounter); err != nil {
+			return err
+		} else {
+			labelCounter = newLabelCounter
+			notignoredLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+			labelCounter++
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n  %s:\n", ignoredIdent, redoLabel, notignoredLabel, notignoredLabel); err != nil {
+				return err
+			}
+		}
+		if newLabelCounter, rhsIdent, err := codeGenExpr(w, stmt, calc.RHS, labelCounter); err != nil {
+			return err
+		} else if newNewLabelCounter, err := codeGenGets(w, stmt, calc.LHS, rhsIdent, redoLabel, newLabelCounter); err != nil {
+			return err
+		} else {
+			labelCounter = newNewLabelCounter
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+
 	case StatementNext:
 		stackptrIdent := fmt.Sprintf("%%stackptr%d.%d", stmt.Index, labelCounter)
 		stackptrCheckIdent := fmt.Sprintf("%%stackptrcheck%d.%d", stmt.Index, labelCounter+1)
@@ -1105,4 +1131,133 @@ func codeGenFindArrayElement(w io.Writer, stmt *Statement, boundsErrorLabel stri
 		return 0, nil, "", err
 	}
 	return labelCounter, indexIdentSrcLabels, arrayelementptrIdent, nil
+}
+
+// returns newLabelCounter, ignoredIdent(i1), error
+func codeGenCheckIgnored(w io.Writer, stmt *Statement, ignoredable Ignoredable, labelCounter int) (int, string, error) {
+	vIdent := ""
+	vType := ""
+	switch v := ignoredable.(type) {
+	case Array16:
+		vIdent = fmt.Sprintf("@tail%d", v)
+		vType = "%arr_vrbl"
+	case Array32:
+		vIdent = fmt.Sprintf("@hybrid%d", v)
+		vType = "%arr_vrbl"
+	case Var16:
+		vIdent = fmt.Sprintf("@onespot%d", v)
+		vType = "%vrbl"
+	case Var32:
+		vIdent = fmt.Sprintf("@twospot%d", v)
+		vType = "%vrbl"
+	case ArrayElement:
+		return codeGenCheckIgnored(w, stmt, v.Array, labelCounter)
+	default:
+		panic("CheckIgnored")
+	}
+
+	ignoredptrIdent := fmt.Sprintf("%%ignoredptr%d.%d", stmt.Index, labelCounter)
+	ignoredIdent := fmt.Sprintf("%%ignored%d.%d", stmt.Index, labelCounter+1)
+	labelCounter += 2
+	if _, err := fmt.Fprintf(w, "    %s = getelementptr %s, %s* %s, i32 0, i32 0\n", ignoredptrIdent, vType, vType, vIdent); err != nil {
+		return 0, "", nil
+	}
+	if _, err := fmt.Fprintf(w, "    %s = load i1,i1* %s\n", ignoredIdent, ignoredptrIdent); err != nil {
+		return 0, "", nil
+	}
+
+	return labelCounter, ignoredIdent, nil
+}
+
+func codeGenGets(w io.Writer, stmt *Statement, lhs LValue, rhsIdent string, doneLabel string, labelCounter int) (int, error) {
+	switch lhs.(type) {
+	case Var16, Var32:
+		if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", rhsIdent, stmt.Index+1); err != nil {
+			return 0, err
+		}
+
+		rhsvaluei32Ident := fmt.Sprintf("%%rhsvaluei32%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1\n", rhsvaluei32Ident, rhsIdent); err != nil {
+			return 0, err
+		}
+
+		vIdent := ""
+		if _, ok := lhs.(Var32); ok {
+			vIdent = fmt.Sprintf("@twospot%d", lhs)
+		} else {
+			vIdent = fmt.Sprintf("@onespot%d", lhs)
+			//... do range check: if rhs.tag == 1 && rhs.value >=65535, fatal_error 275
+		}
+		valueptrptrIdent := fmt.Sprintf("%%valueptrptr%d.%d", stmt.Index, labelCounter)
+		valueptrIdent := fmt.Sprintf("%%valueptr%d.%d", stmt.Index, labelCounter+1)
+		valueptrisnullIdent := fmt.Sprintf("%%valueptrisnull%d.%d", stmt.Index, labelCounter+2)
+		labelCounter += 3
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl, %%vrbl* %s,i32 0,i32 1\n", valueptrptrIdent, vIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = load %%vrbl_val*, %%vrbl_val** %s\n", valueptrIdent, valueptrptrIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = icmp eq %%vrbl_val* %s,null\n", valueptrisnullIdent, valueptrIdent); err != nil {
+			return 0, err
+		}
+		valueptrisnullLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+		valueptrnotnullLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", valueptrisnullIdent, valueptrisnullLabel, valueptrnotnullLabel); err != nil {
+			return 0, err
+		}
+
+		storevalueLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%%s\n", valueptrnotnullLabel, storevalueLabel); err != nil {
+			return 0, err
+		}
+
+		// malloc new value
+		mallocresultIdent := fmt.Sprintf("%%mallocresult%d.%d", stmt.Index, labelCounter)
+		newvalueptrIdent := fmt.Sprintf("%%newvalueptr%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = call i8* @malloc(i32 ptrtoint(%%vrbl_val* getelementptr(%%vrbl_val,%%vrbl_val* null,i32 1) to i32))\n", valueptrisnullLabel, mallocresultIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    call void @llvm.memset.p0i8.i32(i8* %s,i8 0,i32 ptrtoint(%%vrbl_val* getelementptr(%%vrbl_val,%%vrbl_val* null,i32 1) to i32),i32 0,i1 0)\n", mallocresultIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = bitcast i8* %s to %%vrbl_val*\n", newvalueptrIdent, mallocresultIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    store %%vrbl_val* %s, %%vrbl_val** %s\n", newvalueptrIdent, valueptrptrIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s\n", storevalueLabel); err != nil {
+			return 0, err
+		}
+
+		// store value
+		finalvalueptrIdent := fmt.Sprintf("%%finalvalueptr%d.%d", stmt.Index, labelCounter)
+		finalvaluei32ptrIdent := fmt.Sprintf("%%finalvaluei32ptr%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = phi %%vrbl_val* [%s,%%%s],[%s,%%%s]\n", storevalueLabel, finalvalueptrIdent, valueptrIdent, valueptrnotnullLabel, newvalueptrIdent, valueptrisnullLabel); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl_val, %%vrbl_val* %s, i32 0, i32 1\n", finalvaluei32ptrIdent, finalvalueptrIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    store i32 %s,i32* %s\n    br label %%%s\n", rhsvaluei32Ident, finalvaluei32ptrIdent, doneLabel); err != nil {
+			return 0, err
+		}
+		return labelCounter, nil
+
+	case ArrayElement:
+		//...
+		if _, err := fmt.Fprintf(w, "    ; not implemented yet\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n    br label %%%s\n", stmt.Index+1, doneLabel); err != nil {
+			return 0, err
+		}
+		return labelCounter, nil
+
+	default:
+		panic("Gets")
+	}
 }

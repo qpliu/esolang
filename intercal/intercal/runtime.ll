@@ -9,7 +9,7 @@ declare void @srandom(i32)
 declare i32 @random()
 declare i32 @time(i8*)
 declare void @llvm.memcpy.p0i8.p0i8.i32(i8*, i8*, i32, i1)
-declare i32 @llvm.ctpop.i32(i32)
+declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i32, i1)
 
 ; tag, value
 ; tag=0 16-bit value

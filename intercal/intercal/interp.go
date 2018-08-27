@@ -132,6 +132,10 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 
 	case StatementCalculateArrayDimension:
 		dim := stmt.Operands.(Dimensioning)
+		if dim.LHS.Ignored(s) {
+			s.StatementIndex = stmt.Index + 1
+			return nil
+		}
 		dims := []int{}
 		for _, e := range dim.RHS {
 			v, _, err := e.Eval(s)
