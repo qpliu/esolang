@@ -23,7 +23,7 @@ var (
 	Err562 = &Error{562, "Insufficient data.", "I DO NOT COMPUTE", nil, 0}
 	Err579 = &Error{579, "Input data is invalid.", "", nil, 0}
 	Err621 = &Error{621, "The expression of a RESUME statement evaluated to #0.", "ERROR TYPE 621 ENCOUNTERED", nil, 0}
-	Err632 = &Error{632, "Program execution was terminated via a RESUME statement instead of GIVE UP.", "THE NEXT STACK RUPTURES.  ALL DIE.  OH, THE EMBARRASSMENT!", nil, 0}
+	Err632 = &Error{632, "Program execution was terminated via a RESUME statement instead of GIVE UP.", "PROGRAM ATTEMPTED TO EXIT WITHOUT ERROR MESSAGE", nil, 0}
 	Err633 = &Error{633, "Execution has passed beyond the last statement of the program.", "PROGRAM FELL OFF THE EDGE", nil, 0}
 	Err774 = &Error{774, "A compiler error has occurred (see section 8.1).", "RANDOM COMPILER BUG", nil, 0}
 	Err778 = &Error{778, "An unexplainable compiler error has occurred (see J. Lyon or B. Woods).", "UNEXPLAINED COMPILER BUG", nil, 0}

@@ -530,7 +530,7 @@ func (e ExprMingle) ConstValue() (uint32, bool, bool) {
 	if !lIsConst || l >= 65536 || !rIsConst || r >= 65536 {
 		return 0, true, false
 	}
-	return OpMingle(l, r), true, true
+	return OpMingle(l, r), false, true
 }
 
 type ExprSelect [2]Expr

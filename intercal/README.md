@@ -109,7 +109,7 @@ all array elements contain 0.
 The C-INTERCAL documentation says that spaces cannot be added inside a
 decimal number in an INTERCAL program.  This restriction is not in the
 1973 document or the 1996 document, so this implementation allows spaces
-inside numbers.
+(and line breaks) inside numbers.
 
 Since section 4.4.11 says that PLEASE GIVE UP has the effect of a PLEASE
 RESUME #80, this implementation will never produce error 632.  On second
@@ -151,7 +151,10 @@ INTERLAC is an attempt to implement a compiler.
 ## Notes on compiler implementation
 Use the COMPILAC parser.
 
-Generate LLVM assembly.  Don't want to deal with LLVM bindings.
+Generate LLVM assembly.  Don't want to deal with LLVM bindings.  Developed
+with LLVM version 5.  Probably needs minimal changes for later LLVM versions.
+For example, `@llvm.memset.p018.i32` drops the 4th argument at some later
+version (somewhere from LLVM version 6 to LLVM version 8).
 
 All code generation goes into @main.  There may be other runtime functions.
 

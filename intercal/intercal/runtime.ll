@@ -2118,3 +2118,88 @@ define void @finish_fatal_error(i8* %message, i32 %message_len, i8* %stmt_number
     call void @exit(i32 1) noreturn
     ret void
 }
+
+define void @stash_var(%vrbl* %var) {
+    %storeval_ptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
+
+    %mallocresult = call i8* @malloc(i32 ptrtoint(%vrbl_val* getelementptr(%vrbl_val,%vrbl_val* null,i32 1) to i32))
+    call void @llvm.memset.p0i8.i32(i8* %mallocresult,i8 0,i32 ptrtoint(%vrbl_val* getelementptr(%vrbl_val,%vrbl_val* null,i32 1) to i32),i32 0,i1 0)
+    %newval = bitcast i8* %mallocresult to %vrbl_val*
+
+    %oldvalptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
+    %oldval = load %vrbl_val*,%vrbl_val** %oldvalptr
+    %oldval_isnull = icmp eq %vrbl_val* %oldval, null
+    br i1 %oldval_isnull,label %stash_uninitialized,label %push_newval
+
+  stash_uninitialized:
+    store %vrbl_val* %newval,%vrbl_val** %storeval_ptr
+    call void @stash_var(%vrbl* %var)
+    ret void
+
+  push_newval:
+    %oldi32valptr = getelementptr %vrbl_val,%vrbl_val* %oldval,i32 0,i32 1
+    %oldi32val = load i32,i32* %oldi32valptr
+    %newvallinkptr = getelementptr %vrbl_val,%vrbl_val* %newval,i32 0,i32 0
+    store %vrbl_val* %oldval,%vrbl_val** %newvallinkptr
+    %newi32valptr = getelementptr %vrbl_val,%vrbl_val* %newval,i32 0,i32 1
+    store i32 %oldi32val,i32* %newi32valptr
+    br label %store_newval
+
+  store_newval:
+    store %vrbl_val* %newval,%vrbl_val** %storeval_ptr
+    ret void
+}
+
+define void @stash_arr(%arr_vrbl* %arr) {
+    ;...
+    ; if uninitialized, push 0-dim value to distinguish from unstashed
+    ret void
+}
+
+define i1 @retrieve_var(%vrbl* %var) {
+    %storeval_ptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
+
+    %valptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
+    %val = load %vrbl_val*,%vrbl_val** %valptr
+    %val_isnull = icmp eq %vrbl_val* %val, null
+    br i1 %val_isnull,label %retfail,label %checkval
+
+  checkval:
+    %valnextptr = getelementptr %vrbl_val,%vrbl_val* %val,i32 0,i32 0
+    %valnext = load %vrbl_val*,%vrbl_val** %valnextptr
+    %valnext_isnull = icmp eq %vrbl_val* %valnext, null
+    br i1 %valnext_isnull,label %retfail,label %dopop
+
+  dopop:
+    store %vrbl_val* %valnext,%vrbl_val** %storeval_ptr
+    %val_addr = bitcast %vrbl_val* %val to i8*
+    call void @free(i8* %val_addr)
+    ret i1 true
+
+  retfail:
+    ret i1 false
+}
+
+define i1 @retrieve_arr(%arr_vrbl* %arr) {
+    %storeval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+
+    %valptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %val = load %arr_val*,%arr_val** %valptr
+    %val_isnull = icmp eq %arr_val* %val, null
+    br i1 %val_isnull,label %retfail,label %checkval
+
+  checkval:
+    %valnextptr = getelementptr %arr_val,%arr_val* %val,i32 0,i32 0
+    %valnext = load %arr_val*,%arr_val** %valnextptr
+    %valnext_isnull = icmp eq %arr_val* %valnext, null
+    br i1 %valnext_isnull,label %retfail,label %dopop
+
+  dopop:
+    store %arr_val* %valnext,%arr_val** %storeval_ptr
+    %val_addr = bitcast %arr_val* %val to i8*
+    call void @free(i8* %val_addr)
+    ret i1 true
+
+  retfail:
+    ret i1 false
+}
