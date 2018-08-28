@@ -34,6 +34,7 @@ type LValue interface {
 
 type Ignoredable interface {
 	Ignored(state *State) bool
+	Is16() bool
 }
 
 type Stashable interface {
@@ -95,6 +96,10 @@ func (v Array16) Remember(state *State) {
 
 func (v Array16) Ignored(state *State) bool {
 	return state.Array16(v).Ignored
+}
+
+func (v Array16) Is16() bool {
+	return true
 }
 
 func (v Array16) Dimension(state *State, dimensions []int) *Error {
@@ -172,6 +177,10 @@ func (v Array32) Remember(state *State) {
 
 func (v Array32) Ignored(state *State) bool {
 	return state.Array32(v).Ignored
+}
+
+func (v Array32) Is16() bool {
+	return false
 }
 
 func (v Array32) Dimension(state *State, dimensions []int) *Error {
@@ -271,6 +280,10 @@ func (v Var16) Ignored(state *State) bool {
 	return state.Var16(v).Ignored
 }
 
+func (v Var16) Is16() bool {
+	return true
+}
+
 func (v Var16) ReadOut(state *State, w io.Writer) *Error {
 	Output(w, state.Var16(v).Value)
 	return nil
@@ -343,6 +356,10 @@ func (v Var32) Remember(state *State) {
 
 func (v Var32) Ignored(state *State) bool {
 	return state.Var32(v).Ignored
+}
+
+func (v Var32) Is16() bool {
+	return false
 }
 
 func (v Var32) ReadOut(state *State, w io.Writer) *Error {
@@ -450,6 +467,10 @@ func (v ArrayElement) Gets(state *State, value uint32, is16 bool) *Error {
 
 func (v ArrayElement) Ignored(state *State) bool {
 	return v.Array.Ignored(state)
+}
+
+func (v ArrayElement) Is16() bool {
+	return v.Array.Is16()
 }
 
 func (v ArrayElement) ReadOut(state *State, w io.Writer) *Error {

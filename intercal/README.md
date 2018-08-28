@@ -71,8 +71,8 @@ for binary or text I/O in newer implementations.
 
 Section 4.4.1 says 16-bit variables can only get 32-bit values if the
 value is less than 65535.  Presumably they can get a 16-bit value equal
-to 65535.  This bizarre restriction remains in the 1996 document, so
-this implementation will enforce it.
+to 65535.  This bizarre restriction remains in the 1996 document.  This
+implementation will enforce it.
 
 This implementation treats a spark or a rabbit-ears that immediately
 follows a binary operator or is immediately followed by a unary operator
@@ -124,7 +124,9 @@ documented, the error messages are taken from the C-INTERCAL documentation,
 with the exception of error 579 when WRITING IN an empty line, which is
 "WHAT YOU WRITE DOES NOT COUNT" in this implementation.  On second
 thought, an empty line shall result in error 562, instead of inventing
-messages that are not in any of the documents.
+messages that are not in any of the documents.  Some research shows that
+the message for error 632 in C-INTERCAL differs from the message in the
+1972 implementation, so this implementation will use the latter message.
 
 Since section 7.1 does not say what the second line of an error message is
 when there is no next statement, this implementation will have "ON THE
