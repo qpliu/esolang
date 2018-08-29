@@ -323,4 +323,12 @@ func TestParseExpr(t *testing.T) {
 	testParseExpr(t, "’⊻,1SUB#1#1¢#1’~’#0¢#65535’", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
 	testParseExpr(t, "'?\",1SUB#1#1\"$#1'~'#0$#65535'", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
 	testParseExpr(t, "’∀,1SUB#1#1¢#1’~’#0¢#65535’", ExprSelect{ExprXor{ExprMingle{ArrayElement{Array16(1), []Expr{ExprConst(1), ExprConst(1)}}, ExprConst(1)}}, ExprMingle{ExprConst(0), ExprConst(65535)}})
+
+	testParseExpr(t, "\",1SUB\",2SUB#1\"#2\"", ArrayElement{Array16(1), []Expr{ArrayElement{Array16(2), []Expr{ExprConst(1)}}, ExprConst(2)}})
+	testParseExpr(t, "\",1SUB',2SUB#1'#2\"", ArrayElement{Array16(1), []Expr{ArrayElement{Array16(2), []Expr{ExprConst(1)}}, ExprConst(2)}})
+
+	testParseExpr(t, "\"?'\"!1~.1'~#1\"$#1'\"~#3", ExprSelect{ExprXor{ExprMingle{ExprSelect{ExprSelect{Var16(1), Var16(1)}, ExprConst(1)}, ExprConst(1)}}, ExprConst(3)})
+
+	testParseExpr(t, "',2SUB.1\".2~.3\"'~#1", ExprSelect{ArrayElement{Array16(2), []Expr{Var16(1), ExprSelect{Var16(2), Var16(3)}}}, ExprConst(1)})
+	testParseExpr(t, ",3SUB\",2SUB.1'.2~.3'\".4", ArrayElement{Array16(3), []Expr{ArrayElement{Array16(2), []Expr{Var16(1), ExprSelect{Var16(2), Var16(3)}}}, Var16(4)}})
 }

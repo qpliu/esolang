@@ -1,23 +1,21 @@
-COMPILAC is an attempt to implement an interpreter of the programming
-language as described by
-http://www.muppetlabs.com/~breadbox/intercal/intercal.txt
+This is an implementation of the INTERCAL programming language
+described by  http://www.muppetlabs.com/~breadbox/intercal/intercal.txt
 with the exception of using Unicode instead of EBCDIC.
 
-Also, the implementation attempts to follow the 1973 document in
+COMPILAC is an interpreter.
+
+INTERLAC is a compiler, which targets LLVM version 5.  It probably needs
+only minimal changes for later LLVM versions.  For example,
+`@llvm.memset.p0i8.i32` and `@llvm.memcpy.p0i8.p0i8.i32` drop their align
+arguments at some later version (somewhere from LLVM version 6 to LLVM
+version 8).
+
+This implementation attempts to follow the 1973 document in
 preference to any later changes or additions.  As the 1973 document
 references the Atari Implementation, it probably includes revisions
 from the 1980s.  It seems reasonable to me to assume that these
 revisions are limited to the Notes On The Atari Implementation and
 the ASCII entries in the character set table.
-
-I will try to avoid looking at other implementations until the
-implementation is reasonably complete so that it will be based on
-the documents rather than how another implementation did it.
-
-Known Bugs
-----------
-The expression parser fails to parse some (many or most) complicated
-expressions.
 
 Notes
 -----
@@ -138,6 +136,11 @@ not receiving the input, so that it gets received by the next not IGNOREd
 variable that is inputted into, as opposed to taking and discarding the
 input and having to decide how to handle erroneous input.
 
+Section 4.4.7 says all subsequent statements have no effect on the
+variables and/or arrays.  That means STASH and RETRIEVE do nothing to
+them.  Apparently, in J-INTERCAL and CLC-INTERCAL, STASH and RETRIEVE do
+have effects on IGNOREd variables, which seems incorrect to me.
+
 The INTERCAL System Library described in sections 5 and 6 is not
 included with this implementation.  It's probably a copyright violation
 to include it.  An optimized INTERCAL System Library implementation
@@ -145,61 +148,3 @@ would behave differently from an INTERCAL implementation when ABSTAIN or
 IGNORE are used or when operating close to the RESUME stack limit.
 Perhaps a future version of this implementation will include such an
 optimized INTERCAL System Library.
-
-Compiler
---------
-INTERLAC is an attempt to implement a compiler.
-
-## Notes on compiler implementation
-Use the COMPILAC parser.
-
-Generate LLVM assembly.  Don't want to deal with LLVM bindings.  Developed
-with LLVM version 5.  Probably needs minimal changes for later LLVM versions.
-For example, `@llvm.memset.p0i8.i32` and `@llvm.memcpy.p0i8.p0i8.i32` drop
-their align arguments at some later version (somewhere from LLVM version 6
-to LLVM version 8).
-
-All code generation goes into @main.  There may be other runtime functions.
-
-Global variables include an ABSTAIN array [n x i1], a NEXT stack [79 x i8*],
-a NEXT stack pointer i8, one for each variable and array referenced in
-the program, a buffer [5 x i8] for WRITE IN.  These don't have to be globals.
-They could be allocaed in @main (or, for WRITE IN, in the runtime function).
-
-Each statement will have an entry LLVM label that will be used by the NEXT
-stack and other statements.  All other LLVM labels in the statement will
-be private to the statement.  The statement code has the abstain check and
-the chance check if necessary.
-
-Use blockaddress for NEXT and indirectbr for RESUME.
-
-Variables will have type { i1, variable_data* }, where the flag is the IGNORE
-flag.  variable_data is a linked list for STASH/RETRIEVE and has type
-{ variable_data*, u32 }.
-
-Arrays will have type { i1, array_data* }, where the flag is the IGNORE
-flag.  array_data is a linked list for STASH/RETRIEVE and has type
-{ array_data*, u32, [n x u32], [0 x u32] }, where the second element is the
-number of dimensions, the third element is the dimensions (n is the maximum
-number of dimensions determined at compile time), and the fourth element is
-the array values.  It may be possible to have an array_data typedef for
-each array variable, each with its own maximum number of dimensions.
-
-Run-time values will have type { i2, u32 }, where the first value is the
-type tag where 0 is for 16-bit values, 1 is for 32 bit values, and 2
-is for most error codes, and 3 is for error code 579 that requires
-special processing.
-
-For error code 579, to avoid buffering a potentially unlimited number of
-characters for the error message, the bytes (after the first 5, which
-are buffered) will be copied byte by byte from the input file to the output
-file.
-
-An alternative to using a [5 x i8] buffer for WRITE IN could be having a
-big mess of branches on reading each character.  It wouldn't be that
-horrible, being hand-written LLVM assembly for the runtime library.
-
-Have a [n x i8] constant for the program listing, written at the start of
-execution.  Calculate offsets into it for error code 000 messages.  Also
-calculate offsets into it for line numbers for the ON THE WAY TO STATEMENT
-nnnn part of error messages.
