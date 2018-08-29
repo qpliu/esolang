@@ -4,7 +4,7 @@ with the exception of using Unicode instead of EBCDIC.
 
 COMPILAC is an interpreter.
 
-INTERLAC is a compiler, which targets LLVM version 5.  It probably needs
+INTERLAC is a compiler targeting LLVM version 5.  It probably needs
 only minimal changes for later LLVM versions.  For example,
 `@llvm.memset.p0i8.i32` and `@llvm.memcpy.p0i8.p0i8.i32` drop their align
 arguments at some later version (somewhere from LLVM version 6 to LLVM
@@ -43,9 +43,9 @@ implementation will only allow 16-bit array subscripts in order to follow
 the 1973 document, which means the parser will be complicated by having
 to distinguish between 16-bit and 32-bit expressions.
 
-It is unclear whether READING OUT or simply READING is the gerund for
+It is unclear whether `READING OUT` or simply `READING` is the gerund for
 output, so this implementation will accept both.  Similarly for
-WRITING IN versus WRITING for input.
+`WRITING IN` versus `WRITING` for input.
 
 Section 3.4.2 of the 1973 document says
 ```
@@ -54,17 +54,17 @@ Section 3.4.2 of the 1973 document says
 is 34815, which was corrected to 34915 in the 1996 document.  In this
 implementation, it evaluates to 34915.
 
-Section 4.4.12 says that the elements in the WRITE IN list are separated
+Section 4.4.12 says that the elements in the `WRITE IN` list are separated
 by intersections.  However, section 4.4.13 does not say that the elements
-in the READ OUT list are separated by anything.  Since the list can
+in the `READ OUT` list are separated by anything.  Since the list can
 contain array elements, a separator is needed to prevent ambiguity
 due to the possibility of multidimensional arrays, so this implementation
-will require the list elements for READ OUT to be separated by
+will require the list elements for `READ OUT` to be separated by
 intersections.
 
-Section 4.4.13 also omits arrays from the READ OUT list, so this
-implementation will not support arrays in the READ OUT list despite many
-examples on the internet of READING OUT arrays.  Apparently, that is
+Section 4.4.13 also omits arrays from the `READ OUT` list, so this
+implementation will not support arrays in the `READ OUT` list despite many
+examples on the internet of `READING OUT` arrays.  Apparently, that is
 for binary or text I/O in newer implementations.
 
 Section 4.4.1 says 16-bit variables can only get 32-bit values if the
@@ -85,41 +85,41 @@ a fatal error.  For one-dimensional arrays, the only obvious
 interpretation is to read starting with subscript 1 and ending with the
 largest subscript.  For multi-dimensional arrays, the leftmost subscript
 will will run through its entire range from 1 to its largest subscript,
-then reset to 1 with the next leftmost subscript incremented to its
-next value, and similarly for all its subscripts until all the subscripts
-have are at their largest values.
+then reset and run through its entire range again with the next leftmost
+subscript incremented to its next value, and similarly for all its
+subscripts until all the subscripts have their largest values.
 
-Section 4.4.13 in the 1973 document says that #3999 reads out as MMMIM,
+Section 4.4.13 in the 1973 document says that `#3999` reads out as MMMIM,
 which is what this implementation does.  The 1996 document says that
-#3999 reads out as MMMCMXCIX, which this implementation does not.
+`#3999` reads out as MMMCMXCIX, which this implementation does not.
 
 The document does not say what happens when variables are used before
 being assigned.  It would make sense for a fatal error to occur in
-most of the cases, though not in the cases of IGNORE or REMEMBER.  Since
-none of the error messages in the document seem to refer to using an
-uninitialized variable, uninitialized variables will evaluate to 0,
-and STASHING an uninitialized variable will stash 0.  For undimensioned
-arrays, it will be a 0-dimensional array, so evaluating any element
-will result in error 241, and STASHING an undimensioned array will stash
-a 0-dimensional array.  After an array is dimensioned or redimensioned,
-all array elements contain 0.
+most of the cases, though not in the cases of `IGNORE` or `REMEMBER`.
+Since none of the error codes in the document seem to refer to using an
+uninitialized variable, uninitialized variables will evaluate to `#0`,
+and `STASHING` an uninitialized variable will stash `#0`.  Undimensioned
+arrays will be 0-dimensional arrays, so evaluating any element will result
+in error 241, and `STASHING` an undimensioned array will stash a
+0-dimensional array.  After an array is dimensioned or redimensioned, all
+the array elements contain `#0`.
 
 The C-INTERCAL documentation says that spaces cannot be added inside a
 decimal number in an INTERCAL program.  This restriction is not in the
 1973 document or the 1996 document, so this implementation allows spaces
 (and line breaks) inside numbers.
 
-Since section 4.4.11 says that PLEASE GIVE UP has the effect of a PLEASE
-RESUME #80, this implementation will never produce error 632.  On second
+Since section 4.4.11 says that `PLEASE GIVE UP` has the effect of a `PLEASE
+RESUME #80`, this implementation will never produce error 632.  On second
 thought, this implementation will produce error 632 when terminating via
-a resume statement, and PLEASE GIVE UP will be different than PLEASE
-RESUME #80, as the former will terminate without an error and the latter
+a resume statement, and `PLEASE GIVE UP` will be different than `PLEASE
+RESUME #80`, as the former will terminate without an error and the latter
 will terminate with error 632.
 
 Since the errors in section 7 does not include the actual error messages,
 and the messages for errors other than 000, 123, 275, and 436 are not
 documented, the error messages are taken from the C-INTERCAL documentation,
-with the exception of error 579 when WRITING IN an empty line, which is
+with the exception of error 579 when `WRITING IN` an empty line, which is
 "WHAT YOU WRITE DOES NOT COUNT" in this implementation.  On second
 thought, an empty line shall result in error 562, instead of inventing
 messages that are not in any of the documents.  Some research shows that
@@ -130,21 +130,21 @@ Since section 7.1 does not say what the second line of an error message is
 when there is no next statement, this implementation will have "ON THE
 WAY TO STATEMENT nnnn" in those cases so that it still follows the format.
 
-In section 4.4.7, the document says inputting into an IGNOREd variable
+In section 4.4.7, the document says inputting into an `IGNOREd` variable
 also has no effect.  This implementation interprets having no effect as
-not receiving the input, so that it gets received by the next not IGNOREd
+not receiving the input, so that it gets received by the next not `IGNOREd`
 variable that is inputted into, as opposed to taking and discarding the
 input and having to decide how to handle erroneous input.
 
 Section 4.4.7 says all subsequent statements have no effect on the
-variables and/or arrays.  That means STASH and RETRIEVE do nothing to
-them.  Apparently, in J-INTERCAL and CLC-INTERCAL, STASH and RETRIEVE do
-have effects on IGNOREd variables, which seems incorrect to me.
+variables and/or arrays.  That means `STASH` and `RETRIEVE` do nothing to
+them.  Apparently, in J-INTERCAL and CLC-INTERCAL, `STASH` and `RETRIEVE` do
+have effects on `IGNOREd` variables, which seems incorrect to me.
 
 The INTERCAL System Library described in sections 5 and 6 is not
 included with this implementation.  It's probably a copyright violation
 to include it.  An optimized INTERCAL System Library implementation
-would behave differently from an INTERCAL implementation when ABSTAIN or
-IGNORE are used or when operating close to the RESUME stack limit.
+would behave differently from an INTERCAL implementation when `ABSTAIN` or
+`IGNORE` are used or when operating close to the `RESUME` stack limit.
 Perhaps a future version of this implementation will include such an
 optimized INTERCAL System Library.
