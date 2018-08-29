@@ -108,7 +108,7 @@ func (v Array16) Dimension(state *State, dimensions []int) *Error {
 		return nil
 	}
 	if len(dimensions) == 0 {
-		return Err241
+		return Err778
 	}
 	size := 1
 	for _, dim := range dimensions {
@@ -189,7 +189,7 @@ func (v Array32) Dimension(state *State, dimensions []int) *Error {
 		return nil
 	}
 	if len(dimensions) == 0 {
-		return Err241
+		return Err778
 	}
 	size := 1
 	for _, dim := range dimensions {

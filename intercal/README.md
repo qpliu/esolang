@@ -155,8 +155,9 @@ Use the COMPILAC parser.
 
 Generate LLVM assembly.  Don't want to deal with LLVM bindings.  Developed
 with LLVM version 5.  Probably needs minimal changes for later LLVM versions.
-For example, `@llvm.memset.p018.i32` drops the 4th argument at some later
-version (somewhere from LLVM version 6 to LLVM version 8).
+For example, `@llvm.memset.p0i8.i32` and `@llvm.memcpy.p0i8.p0i8.i32` drop
+their align arguments at some later version (somewhere from LLVM version 6
+to LLVM version 8).
 
 All code generation goes into @main.  There may be other runtime functions.
 

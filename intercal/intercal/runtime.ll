@@ -8,7 +8,7 @@ declare void @exit(i32) noreturn
 declare void @srandom(i32)
 declare i32 @random()
 declare i32 @time(i8*)
-declare void @llvm.memcpy.p0i8.p0i8.i32(i8*, i8*, i32, i1)
+declare void @llvm.memcpy.p0i8.p0i8.i32(i8*, i8*, i32, i32, i1)
 declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i32, i1)
 
 ; tag, value
@@ -1462,7 +1462,7 @@ define %val @input16() {
 
   loop:
     %total = phi i32 [0, %entry], [%next_total, %next_digit_good]
-    %is_empty = phi i1 [1, %entry], [1, %next_digit_good]
+    %is_empty = phi i1 [1, %entry], [0, %next_digit_good]
     %digit_struct = call {i4,i32} @read_digit()
     %digit_tag = extractvalue {i4,i32} %digit_struct, 0
     %digit_tagis0 = icmp eq i4 %digit_tag, 0
@@ -1508,7 +1508,7 @@ define %val @input16() {
     %err = phi %val [insertvalue(%val insertvalue(%val zeroinitializer,i2 3,0),i32 579,1),%check_tag3],
                    [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 275,1),%next_digit_maybe],
                    [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 275,1),%next_digit_maybe2],
-                   [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 579,1),%read_eol],
+                   [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 562,1),%read_eol],
                    [insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 562,1),%read_eof]
     ret %val %err
 
@@ -1524,7 +1524,7 @@ define %val @input32() {
 
   loop:
     %total = phi i32 [0, %entry], [%next_total, %next_digit_good]
-    %is_empty = phi i1 [1, %entry], [1, %next_digit_good]
+    %is_empty = phi i1 [1, %entry], [0, %next_digit_good]
     %digit_struct = call {i4,i32} @read_digit()
     %digit_tag = extractvalue {i4,i32} %digit_struct, 0
     %digit_tagis0 = icmp eq i4 %digit_tag, 0
@@ -2151,8 +2151,52 @@ define void @stash_var(%vrbl* %var) {
 }
 
 define void @stash_arr(%arr_vrbl* %arr) {
-    ;...
-    ; if uninitialized, push 0-dim value to distinguish from unstashed
+    %arr_val_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %old_arr_val = load %arr_val*,%arr_val** %arr_val_ptr
+    %uninitialized = icmp eq %arr_val* %old_arr_val,null
+    br i1 %uninitialized,label %stash_uninitialized,label %push_newval
+
+  stash_uninitialized:
+    ; push 0-dim value to distinguish from unstashed
+    %zerodim_mallocresult = call i8* @malloc(i32 ptrtoint(i32* getelementptr(%arr_val,%arr_val* null,i32 0,i32 1,i32 1) to i32))
+    call void @llvm.memset.p0i8.i32(i8* %zerodim_mallocresult,i8 0,i32 ptrtoint(i32* getelementptr(%arr_val,%arr_val* null,i32 0,i32 1,i32 0) to i32),i32 0,i1 0)
+    %zerodim_arr_val = bitcast i8* %zerodim_mallocresult to %arr_val*
+    store %arr_val* %zerodim_arr_val,%arr_val** %arr_val_ptr
+    call void @stash_arr(%arr_vrbl* %arr)
+    ret void
+
+  push_newval:
+    %olddims_ptr = getelementptr %arr_val,%arr_val* %old_arr_val,i32 0,i32 1,i32 0
+    %olddims = load i32,i32* %olddims_ptr
+    %olddims_iszero = icmp eq i32 %olddims,0
+    br i1 %olddims_iszero,label %malloc_newval,label %calc_newval_size
+
+  calc_newval_size:
+    %current_dim_index = phi i32 [1,%push_newval],[%next_dim_index,%calc_next_newval_size]
+    %current_size = phi i32 [1,%push_newval],[%next_size,%calc_next_newval_size]
+    %current_mallocsize_indexminus1 = add i32 %current_size,%olddims
+    %current_mallocsize_index = add i32 %current_mallocsize_indexminus1,1
+    %current_dims_done = icmp ugt i32 %current_dim_index,%olddims
+    br i1 %current_dims_done,label %malloc_newval,label %calc_next_newval_size
+
+  calc_next_newval_size:
+    %next_dim_index = add i32 %current_dim_index,1
+    %current_dim_ptr = getelementptr %arr_val,%arr_val* %old_arr_val,i32 0,i32 1,i32 %current_dim_index
+    %current_dim = load i32,i32* %current_dim_ptr
+    %next_size = mul i32 %current_dim,%current_size
+    br label %calc_newval_size
+
+  malloc_newval:
+    %mallocsize_index = phi i32 [1,%push_newval],[%current_mallocsize_index,%calc_newval_size]
+    %mallocsize_addr = getelementptr %arr_val,%arr_val* null,i32 0, i32 1,i32 %mallocsize_index
+    %mallocsize = ptrtoint i32* %mallocsize_addr to i32
+    %mallocresult = call i8* @malloc(i32 %mallocsize)
+    %oldval_i8star = bitcast %arr_val* %old_arr_val to i8*
+    call void @llvm.memcpy.p0i8.p0i8.i32(i8* %mallocresult,i8* %oldval_i8star,i32 %mallocsize,i32 0,i1 0)
+    %new_arr_val = bitcast i8* %mallocresult to %arr_val*
+    %new_arr_val_stash_ptr = getelementptr %arr_val,%arr_val* %new_arr_val,i32 0,i32 0
+    store %arr_val* %old_arr_val,%arr_val** %new_arr_val_stash_ptr
+    store %arr_val* %new_arr_val,%arr_val** %arr_val_ptr
     ret void
 }
 
@@ -2202,4 +2246,120 @@ define i1 @retrieve_arr(%arr_vrbl* %arr) {
 
   retfail:
     ret i1 false
+}
+
+define {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr) {
+    %arr_val_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arr_val = load %arr_val*,%arr_val** %arr_val_ptr
+    %arr_valisnull = icmp eq %arr_val* %arr_val,null
+    br i1 %arr_valisnull,label %ret_fail,label %calc_range
+
+  ret_fail:
+    ret {i32,i32,i1} zeroinitializer
+
+  calc_range:
+    %dims_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1,i32 0
+    %dims = load i32,i32* %dims_ptr
+    %dims_iszero = icmp eq i32 %dims,0
+    br i1 %dims_iszero,label %ret_fail,label %loop
+
+  loop:
+    %current_index = phi i32 [1,%calc_range],[%next_index,%next_loop]
+    %current_size = phi i32 [1,%calc_range],[%next_size,%next_loop]
+    %last_index_done = icmp ugt i32 %current_index,%dims
+    br i1 %last_index_done,label %ret_result,label %next_loop
+
+  next_loop:
+    %next_index = add i32 %current_index,1
+    %current_dim_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1,i32 %current_index
+    %current_dim = load i32,i32* %current_dim_ptr
+    %next_size = mul i32 %current_size,%current_dim
+    br label %loop
+
+  ret_result:
+    %start_index = add i32 %dims,1
+    %end_index = add i32 %start_index,%current_size
+    %result1 = insertvalue {i32,i32,i1} insertvalue({i32,i32,i1} zeroinitializer,i1 1,2), i32 %start_index, 0
+    %result = insertvalue {i32,i32,i1} %result1, i32 %end_index, 1
+    ret {i32,i32,i1} %result
+}
+
+define %val @writein16(%arr_vrbl* %arr) {
+    %range = call {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr)
+    %rangeok = extractvalue {i32,i32,i1} %range,2
+    br i1 %rangeok,label %dowritein,label %ret_fail
+
+  ret_fail:
+    ret %val insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 241,1)
+
+  dowritein:
+    %arrval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arrval = load %arr_val*,%arr_val** %arrval_ptr
+    %start_index = extractvalue {i32,i32,i1} %range,0
+    %end_index = extractvalue {i32,i32,i1} %range,1
+    br label %loop
+
+  loop:
+    %index = phi i32 [%start_index,%dowritein],[%next_index,%next_loop]
+    %index_ok = icmp ult i32 %index,%end_index
+    br i1 %index_ok,label %input,label %done
+
+  input:
+    %input_val = call %val @input16()
+    %input_tag = extractvalue %val %input_val,0
+    %input_iserr = icmp uge i2 %input_tag,2
+    br i1 %input_iserr,label %input_err,label %next_loop
+
+  next_loop:
+    %next_index = add i32 %index,1
+    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 1,i32 %index
+    %new_elem = extractvalue %val %input_val, 1
+    store i32 %new_elem,i32* %elem_ptr
+    br label %loop
+
+  input_err:
+    ret %val %input_val
+
+  done:
+    ret %val zeroinitializer
+}
+
+define %val @writein32(%arr_vrbl* %arr) {
+    %range = call {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr)
+    %rangeok = extractvalue {i32,i32,i1} %range,2
+    br i1 %rangeok,label %dowritein,label %ret_fail
+
+  ret_fail:
+    ret %val insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 241,1)
+
+  dowritein:
+    %arrval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arrval = load %arr_val*,%arr_val** %arrval_ptr
+    %start_index = extractvalue {i32,i32,i1} %range,0
+    %end_index = extractvalue {i32,i32,i1} %range,1
+    br label %loop
+
+  loop:
+    %index = phi i32 [%start_index,%dowritein],[%next_index,%next_loop]
+    %index_ok = icmp ult i32 %index,%end_index
+    br i1 %index_ok,label %input,label %done
+
+  input:
+    %input_val = call %val @input32()
+    %input_tag = extractvalue %val %input_val,0
+    %input_iserr = icmp uge i2 %input_tag,2
+    br i1 %input_iserr,label %input_err,label %next_loop
+
+  next_loop:
+    %next_index = add i32 %index,1
+    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 1,i32 %index
+    %new_elem = extractvalue %val %input_val, 1
+    store i32 %new_elem,i32* %elem_ptr
+    br label %loop
+
+  input_err:
+    ret %val %input_val
+
+  done:
+    ret %val zeroinitializer
 }

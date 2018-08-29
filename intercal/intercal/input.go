@@ -34,6 +34,9 @@ func (r *IntercalReader) inputToken(buf *bytes.Buffer) error {
 			for {
 				b, err := (*bufio.Reader)(r).ReadByte()
 				if err != nil {
+					if err == io.EOF && buf.Len() > 0 {
+						return nil
+					}
 					return err
 				}
 				switch b {

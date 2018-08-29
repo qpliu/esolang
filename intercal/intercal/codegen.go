@@ -658,6 +658,18 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 		for _, operand := range stmt.Operands.([]Stashable) {
+			notignoredLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+			nextLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+			labelCounter += 2
+			if newLabelCounter, ignoredIdent, err := codeGenCheckIgnored(w, stmt, operand, labelCounter); err != nil {
+				return err
+			} else {
+				labelCounter = newLabelCounter
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n  %s:\n", ignoredIdent, nextLabel, notignoredLabel, notignoredLabel); err != nil {
+					return err
+				}
+			}
+
 			switch v := operand.(type) {
 			case Var16:
 				if _, err := fmt.Fprintf(w, "    call void @stash_var(%%vrbl* @onespot%d)\n", v); err != nil {
@@ -678,6 +690,10 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			default:
 				panic("Stash")
 			}
+
+			if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n", nextLabel, nextLabel); err != nil {
+				return err
+			}
 		}
 		if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n    br label %%stmt%d\n", redoLabel, redoDoneLabel, nextIndex(stmt, statements)); err != nil {
 			return err
@@ -687,9 +703,22 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		if _, err := fmt.Fprintf(w, "    ;RETRIEVE\n"); err != nil {
 			return err
 		}
-		retrievesucceededIdent := fmt.Sprintf("%%retrievesucceeded%d.%d", stmt.Index, labelCounter)
-		labelCounter++
 		for _, operand := range stmt.Operands.([]Stashable) {
+			notignoredLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+			nextLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+			labelCounter += 2
+			if newLabelCounter, ignoredIdent, err := codeGenCheckIgnored(w, stmt, operand, labelCounter); err != nil {
+				return err
+			} else {
+				labelCounter = newLabelCounter
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n  %s:\n", ignoredIdent, nextLabel, notignoredLabel, notignoredLabel); err != nil {
+					return err
+				}
+			}
+
+			retrievesucceededIdent := fmt.Sprintf("%%retrievesucceeded%d.%d", stmt.Index, labelCounter)
+			labelCounter++
+
 			switch v := operand.(type) {
 			case Var16:
 				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_var(%%vrbl* @onespot%d)\n", retrievesucceededIdent, v); err != nil {
@@ -710,14 +739,18 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			default:
 				panic("Retrieve")
 			}
-		}
-		retrievefailedLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
-		labelCounter++
-		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", retrievesucceededIdent, redoLabel, retrievefailedLabel); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 436,1),i32 %d)\n", retrievefailedLabel, nextIndex(stmt, statements)); err != nil {
-			return err
+
+			retrievefailedLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+			labelCounter++
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", retrievesucceededIdent, nextLabel, retrievefailedLabel); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 436,1),i32 %d)\n", retrievefailedLabel, nextIndex(stmt, statements)); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n", nextLabel, nextLabel); err != nil {
+				return err
+			}
 		}
 		if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n    br label %%stmt%d\n", redoLabel, redoDoneLabel, nextIndex(stmt, statements)); err != nil {
 			return err
@@ -746,11 +779,11 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 					return err
 				}
 			case Array16:
-				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%arr_vrbl* @tail%d,i32 0,i32 0)\n", flag, v); err != nil {
+				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%arr_vrbl, %%arr_vrbl* @tail%d,i32 0,i32 0)\n", flag, v); err != nil {
 					return err
 				}
 			case Array32:
-				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%arr_vrbl* @hybrid%d,i32 0,i32 0)\n", flag, v); err != nil {
+				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%arr_vrbl, %%arr_vrbl* @hybrid%d,i32 0,i32 0)\n", flag, v); err != nil {
 					return err
 				}
 			default:
@@ -821,50 +854,63 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 		for _, vrbl := range stmt.Operands.([]WriteInable) {
+			newLabelCounter, ignoredIdent, err := codeGenCheckIgnored(w, stmt, vrbl, labelCounter)
+			if err != nil {
+				return err
+			}
+			writeinLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, newLabelCounter)
+			nextLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, newLabelCounter+1)
+			labelCounter = newLabelCounter + 2
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n  %s:\n", ignoredIdent, nextLabel, writeinLabel, writeinLabel); err != nil {
+				return err
+			}
+
 			switch v := vrbl.(type) {
 			case Var16, Var32, ArrayElement:
-				newLabelCounter, ignoredIdent, err := codeGenCheckIgnored(w, stmt, v, labelCounter)
-				if err != nil {
-					return err
-				}
-				writeinLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, newLabelCounter)
-				doneLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, newLabelCounter+1)
-				labelCounter = newLabelCounter + 2
-
-				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", ignoredIdent, doneLabel, writeinLabel); err != nil {
-					return err
-				}
-
 				inputIdent := "@input32"
 				if v.Is16() {
 					inputIdent = "@input16"
 				}
 				inputvalIdent := fmt.Sprintf("%%inputval%d.%d", stmt.Index, labelCounter)
 				labelCounter++
-				if _, err := fmt.Fprintf(w, "  %s:\n    %s = call %%val %s()\n", writeinLabel, inputvalIdent, inputIdent); err != nil {
+				if _, err := fmt.Fprintf(w, "    %s = call %%val %s()\n", inputvalIdent, inputIdent); err != nil {
 					return err
 				}
 
-				if newLabelCounter, err := codeGenGets(w, stmt, v.(LValue), inputvalIdent, doneLabel, labelCounter); err != nil {
+				if newLabelCounter, err := codeGenGets(w, stmt, v.(LValue), inputvalIdent, nextLabel, labelCounter); err != nil {
 					return err
 				} else {
 					labelCounter = newLabelCounter
 				}
 
-				if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
-					return err
+			case Array16, Array32:
+				writeinCall := ""
+				if v.Is16() {
+					writeinCall = fmt.Sprintf("@writein16(%%arr_vrbl* @tail%d)", v)
+				} else {
+					writeinCall = fmt.Sprintf("@writein32(%%arr_vrbl* @hybrid%d)", v)
 				}
 
-			case Array16, Array32:
-				//...
-				if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n", nextIndex(stmt, statements)); err != nil {
+				errIdent := fmt.Sprintf("%%writeinerr%d.%d", stmt.Index, labelCounter)
+				labelCounter++
+				if _, err := fmt.Fprintf(w, "    %s = call %%val %s\n", errIdent, writeinCall); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", errIdent, nextIndex(stmt, statements)); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "    br label %%%s\n", nextLabel); err != nil {
 					return err
 				}
 
 			default:
-				if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n", nextIndex(stmt, statements)); err != nil {
+				if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n    br label %s\n", nextIndex(stmt, statements), nextLabel); err != nil {
 					return err
 				}
+			}
+
+			if _, err := fmt.Fprintf(w, "  %s:\n", nextLabel); err != nil {
+				return err
 			}
 		}
 		if _, err := fmt.Fprintf(w, "    br label %%%s\n", redoLabel); err != nil {
@@ -1472,53 +1518,56 @@ func codeGenCheckIgnored(w io.Writer, stmt *Statement, ignoredable Ignoredable, 
 }
 
 func codeGenGets(w io.Writer, stmt *Statement, lhs LValue, rhsIdent string, doneLabel string, labelCounter int) (int, error) {
+	if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", rhsIdent, stmt.Index+1); err != nil {
+		return 0, err
+	}
+
+	rhsi32valueIdent := fmt.Sprintf("%%rhsi32value%d.%d", stmt.Index, labelCounter)
+	labelCounter++
+	if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1\n", rhsi32valueIdent, rhsIdent); err != nil {
+		return 0, err
+	}
+
+	if lhs.Is16() {
+		rhstagIdent := fmt.Sprintf("%%rhstag%d.%d", stmt.Index, labelCounter)
+		rhstagisoneIdent := fmt.Sprintf("%%rhstagisone%d.%d", stmt.Index, labelCounter+1)
+		dorangecheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
+		rangeokLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+3)
+		labelCounter += 4
+		if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,0\n", rhstagIdent, rhsIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    %s = icmp eq i2 %s,1\n", rhstagisoneIdent, rhstagIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", rhstagisoneIdent, dorangecheckLabel, rangeokLabel); err != nil {
+			return 0, err
+		}
+
+		rhs65535checkIdent := fmt.Sprintf("%%rhs65535check%d.%d", stmt.Index, labelCounter)
+		failrangecheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = icmp uge i32 %s,65535 ; uge and not ugt: 4.4.1 says, '16-bit variables may be assigned 32-bit values only if the value is less than 65535.'\n", dorangecheckLabel, rhs65535checkIdent, rhsi32valueIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", rhs65535checkIdent, failrangecheckLabel, rangeokLabel); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 275,1),i32 %d)\n", failrangecheckLabel, stmt.Index+1); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n", rangeokLabel, rangeokLabel); err != nil {
+			return 0, err
+		}
+	}
+
 	switch lhs.(type) {
 	case Var16, Var32:
-		if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)\n", rhsIdent, stmt.Index+1); err != nil {
-			return 0, err
-		}
-
-		rhsi32valueIdent := fmt.Sprintf("%%rhsi32value%d.%d", stmt.Index, labelCounter)
-		labelCounter++
-		if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1\n", rhsi32valueIdent, rhsIdent); err != nil {
-			return 0, err
-		}
-
 		vIdent := ""
-		if _, ok := lhs.(Var32); ok {
-			vIdent = fmt.Sprintf("@twospot%d", lhs)
-		} else {
+		if lhs.Is16() {
 			vIdent = fmt.Sprintf("@onespot%d", lhs)
-			rhstagIdent := fmt.Sprintf("%%rhstag%d.%d", stmt.Index, labelCounter)
-			rhstagisoneIdent := fmt.Sprintf("%%rhstagisone%d.%d", stmt.Index, labelCounter+1)
-			dorangecheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
-			rangeokLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+3)
-			labelCounter += 4
-			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,0\n", rhstagIdent, rhsIdent); err != nil {
-				return 0, err
-			}
-			if _, err := fmt.Fprintf(w, "    %s = icmp eq i2 %s,1\n", rhstagisoneIdent, rhstagIdent); err != nil {
-				return 0, err
-			}
-			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", rhstagisoneIdent, dorangecheckLabel, rangeokLabel); err != nil {
-				return 0, err
-			}
-
-			rhs65535checkIdent := fmt.Sprintf("%%rhs65535check%d.%d", stmt.Index, labelCounter)
-			failrangecheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
-			labelCounter += 2
-			if _, err := fmt.Fprintf(w, "  %s:\n    %s = icmp uge i32 %s,65535 ; uge and not ugt: 4.4.1 says, '16-bit variables may be assigned 32-bit values only if the value is less than 65535.'\n", dorangecheckLabel, rhs65535checkIdent, rhsi32valueIdent); err != nil {
-				return 0, err
-			}
-			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s\n", rhs65535checkIdent, failrangecheckLabel, rangeokLabel); err != nil {
-				return 0, err
-			}
-			if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 275,1),i32 %d)\n", failrangecheckLabel, stmt.Index+1); err != nil {
-				return 0, err
-			}
-			if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n", rangeokLabel, rangeokLabel); err != nil {
-				return 0, err
-			}
+		} else {
+			vIdent = fmt.Sprintf("@twospot%d", lhs)
 		}
 		valueptrptrIdent := fmt.Sprintf("%%valueptrptr%d.%d", stmt.Index, labelCounter)
 		valueptrIdent := fmt.Sprintf("%%valueptr%d.%d", stmt.Index, labelCounter+1)
@@ -1582,10 +1631,45 @@ func codeGenGets(w io.Writer, stmt *Statement, lhs LValue, rhsIdent string, done
 		return labelCounter, nil
 
 	case ArrayElement:
-		//...
-		if _, err := fmt.Fprintf(w, "    ; not implemented yet\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n    br label %%%s\n", stmt.Index+1, doneLabel); err != nil {
+		indexErrorLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+		boundsErrorLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+		labelCounter += 2
+
+		newLabelCounter, indexIdentSrcLabels, arrayElementPtrIdent, err := codeGenFindArrayElement(w, stmt, boundsErrorLabel, indexErrorLabel, lhs.(ArrayElement), labelCounter)
+		if err != nil {
 			return 0, err
 		}
+		labelCounter = newLabelCounter
+
+		if _, err := fmt.Fprintf(w, "    store i32 %s,i32* %s\n", rhsi32valueIdent, arrayElementPtrIdent); err != nil {
+			return 0, err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s\n", doneLabel); err != nil {
+			return 0, err
+		}
+
+		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 241,1),i32 %d)\n    br label %%%s\n", boundsErrorLabel, stmt.Index+1, doneLabel); err != nil {
+			return 0, err
+		}
+
+		indexerrorIdent := fmt.Sprintf("%%indexerror%d.%d", stmt.Index, labelCounter)
+		labelCounter++
+		if _, err := fmt.Fprintf(w, "    %s:\n    %s = phi %%val ", indexErrorLabel, indexerrorIdent); err != nil {
+			return 0, err
+		}
+		for i, indexIdentSrcLabel := range indexIdentSrcLabels {
+			comma := ","
+			if i == 0 {
+				comma = ""
+			}
+			if _, err := fmt.Fprintf(w, "%s[%s,%%%s]", comma, indexIdentSrcLabel[0], indexIdentSrcLabel[1]); err != nil {
+				return 0, err
+			}
+		}
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val %s,i32 %d)\n    br label %%%s\n", indexerrorIdent, stmt.Index+1, doneLabel); err != nil {
+			return 0, err
+		}
+
 		return labelCounter, nil
 
 	default:

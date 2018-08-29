@@ -7,5 +7,6 @@
 (3) DO .1 <- #3
     DO (1) NEXT
     PLEASE GIVE UP
+    DON'T THANK ME
 (1) DO READ OUT .1
     DO RESUME #1

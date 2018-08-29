@@ -1,4 +1,4 @@
 DO STASH ,1
 DO ,1 <- #1
 DO RETRIEVE ,1
-DO .1 <- ,1SUB#2
+DO .1 <- ,1SUB#1
