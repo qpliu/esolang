@@ -23,7 +23,8 @@ Known bugs
 ----------
 This implementation does not allow spaces within `NOT`, `N'T`, `NEXT`,
 `FORGET`, `CALCULATING`, `UP`, `BY`, `SUB`, etc.  According to 4.1, only
-`DO` and `PLEASE` cannot contain spaces.
+`DO` and `PLEASE` cannot contain spaces, although overpunches presumably
+also cannot contain spaces.
 
 Notes
 -----
@@ -183,4 +184,4 @@ This implementation has a 7 bit buffer.  If the buffer is full, outputting
 a bit causes the 8 bits to be written and the buffer to be cleared.  The
 8 bits are written as a byte with the first bit buffered as the least
 significant bit and the last bit as the most significant bit.  Any bits in
-the buffer then the program terminates are discarded.
+the buffer when the program terminates are discarded.
