@@ -17,6 +17,14 @@ from the 1980s.  It seems reasonable to me to assume that these
 revisions are limited to the Notes On The Atari Implementation and
 the ASCII entries in the character set table.
 
+Please note that this implementation is very buggy.
+
+Known bugs
+----------
+This implementation does not allow spaces within `NOT`, `N'T`, `NEXT`,
+`FORGET`, `CALCULATING`, `UP`, `BY`, `SUB`, etc.  According to 4.1, only
+`DO` and `PLEASE` cannot contain spaces.
+
 Notes
 -----
 Since the famous politeness checker was undocumented, it will not be
@@ -148,3 +156,31 @@ would behave differently from an INTERCAL implementation when `ABSTAIN` or
 `IGNORE` are used or when operating close to the `RESUME` stack limit.
 Perhaps a future version of this implementation will include such an
 optimized INTERCAL System Library.
+
+Extensions to INTERCAL
+----------------------
+This implementation extends INTERCAL to allow binary output.
+
+```
+    PLEASE READ OUT
+```
+outputs a bit with value 1.
+
+```
+    PLEASE READ NAUGHT
+```
+or
+```
+    PLEASE READ NOT
+```
+or even
+```
+    PLEASE READN'T
+```
+outputs a bit with value 0.
+
+This implementation has a 7 bit buffer.  If the buffer is full, outputting
+a bit causes the 8 bits to be written and the buffer to be cleared.  The
+8 bits are written as a byte with the first bit buffered as the least
+significant bit and the last bit as the most significant bit.  Any bits in
+the buffer then the program terminates are discarded.

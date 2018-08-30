@@ -33,11 +33,11 @@ func testParseList(t *testing.T, src, expectedListing string, errorCode int) {
 
 func TestParseList(t *testing.T) {
 	testParseList(t, `PLEASE NOTE THIS LINE HAS NO EFFECT
-`, `*   1 PLEASE NOTE THIS LINE HAS NO EFFECT
+`, `*0001 PLEASE NOTE THIS LINE HAS NO EFFECT
 `, 0)
 	testParseList(t, `PLEASE NOTE THIS LINE DOES NOTHING
-`, `*   1 PLEASE NOTE THIS LINE 
-*   2 DOES NOTHING
+`, `*0001 PLEASE NOTE THIS LINE 
+*0002 DOES NOTHING
 `, -1)
 	testParseList(t, `        DO (5) NEXT
    (5) DO FORGET #1
@@ -67,34 +67,34 @@ func TestParseList(t *testing.T) {
        PLEASE DO (5) NEXT
    (3) DO (2) NEXT
        PLEASE GIVE UP
-`, `    1         DO (5) NEXT
-    2    (5) DO FORGET #1
-    3        PLEASE WRITE IN :1
-    4        DO .1 <- '⊻":1~'#32768¢#0'"¢#1'~#3
-    5        DO (1) NEXT
-    6        DO :1 <- "'⊻":1~'#65535¢#0'"¢#65535'
+`, ` 0001         DO (5) NEXT
+ 0002    (5) DO FORGET #1
+ 0003        PLEASE WRITE IN :1
+ 0004        DO .1 <- '⊻":1~'#32768¢#0'"¢#1'~#3
+ 0005        DO (1) NEXT
+ 0006        DO :1 <- "'⊻":1~'#65535¢#0'"¢#65535'
        ~'#0¢#65535'"¢"'⊻":1~'#0¢#65535'"
        ¢#65535'~'#0¢#65535'"
-    7        DO :2 <- #1
-    8        PLEASE DO (4) NEXT
-    9    (4) DO FORGET #1
-   10        DO .1 <- "⊻’:1~:2’¢#1"~#3
-   11        DO :1 <- "'⊻":1~'#65535¢#0'"¢":2~'#65535
+ 0007        DO :2 <- #1
+ 0008        PLEASE DO (4) NEXT
+ 0009    (4) DO FORGET #1
+ 0010        DO .1 <- "⊻’:1~:2’¢#1"~#3
+ 0011        DO :1 <- "'⊻":1~'#65535¢#0'"¢":2~'#65535
        ¢#0'"'~'#0¢#65535'"¢"'⊻":1~'#0
        ¢#65535'"¢":2~'#0¢#65535'"'~'#0¢#65535'"
-   12        DO (1) NEXT
-   13        DO :2 <- ":2~'#0¢#65535'"
+ 0012        DO (1) NEXT
+ 0013        DO :2 <- ":2~'#0¢#65535'"
        ¢"'":2~'#65535¢#0'"¢#0'~'#32767¢#1'"
-   14        DO (4) NEXT
-   15    (2) DO RESUME .1
-   16    (1) PLEASE DO (2) NEXT
-   17        PLEASE FORGET #1
-   18        DO READ OUT :1
-   19        PLEASE DO .1 <- '⊻"':1~:1'~#1"¢#1'~#3
-   20        DO (3) NEXT
-   21        PLEASE DO (5) NEXT
-   22    (3) DO (2) NEXT
-   23        PLEASE GIVE UP
+ 0014        DO (4) NEXT
+ 0015    (2) DO RESUME .1
+ 0016    (1) PLEASE DO (2) NEXT
+ 0017        PLEASE FORGET #1
+ 0018        DO READ OUT :1
+ 0019        PLEASE DO .1 <- '⊻"':1~:1'~#1"¢#1'~#3
+ 0020        DO (3) NEXT
+ 0021        PLEASE DO (5) NEXT
+ 0022    (3) DO (2) NEXT
+ 0023        PLEASE GIVE UP
 `, -1)
 }
 
@@ -225,6 +225,26 @@ func TestParseStatements(t *testing.T) {
 
 	stmts = testParseStatements(t, "DO READ OUT ,1 SUB .2 + #3 + ;4 SUB #5 + :6", []StatementType{StatementReadOut})
 	if _, ok := stmts[0].Operands.([]ReadOutable); !ok {
+		t.Errorf("unexpected operand: %s", stmts[0].String())
+	}
+
+	stmts = testParseStatements(t, "DO READ OUT", []StatementType{StatementReadOutBit})
+	if _, ok := stmts[0].Operands.(bool); !ok {
+		t.Errorf("unexpected operand: %s", stmts[0].String())
+	}
+
+	stmts = testParseStatements(t, "DO READ NAUGHT", []StatementType{StatementReadOutBit})
+	if _, ok := stmts[0].Operands.(bool); !ok {
+		t.Errorf("unexpected operand: %s", stmts[0].String())
+	}
+
+	stmts = testParseStatements(t, "DO READ NOT", []StatementType{StatementReadOutBit})
+	if _, ok := stmts[0].Operands.(bool); !ok {
+		t.Errorf("unexpected operand: %s", stmts[0].String())
+	}
+
+	stmts = testParseStatements(t, "DO READN'T", []StatementType{StatementReadOutBit})
+	if _, ok := stmts[0].Operands.(bool); !ok {
 		t.Errorf("unexpected operand: %s", stmts[0].String())
 	}
 }

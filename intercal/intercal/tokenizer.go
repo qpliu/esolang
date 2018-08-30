@@ -347,6 +347,7 @@ const (
 	TokenSub
 	TokenBy
 	TokenThank
+	TokenNaught
 )
 
 type tokenTableEntry struct {
@@ -442,6 +443,7 @@ var tokenTable = []tokenTableEntry{
 	{"SUB", TokenSub},
 	{"BY", TokenBy},
 	{"THANK", TokenThank},
+	{"NAUGHT", TokenNaught},
 }
 
 func init() {

@@ -69,6 +69,9 @@ const (
 
 	StatementReadOut
 	// Operands is []ReadOutable
+
+	StatementReadOutBit
+	// Operands is bool
 )
 
 const (
@@ -506,6 +509,19 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 			index++
 		}
 	case TokenRead:
+		if index+2 == len(s.Tokens) && s.Tokens[index+1].Type == TokenOut {
+			s.Type = StatementReadOutBit
+			s.Operands = true
+			gerundTable[TokenReading] = append(gerundTable[TokenReading], s.Index)
+			return
+		}
+		if index+2 == len(s.Tokens) && (s.Tokens[index+1].Type == TokenNaught || s.Tokens[index+1].Type == TokenNot) {
+			s.Type = StatementReadOutBit
+			s.Operands = false
+			gerundTable[TokenReading] = append(gerundTable[TokenReading], s.Index)
+			return
+		}
+
 		if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenOut {
 			return
 		}
@@ -897,7 +913,7 @@ func ListStatements(statements []*Statement, out io.Writer) error {
 		if s.Type == StatementUnrecognizable {
 			c = '*'
 		}
-		_, err := fmt.Fprintf(out, "%c%4d %s\n", c, s.Index+1, s.String())
+		_, err := fmt.Fprintf(out, "%c%04d %s\n", c, s.Index+1, s.String())
 		if err != nil {
 			return err
 		}
