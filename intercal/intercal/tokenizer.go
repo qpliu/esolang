@@ -58,6 +58,7 @@ func (t *Tokenizer) Next() (*Token, error) {
 						return nil, err
 					} else {
 						t.f = f
+						t.r = f
 					}
 				} else {
 					t.atEOF = true
