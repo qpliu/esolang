@@ -118,7 +118,7 @@ func testParseStatements(t *testing.T, src string, expected []StatementType) []*
 func TestParseStatements(t *testing.T) {
 	testParseStatements(t, "DO ,1SUB#1#1 <- ’⊻,1SUB#1#1¢#1’~’#0¢#65535’", []StatementType{StatementCalculate})
 	testParseStatements(t, `DO ;7 <- #7 BY .7 BY ",7SUB#7"¢’:7~#7’`, []StatementType{StatementCalculateArrayDimension})
-	testParseStatements(t, `DO ;7 <- #7 BY .7 BY ,7SUB"#7¢’:7~#7’"`, []StatementType{StatementUnrecognizable}) // because 32-bit array subscripts are not allowed
+	testParseStatements(t, `DO ;7 <- #7 BY .7 BY ,7SUB"#7¢’:7~#7’"`, []StatementType{StatementCalculateArrayDimension})
 	testParseStatements(t, "DO (1) NEXT (1) DO GIVE UP", []StatementType{StatementNext, StatementGiveUp})
 	testParseStatements(t, "PLEASE DO (1) NEXT (1) DO FORGET #1", []StatementType{StatementNext, StatementForget})
 	testParseStatements(t, "PLEASE (1) NEXT (1) DO %1000 RESUME #1", []StatementType{StatementNext, StatementResume})
@@ -351,4 +351,6 @@ func TestParseExpr(t *testing.T) {
 
 	testParseExpr(t, "',2SUB.1\".2~.3\"'~#1", ExprSelect{ArrayElement{Array16(2), []Expr{Var16(1), ExprSelect{Var16(2), Var16(3)}}}, ExprConst(1)})
 	testParseExpr(t, ",3SUB\",2SUB.1'.2~.3'\".4", ArrayElement{Array16(3), []Expr{ArrayElement{Array16(2), []Expr{Var16(1), ExprSelect{Var16(2), Var16(3)}}}, Var16(4)}})
+
+	testParseExpr(t, ";2 SUB '\"?.3$#1\"~#3'", ArrayElement{Array32(2), []Expr{ExprSelect{ExprXor{ExprMingle{Var16(3), ExprConst(1)}}, ExprConst(3)}}})
 }

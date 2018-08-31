@@ -754,7 +754,7 @@ func (s *Statement) parseExpr(index int, mustBe16, binaryOpRhs, firstSubscript b
 			unaryOp = s.Tokens[index]
 			index++
 		}
-		expr, newIndex, err := s.parseExpr(index, mustBe16, false, false, TokenSpark)
+		expr, newIndex, err := s.parseExpr(index, false, false, false, TokenSpark)
 		if err != nil {
 			return nil, index, err
 		} else if expr == nil || newIndex >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenSpark {
@@ -771,7 +771,7 @@ func (s *Statement) parseExpr(index int, mustBe16, binaryOpRhs, firstSubscript b
 			unaryOp = s.Tokens[index]
 			index++
 		}
-		expr, newIndex, err := s.parseExpr(index, mustBe16, false, false, TokenRabbitEars)
+		expr, newIndex, err := s.parseExpr(index, false, false, false, TokenRabbitEars)
 		if err != nil {
 			return nil, index, err
 		} else if expr == nil || newIndex >= len(s.Tokens) || s.Tokens[newIndex].Type != TokenRabbitEars {
