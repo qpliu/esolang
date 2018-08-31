@@ -8,7 +8,7 @@ import (
 
 func testTokenize(src string) ([]*Token, error) {
 	tokens := []*Token{}
-	tokenizer := NewTokenizer("()", bytes.NewBufferString(src))
+	tokenizer := NewTokenizer(bytes.NewBufferString(src))
 	for {
 		token, err := tokenizer.Next()
 		if token != nil {
@@ -29,12 +29,12 @@ func testTokenizeTypes(t *testing.T, src string, tokenTypes []TokenType) {
 		t.Errorf("Unexpected error=%s", err.Error())
 	}
 	if len(tokens) != len(tokenTypes) {
-		t.Errorf("Unexpected token count=%d expected=%d", len(tokens), len(tokenTypes))
+		t.Errorf("Unexpected token count=%d expected=%d, %s", len(tokens), len(tokenTypes), src)
 		return
 	}
 	for i, token := range tokens {
 		if token.Type != tokenTypes[i] {
-			t.Errorf("Unexpected token type[%d]=%d expected=%d", i, token.Type, tokenTypes[i])
+			t.Errorf("Unexpected token type[%d]=%d expected=%d, %s", i, token.Type, tokenTypes[i], src)
 		}
 	}
 }
@@ -45,12 +45,12 @@ func testTokenizeNumbers(t *testing.T, src string, values []uint16) {
 		t.Errorf("Unexpected error=%s", err.Error())
 	}
 	if len(tokens) != len(values) {
-		t.Errorf("Unexpected token count=%d expected=%d", len(tokens), len(values))
+		t.Errorf("Unexpected token count=%d expected=%d, %s", len(tokens), len(values), src)
 		return
 	}
 	for i, token := range tokens {
 		if token.NumberValue != values[i] {
-			t.Errorf("Unexpected token value[%d]=%d expected=%d", i, token.NumberValue, values[i])
+			t.Errorf("Unexpected token value[%d]=%d expected=%d, %s", i, token.NumberValue, values[i], src)
 		}
 	}
 }
@@ -61,12 +61,12 @@ func testTokenizeStrings(t *testing.T, src string, values []string) {
 		t.Errorf("Unexpected error=%s", err.Error())
 	}
 	if len(tokens) != len(values) {
-		t.Errorf("Unexpected token count=%d expected=%d", len(tokens), len(values))
+		t.Errorf("Unexpected token count=%d expected=%d, %s", len(tokens), len(values), src)
 		return
 	}
 	for i, token := range tokens {
 		if token.StringValue != values[i] {
-			t.Errorf("Unexpected token value[%d]=%s expected=%s", i, token.StringValue, values[i])
+			t.Errorf("Unexpected token value[%d]=%s expected=%s, %s", i, token.StringValue, values[i], src)
 		}
 	}
 }
@@ -147,5 +147,46 @@ func TestTokenizer(t *testing.T) {
 		TokenIntersection,
 		TokenGiving,
 		TokenUp,
+	})
+	testTokenizeTypes(t, "(123) DON'T YOU REALIZE THIS STATEMENT SHOULD ONLY BE ENCOUNTERED\n ONCE?\n PLEASE REINSTATE (123)\n", []TokenType{
+		TokenWax,
+		TokenNumber,
+		TokenWane,
+		TokenDo,
+		TokenNot,
+		TokenString,
+		TokenWhat,
+		TokenPlease,
+		TokenReinstate,
+		TokenWax,
+		TokenNumber,
+		TokenWane,
+	})
+	testTokenizeStrings(t, "(123) DON'T YOU REALIZE THIS STATEMENT SHOULD ONLY BE ENCOUNTERED\n ONCE?\n PLEASE REINSTATE (123)\n", []string{
+		"(",
+		"123",
+		") ",
+		"DO",
+		"N'T ",
+		"YOU REALIZE THIS STATEMENT SHOULD ONLY BE ENCOUNTERED\n ONCE",
+		"?\n",
+		" PLEASE ",
+		"REINSTATE ",
+		"(",
+		"123",
+		")\n",
+	})
+	testTokenizeTypes(t, "PLEASE NOTE THAT THIS LINE DOES NOTHING", []TokenType{
+		TokenPlease,
+		TokenNot,
+		TokenString,
+		TokenIn,
+		TokenString,
+		TokenDo,
+		TokenString,
+		TokenNot,
+		TokenString,
+		TokenIn,
+		TokenString,
 	})
 }

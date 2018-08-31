@@ -1,33 +1,28 @@
 package intercal
 
 import (
-	"bufio"
-	"bytes"
 	"io"
 	"os"
 	"sort"
-	"strings"
+	"strconv"
 )
 
 type Tokenizer struct {
-	r *bufio.Reader
+	r     io.Reader
+	atEOF bool
+
+	buffer       []byte
+	index        int
+	tokenBuffer  []byte
+	tokenIndexes []int
 
 	f         *os.File
 	filenames []string
 	fileIndex int
-
-	filename string
-
-	line    string
-	linenum int
-	index   int
 }
 
-func NewTokenizer(filename string, r io.Reader) *Tokenizer {
-	return &Tokenizer{
-		r:        bufio.NewReader(r),
-		filename: filename,
-	}
+func NewTokenizer(r io.Reader) *Tokenizer {
+	return &Tokenizer{r: r}
 }
 
 func NewFileTokenizer(filenames []string) (*Tokenizer, error) {
@@ -36,231 +31,201 @@ func NewFileTokenizer(filenames []string) (*Tokenizer, error) {
 		return nil, err
 	}
 	return &Tokenizer{
-		r:         bufio.NewReader(f),
+		r:         f,
 		f:         f,
 		filenames: filenames,
 		fileIndex: 0,
-		filename:  filenames[0],
 	}, nil
 }
 
 func (t *Tokenizer) Next() (*Token, error) {
-	leadingSpaces := bytes.Buffer{}
+	atTrailingWhitespace := false
+	atTrailingDigit := false
 	for {
-		if t.index >= len(t.line) {
-			line, err := t.r.ReadString('\n')
-			t.line = line
-			if err != nil {
+		if !t.atEOF && (atTrailingWhitespace || atTrailingDigit || len(t.tokenBuffer) < maxTokenLen+1) {
+			buf := []byte{0}
+			if n, err := t.r.Read(buf); n == 0 {
 				if err != io.EOF {
 					return nil, err
 				}
-				if line == "" {
-					if t.f != nil {
-						t.f.Close()
-					}
+				if t.f != nil {
+					t.f.Close()
+					t.f = nil
+				}
+				if t.fileIndex+1 < len(t.filenames) {
 					t.fileIndex++
-					if t.fileIndex >= len(t.filenames) {
+					if f, err := os.Open(t.filenames[t.fileIndex]); err != nil {
 						return nil, err
+					} else {
+						t.f = f
 					}
-					f, err := os.Open(t.filenames[t.fileIndex])
-					if err != nil {
-						return nil, err
-					}
-					t.r = bufio.NewReader(f)
-					t.f = f
-					t.filename = t.filenames[t.fileIndex]
-					t.linenum = 0
-					continue
+				} else {
+					t.atEOF = true
 				}
-			}
-			t.linenum++
-			t.index = 0
-			continue
-		}
-		switch t.line[t.index] {
-		case ' ', '\t', '\f', '\n', '\r', '\v':
-			leadingSpaces.WriteByte(t.line[t.index])
-			t.index++
-			continue
-		default:
-		}
-		firstNumber := strings.IndexAny(t.line[t.index:], "0123456789")
-		tokenIndex := firstNumber
-		tableIndex := -1
-		for i, entry := range tokenTable {
-			index := strings.Index(t.line[t.index:], entry.Value)
-			if index >= 0 && (index < tokenIndex || tokenIndex < 0) {
-				tokenIndex = index
-				tableIndex = i
-			}
-		}
-		if tokenIndex > 0 {
-			colnum := t.index + 1
-			stringValue := t.line[t.index : t.index+tokenIndex]
-			t.index += tokenIndex
-			return &Token{
-				Filename:    t.filename,
-				LineNum:     t.linenum,
-				ColNum:      colnum,
-				Type:        TokenString,
-				StringValue: leadingSpaces.String() + stringValue + t.trailingSpaces(),
-			}, nil
-		}
-		if tableIndex >= 0 {
-			colnum := t.index + 1
-			t.index += len(tokenTable[tableIndex].Value)
-			return &Token{
-				Filename:    t.filename,
-				LineNum:     t.linenum,
-				ColNum:      colnum,
-				Type:        tokenTable[tableIndex].Type,
-				StringValue: leadingSpaces.String() + tokenTable[tableIndex].Value + t.trailingSpaces(),
-			}, nil
-		} else if firstNumber > 0 {
-			colnum := t.index + 1
-			stringValue := t.line[t.index : t.index+firstNumber]
-			t.index += firstNumber
-			return &Token{
-				Filename:    t.filename,
-				LineNum:     t.linenum,
-				ColNum:      colnum,
-				Type:        TokenString,
-				StringValue: leadingSpaces.String() + stringValue + t.trailingSpaces(),
-			}, nil
-		} else if firstNumber == 0 {
-			linenum := t.linenum
-			colnum := t.index + 1
-			index := t.index
-			value := 0
-		loop:
-			for {
-				if index >= len(t.line) {
-					line, err := t.r.ReadString('\n')
-					t.line = line
-					t.linenum++
-					index = 0
-					if err == io.EOF {
-						break loop
-					} else if err != nil {
-						return nil, err
-					}
-				}
-				switch t.line[index] {
-				case ' ', '\t', '\f', '\n', '\r', '\v':
-				case '0':
-					if value < 65536 {
-						value = value * 10
-					}
-				case '1':
-					if value < 65536 {
-						value = value*10 + 1
-					}
-				case '2':
-					if value < 65536 {
-						value = value*10 + 2
-					}
-				case '3':
-					if value < 65536 {
-						value = value*10 + 3
-					}
-				case '4':
-					if value < 65536 {
-						value = value*10 + 4
-					}
-				case '5':
-					if value < 65536 {
-						value = value*10 + 5
-					}
-				case '6':
-					if value < 65536 {
-						value = value*10 + 6
-					}
-				case '7':
-					if value < 65536 {
-						value = value*10 + 7
-					}
-				case '8':
-					if value < 65536 {
-						value = value*10 + 8
-					}
-				case '9':
-					if value < 65536 {
-						value = value*10 + 9
-					}
-				default:
-					break loop
-				}
-				leadingSpaces.WriteByte(t.line[index])
-				index++
-			}
-			t.index = index
-			spacesBelongToNextLine := true
-			for i := 0; i < index && spacesBelongToNextLine; i++ {
-				switch t.line[i] {
-				case ' ', '\t', '\f', '\n', '\r', '\v':
-				default:
-					spacesBelongToNextLine = false
-				}
-			}
-			if spacesBelongToNextLine {
-				leadingSpaces.Truncate(leadingSpaces.Len() - index)
-				t.index = 0
 			} else {
-				leadingSpaces.WriteString(t.trailingSpaces())
+				t.buffer = append(t.buffer, buf[0])
+				t.index++
+				if isSpace(buf[0]) {
+					atTrailingWhitespace = true
+				} else {
+					t.tokenBuffer = append(t.tokenBuffer, buf[0])
+					t.tokenIndexes = append(t.tokenIndexes, t.index-1)
+					atTrailingWhitespace = false
+					atTrailingDigit = isDigit(buf[0])
+				}
+				continue
 			}
-			tokenType := TokenNumber
-			if value >= 65536 {
-				tokenType = TokenString
-				value = 0
-			}
-			return &Token{
-				Filename:    t.filename,
-				LineNum:     linenum,
-				ColNum:      colnum,
-				Type:        tokenType,
-				NumberValue: uint16(value),
-				StringValue: leadingSpaces.String(),
-			}, nil
-		} else {
-			colnum := t.index + 1
-			stringValue := t.line[t.index:]
-			t.index = len(t.line)
-			return &Token{
-				Filename:    t.filename,
-				LineNum:     t.linenum,
-				ColNum:      colnum,
-				Type:        TokenString,
-				StringValue: leadingSpaces.String() + stringValue + t.trailingSpaces(),
-			}, nil
 		}
+
+		if len(t.tokenBuffer) == 0 {
+			for _, b := range t.buffer {
+				if !isSpace(b) {
+					token := &Token{
+						Type:        TokenString,
+						StringValue: string(t.buffer),
+					}
+					t.buffer = t.buffer[:0]
+					return token, nil
+				}
+			}
+			return nil, io.EOF
+		}
+
+		if isDigit(t.tokenBuffer[0]) {
+			if leadingJunkToken := t.leadingJunk(t.tokenIndexes[0]); leadingJunkToken != nil {
+				return leadingJunkToken, nil
+			}
+			tokenLen := 1
+			for tokenLen < len(t.tokenBuffer) && isDigit(t.tokenBuffer[tokenLen]) {
+				tokenLen++
+			}
+			tokenType := TokenString
+			numberValue := 0
+			if n, err := strconv.Atoi(string(t.tokenBuffer[:tokenLen])); err != nil {
+			} else if n < 65536 {
+				tokenType = TokenNumber
+				numberValue = n
+			}
+			token := t.nextToken(tokenLen)
+			token.Type = tokenType
+			token.NumberValue = uint16(numberValue)
+			return token, nil
+		}
+
+		var tokenMatch *tokenTableEntry
+	tokenTableLoop:
+		for i := range tokenTable {
+			if len(t.tokenBuffer) < len(tokenTable[i].Value) {
+				// can happen on EOF
+				continue
+			}
+			hasSpaces := false
+			for i, v := range []byte(tokenTable[i].Value) {
+				if v != t.tokenBuffer[i] {
+					continue tokenTableLoop
+				}
+				if i > 0 && t.tokenIndexes[i] != t.tokenIndexes[i-1]+1 {
+					hasSpaces = true
+				}
+			}
+			if hasSpaces && tokenTable[i].NoSpaces {
+				continue
+			}
+			tokenMatch = &tokenTable[i]
+			break
+		}
+		if tokenMatch == nil {
+			newLen := len(t.tokenBuffer) - 1
+			copy(t.tokenBuffer, t.tokenBuffer[1:])
+			copy(t.tokenIndexes, t.tokenIndexes[1:])
+			t.tokenBuffer = t.tokenBuffer[:newLen]
+			t.tokenIndexes = t.tokenIndexes[:newLen]
+			continue
+		}
+
+		if leadingJunkToken := t.leadingJunk(t.tokenIndexes[0]); leadingJunkToken != nil {
+			return leadingJunkToken, nil
+		}
+
+		token := t.nextToken(len(tokenMatch.Value))
+		token.Type = tokenMatch.Type
+		return token, nil
 	}
 }
 
-func (t *Tokenizer) trailingSpaces() string {
-	spaces := bytes.Buffer{}
-	for {
-		if t.index >= len(t.line) {
-			return spaces.String()
-		}
-		switch t.line[t.index] {
-		case ' ', '\t', '\f', '\n', '\r', '\v':
-			spaces.WriteByte(t.line[t.index])
-			t.index++
-		default:
-			return spaces.String()
+func isDigit(b byte) bool {
+	switch b {
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return true
+	default:
+		return false
+	}
+}
+
+func isSpace(b byte) bool {
+	switch b {
+	case ' ', '\t', '\f', '\r', '\n':
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *Tokenizer) leadingJunk(tokenStartIndex int) *Token {
+	leadingLen := tokenStartIndex - (t.index - len(t.buffer))
+	lastNewline := -1
+	lastJunk := -1
+	for i := 0; i < leadingLen; i++ {
+		if !isSpace(t.buffer[i]) {
+			lastJunk = i
+		} else if t.buffer[i] == '\n' {
+			lastNewline = i
 		}
 	}
+	if lastJunk >= 0 {
+		if lastNewline > lastJunk {
+			leadingLen = lastNewline + 1
+		}
+		junkToken := &Token{
+			Type:        TokenString,
+			StringValue: string(t.buffer[:leadingLen]),
+		}
+		newLen := len(t.buffer) - leadingLen
+		copy(t.buffer, t.buffer[leadingLen:])
+		t.buffer = t.buffer[:newLen]
+		return junkToken
+	}
+	return nil
+}
+
+func (t *Tokenizer) nextToken(tokenBufferIndex int) *Token {
+	tokenLen := t.tokenIndexes[tokenBufferIndex-1] - (t.index - len(t.buffer)) + 1
+	for tokenLen < len(t.buffer) && isSpace(t.buffer[tokenLen]) {
+		if t.buffer[tokenLen] == '\n' {
+			tokenLen++
+			break
+		}
+		tokenLen++
+	}
+	token := &Token{StringValue: string(t.buffer[:tokenLen])}
+
+	newLen := len(t.buffer) - tokenLen
+	copy(t.buffer, t.buffer[tokenLen:])
+	t.buffer = t.buffer[:newLen]
+
+	newLen = len(t.tokenBuffer) - tokenBufferIndex
+	copy(t.tokenBuffer, t.tokenBuffer[tokenBufferIndex:])
+	t.tokenBuffer = t.tokenBuffer[:newLen]
+	copy(t.tokenIndexes, t.tokenIndexes[tokenBufferIndex:])
+	t.tokenIndexes = t.tokenIndexes[:newLen]
+
+	return token
 }
 
 type TokenType int
 
 type Token struct {
-	Filename string
-	LineNum  int
-	ColNum   int
-
-	Type TokenType
-
+	Type        TokenType
 	NumberValue uint16
 	StringValue string
 }
@@ -351,103 +316,104 @@ const (
 )
 
 type tokenTableEntry struct {
-	Value string
-	Type  TokenType
+	Value    string
+	Type     TokenType
+	NoSpaces bool
 }
 
 var tokenTable = []tokenTableEntry{
-	{".", TokenSpot},
-	{":", TokenTwoSpot},
-	{",", TokenTail},
-	{";", TokenHybrid},
-	{"#", TokenMesh},
-	{"=", TokenHalfMesh},
-	{"'", TokenSpark},
-	{"’", TokenSpark},
-	{"`", TokenBackSpark},
-	{"!", TokenWow},
-	{"?", TokenWhat},
-	{"\"", TokenRabbitEars},
-	{"\"\u0008.", TokenRabbit},
-	{".\u0008\"", TokenRabbit},
-	{"|", TokenSpike},
-	{"%", TokenDoubleOhSeven},
-	{"-", TokenWorm},
-	{"<", TokenAngle},
-	{">", TokenRightAngle},
-	{"(", TokenWax},
-	{")", TokenWane},
-	{"[", TokenUTurn},
-	{"]", TokenUTurnBack},
-	{"{", TokenEmbrace},
-	{"}", TokenBracelet},
-	{"*", TokenSplat},
-	{"&", TokenAmpersand},
-	{"V", TokenBook},
-	{"\u2228", TokenBook},
-	{"V\u0008-", TokenBookworm},
-	{"-\u0008V", TokenBookworm},
-	{"\u22bb", TokenBookworm},
-	{"\u2200", TokenBookworm},
-	{"$", TokenBigMoney},
-	{"c\u0008/", TokenChange},
-	{"/\u0008c", TokenChange},
-	{"\u00a2", TokenChange},
-	{"~", TokenSqiggle},
-	{"_", TokenFlatWorm},
-	{"+", TokenIntersection},
-	{"/", TokenSlat},
-	{"\\", TokenBackSlat},
-	{"@", TokenWhirlpool},
-	{"'\u0008-", TokenHookworm},
-	{"-\u0008'", TokenHookworm},
-	{"^", TokenShark},
-	{"#\u0008*\u0008[]", TokenBlotch},
-	{"*\u0008#\u0008[]", TokenBlotch},
-	{"#\u0008I\u0008[]", TokenBlotch},
-	{"I\u0008#\u0008[]", TokenBlotch},
+	{".", TokenSpot, true},
+	{":", TokenTwoSpot, true},
+	{",", TokenTail, true},
+	{";", TokenHybrid, true},
+	{"#", TokenMesh, true},
+	{"=", TokenHalfMesh, true},
+	{"'", TokenSpark, true},
+	{"’", TokenSpark, true},
+	{"`", TokenBackSpark, true},
+	{"!", TokenWow, true},
+	{"?", TokenWhat, true},
+	{"\"", TokenRabbitEars, true},
+	{"\"\u0008.", TokenRabbit, true},
+	{"|", TokenSpike, true},
+	{"%", TokenDoubleOhSeven, true},
+	{"-", TokenWorm, true},
+	{"<", TokenAngle, true},
+	{">", TokenRightAngle, true},
+	{"(", TokenWax, true},
+	{")", TokenWane, true},
+	{"[", TokenUTurn, true},
+	{"]", TokenUTurnBack, true},
+	{"{", TokenEmbrace, true},
+	{"}", TokenBracelet, true},
+	{"*", TokenSplat, true},
+	{"&", TokenAmpersand, true},
+	{"V", TokenBook, true},
+	{"\u2228", TokenBook, true},
+	{"V\u0008-", TokenBookworm, true},
+	{"\u22bb", TokenBookworm, true},
+	{"\u2200", TokenBookworm, true},
+	{"$", TokenBigMoney, true},
+	{"c\u0008/", TokenChange, true},
+	{"c\u0008|", TokenChange, true},
+	{"\u00a2", TokenChange, true},
+	{"~", TokenSqiggle, true},
+	{"_", TokenFlatWorm, true},
+	{"+", TokenIntersection, true},
+	{"/", TokenSlat, true},
+	{"\\", TokenBackSlat, true},
+	{"@", TokenWhirlpool, true},
+	{"'\u0008-", TokenHookworm, true},
+	{"^", TokenShark, true},
+	{"#\u0008*\u0008[\u0008]", TokenBlotch, true},
+	{"#\u0008I\u0008[\u0008]", TokenBlotch, true},
 
-	{"PLEASE", TokenPlease},
-	{"DO", TokenDo},
-	{"NOT", TokenNot},
-	{"N'T", TokenNot},
-	{"CALCULATING", TokenCalculating},
-	{"NEXT", TokenNext},
-	{"NEXTING", TokenNexting},
-	{"FORGET", TokenForget},
-	{"FORGETTING", TokenForgetting},
-	{"RESUME", TokenResume},
-	{"RESUMING", TokenResuming},
-	{"STASH", TokenStash},
-	{"STASHING", TokenStashing},
-	{"RETRIEVE", TokenRetrieve},
-	{"RETRIEVING", TokenRetrieving},
-	{"IGNORE", TokenIgnore},
-	{"IGNORING", TokenIgnoring},
-	{"REMEMBER", TokenRemember},
-	{"REMEMBERING", TokenRemembering},
-	{"ABSTAIN", TokenAbstain},
-	{"ABSTAINING", TokenAbstaining},
-	{"FROM", TokenFrom},
-	{"REINSTATE", TokenReinstate},
-	{"REINSTATING", TokenReinstating},
-	{"GIVE", TokenGive},
-	{"GIVING", TokenGiving},
-	{"UP", TokenUp},
-	{"WRITE", TokenWrite},
-	{"WRITING", TokenWriting},
-	{"IN", TokenIn},
-	{"READ", TokenRead},
-	{"READING", TokenReading},
-	{"OUT", TokenOut},
-	{"SUB", TokenSub},
-	{"BY", TokenBy},
-	{"THANK", TokenThank},
-	{"NAUGHT", TokenNaught},
+	{"PLEASE", TokenPlease, true},
+	{"DO", TokenDo, true},
+	{"NOT", TokenNot, false},
+	{"N'T", TokenNot, false},
+	{"CALCULATING", TokenCalculating, false},
+	{"NEXT", TokenNext, false},
+	{"NEXTING", TokenNexting, false},
+	{"FORGET", TokenForget, false},
+	{"FORGETTING", TokenForgetting, false},
+	{"RESUME", TokenResume, false},
+	{"RESUMING", TokenResuming, false},
+	{"STASH", TokenStash, false},
+	{"STASHING", TokenStashing, false},
+	{"RETRIEVE", TokenRetrieve, false},
+	{"RETRIEVING", TokenRetrieving, false},
+	{"IGNORE", TokenIgnore, false},
+	{"IGNORING", TokenIgnoring, false},
+	{"REMEMBER", TokenRemember, false},
+	{"REMEMBERING", TokenRemembering, false},
+	{"ABSTAIN", TokenAbstain, false},
+	{"ABSTAINING", TokenAbstaining, false},
+	{"FROM", TokenFrom, false},
+	{"REINSTATE", TokenReinstate, false},
+	{"REINSTATING", TokenReinstating, false},
+	{"GIVE", TokenGive, false},
+	{"GIVING", TokenGiving, false},
+	{"UP", TokenUp, false},
+	{"WRITE", TokenWrite, false},
+	{"WRITING", TokenWriting, false},
+	{"IN", TokenIn, false},
+	{"READ", TokenRead, false},
+	{"READING", TokenReading, false},
+	{"OUT", TokenOut, false},
+	{"SUB", TokenSub, false},
+	{"BY", TokenBy, false},
+	{"THANK", TokenThank, false},
+	{"NAUGHT", TokenNaught, false},
 }
+var maxTokenLen int
 
 func init() {
 	sort.Slice(tokenTable, func(i, j int) bool {
 		return len(tokenTable[i].Value) > len(tokenTable[j].Value)
 	})
+	maxTokenLen = len(tokenTable[0].Value)
+	if maxTokenLen < 5 {
+		maxTokenLen = 5 // len("65535") == 5
+	}
 }

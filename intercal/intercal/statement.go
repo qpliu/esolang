@@ -161,9 +161,6 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 		case TokenWow:
 			token.Type = TokenSpark
 			tokens = append(tokens, token, &Token{
-				Filename:    token.Filename,
-				LineNum:     token.LineNum,
-				ColNum:      token.ColNum,
 				Type:        TokenSpot,
 				NumberValue: 0,
 				StringValue: "",

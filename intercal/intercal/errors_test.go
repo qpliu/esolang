@@ -13,7 +13,7 @@ func testError(t *testing.T, e error, expected string) {
 }
 
 func testErrorAt(t *testing.T, src, expected string) {
-	statements, err := Parse(NewTokenizer("()", bytes.NewBufferString(src)))
+	statements, err := Parse(NewTokenizer(bytes.NewBufferString(src)))
 	if err == nil {
 		err = NewState(statements).Run(nil, nil)
 	}

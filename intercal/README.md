@@ -19,13 +19,6 @@ the ASCII entries in the character set table.
 
 Please note that this implementation is very buggy.
 
-Known bugs
-----------
-This implementation does not allow spaces within `NOT`, `N'T`, `NEXT`,
-`FORGET`, `CALCULATING`, `UP`, `BY`, `SUB`, etc.  According to 4.1, only
-`DO` and `PLEASE` cannot contain spaces, although overpunches presumably
-also cannot contain spaces.
-
 Notes
 -----
 Since the famous politeness checker was undocumented, it will not be
@@ -76,10 +69,10 @@ implementation will not support arrays in the `READ OUT` list despite many
 examples on the internet of `READING OUT` arrays.  Apparently, that is
 for binary or text I/O in newer implementations.
 
-Section 4.4.1 says 16-bit variables can only get 32-bit values if the
-value is less than 65535.  Presumably they can get a 16-bit value equal
-to 65535.  This bizarre restriction remains in the 1996 document.  This
-implementation will enforce it.
+Section 4.4.1 says 16-bit variables can only be assigned 32-bit values if
+the value is less than 65535.  Presumably they can be assigned a 16-bit
+value equal to 65535.  This bizarre restriction remains in the 1996
+document.  This implementation will enforce it.
 
 This implementation treats a spark or a rabbit-ears that immediately
 follows a binary operator or is immediately followed by a unary operator
@@ -114,26 +107,20 @@ in error 241, and `STASHING` an undimensioned array will stash a
 the array elements contain `#0`.
 
 The C-INTERCAL documentation says that spaces cannot be added inside a
-decimal number in an INTERCAL program.  This restriction is not in the
-1973 document or the 1996 document, so this implementation allows spaces
-(and line breaks) inside numbers.
-
-Since section 4.4.11 says that `PLEASE GIVE UP` has the effect of a `PLEASE
-RESUME #80`, this implementation will never produce error 632.  On second
-thought, this implementation will produce error 632 when terminating via
-a resume statement, and `PLEASE GIVE UP` will be different than `PLEASE
-RESUME #80`, as the former will terminate without an error and the latter
-will terminate with error 632.
+keyword or a decimal number in an INTERCAL program.  In section 4.1 of the
+1973 and 1996 document, the only restriction on spaces is that no word of
+a statement identifier (`DO`, `PLEASE`, or `PLEASE DO`) may contain any
+spaces.  In order to follow the original documents more closely, this
+implementation allows spaces anywhere except within `DO` or `PLEASE`, or
+within overpunches, i.e. `c<BACKSPACE><SPACE><BACKSPACE>/` will not be
+recognized as change.
 
 Since the errors in section 7 does not include the actual error messages,
 and the messages for errors other than 000, 123, 275, and 436 are not
-documented, the error messages are taken from the C-INTERCAL documentation,
-with the exception of error 579 when `WRITING IN` an empty line, which is
-"WHAT YOU WRITE DOES NOT COUNT" in this implementation.  On second
-thought, an empty line shall result in error 562, instead of inventing
-messages that are not in any of the documents.  Some research shows that
-the message for error 632 in C-INTERCAL differs from the message in the
-1972 implementation, so this implementation will use the latter message.
+documented, the error messages are taken from the C-INTERCAL documentation.
+Some research shows that the message for error 632 in C-INTERCAL differs
+from the message in the 1972 implementation, so this implementation will use
+the latter message.
 
 Since section 7.1 does not say what the second line of an error message is
 when there is no next statement, this implementation will have "ON THE
@@ -147,8 +134,9 @@ input and having to decide how to handle erroneous input.
 
 Section 4.4.7 says all subsequent statements have no effect on the
 variables and/or arrays.  That means `STASH` and `RETRIEVE` do nothing to
-them.  Apparently, in J-INTERCAL and CLC-INTERCAL, `STASH` and `RETRIEVE` do
-have effects on `IGNOREd` variables, which seems incorrect to me.
+them.  Apparently, in C-INTERCAL, CLC-INTERCAL and J-INTERCAL, `STASH` and
+`RETRIEVE` do have effects on `IGNOREd` variables, which seems incorrect to
+me.
 
 The INTERCAL System Library described in sections 5 and 6 is not
 included with this implementation.  It's probably a copyright violation
@@ -178,7 +166,8 @@ or even
 ```
     PLEASE READN'T
 ```
-outputs a bit with value 0.
+outputs a bit with value 0.  I don't think any major language has even one
+output bit statement, let alone two.
 
 This implementation has a 7 bit buffer.  If the buffer is full, outputting
 a bit causes the 8 bits to be written and the buffer to be cleared.  The

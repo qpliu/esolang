@@ -6,7 +6,7 @@ import (
 )
 
 func testParseList(t *testing.T, src, expectedListing string, errorCode int) {
-	statements, err := Parse(NewTokenizer("()", bytes.NewBufferString(src)))
+	statements, err := Parse(NewTokenizer(bytes.NewBufferString(src)))
 	if err != nil {
 		if errorCode == -1 {
 			t.Errorf("unexpected error=%s", err.Error())
@@ -99,7 +99,7 @@ func TestParseList(t *testing.T) {
 }
 
 func testParseStatements(t *testing.T, src string, expected []StatementType) []*Statement {
-	statements, err := Parse(NewTokenizer("()", bytes.NewBufferString(src)))
+	statements, err := Parse(NewTokenizer(bytes.NewBufferString(src)))
 	if err != nil {
 		t.Errorf("unexpected parse error=%s", err.Error())
 	}

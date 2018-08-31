@@ -122,3 +122,25 @@ func outputDigit(w io.Writer, digits string, overline string, digit int) {
 	w.Write(d)
 	w.Write([]byte(overline))
 }
+
+type IntercalWriter struct {
+	io.Writer
+	index  byte
+	buffer [1]byte
+}
+
+func NewIntercalWriter(w io.Writer) *IntercalWriter {
+	return &IntercalWriter{Writer: w, index: 1}
+}
+
+func (w *IntercalWriter) WriteBit(bit bool) {
+	if bit {
+		w.buffer[0] |= w.index
+	}
+	w.index <<= 1
+	if w.index == 0 {
+		w.Write(w.buffer[:])
+		w.index = 1
+		w.buffer[0] = 0
+	}
+}

@@ -2363,3 +2363,32 @@ define %val @writein32(%arr_vrbl* %arr) {
   done:
     ret %val zeroinitializer
 }
+
+@binary_output_index = global i8 1
+@binary_output_buffer = global i8 0
+
+define void @output_binary(i1 %bit) {
+    %current_index = load i8,i8* @binary_output_index
+    br i1 %bit,label %set_bit,label %advance_index
+
+  set_bit:
+    %current_buffer = load i8,i8* @binary_output_buffer
+    %new_buffer = or i8 %current_buffer,%current_index
+    store i8 %new_buffer,i8* @binary_output_buffer
+    br label %advance_index
+
+  advance_index:
+    %new_index = shl i8 %current_index,1
+    %flush_buffer_check = icmp eq i8 %new_index,0
+    br i1 %flush_buffer_check,label %flush_buffer,label %store_new_index
+
+  flush_buffer:
+    call i32 @write(i32 1,i8* @binary_output_buffer,i32 1)
+    store i8 0,i8* @binary_output_buffer
+    br label %store_new_index
+
+  store_new_index:
+    %next_index = phi i8 [%new_index,%advance_index],[1,%flush_buffer]
+    store i8 %next_index,i8* @binary_output_index
+    ret void
+}

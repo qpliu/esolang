@@ -31,7 +31,7 @@ func testSrcFile(t *testing.T, srcFilename string) {
 	output := &bytes.Buffer{}
 	state := NewState(statements)
 	state.Random.Seed(0)
-	if err := state.Run(input, output); err != nil && !strings.HasSuffix(srcFilename, fmt.Sprintf("E%03d.i", err.Code())) {
+	if err := state.Run(input, NewIntercalWriter(output)); err != nil && !strings.HasSuffix(srcFilename, fmt.Sprintf("E%03d.i", err.Code())) {
 		t.Errorf("%s:%s", srcFilename, err.Error())
 		return
 	}

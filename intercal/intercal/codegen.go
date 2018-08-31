@@ -920,6 +920,21 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			return err
 		}
 
+	case StatementReadOutBit:
+		bit := "0"
+		if stmt.Operands.(bool) {
+			bit = "1"
+		}
+		if _, err := fmt.Fprintf(w, "    ;READ OUT\n    call void @output_binary(i1 %s)\n", bit); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s\n", redoLabel); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, nextIndex(stmt, statements)); err != nil {
+			return err
+		}
+
 	default:
 		if _, err := fmt.Fprintf(w, "    ;UNKNOWN ERROR\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n    br label %%%s\n", stmt.Index+1, redoLabel); err != nil {
 			return err

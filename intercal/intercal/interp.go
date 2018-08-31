@@ -1,7 +1,6 @@
 package intercal
 
 import (
-	"io"
 	"math/rand"
 	"time"
 )
@@ -68,7 +67,7 @@ func (s *State) Array32(v Array32) *ArrayVar {
 	return val
 }
 
-func (s *State) Run(input *IntercalReader, output io.Writer) *Error {
+func (s *State) Run(input *IntercalReader, output *IntercalWriter) *Error {
 	for {
 		if s.StatementIndex >= len(s.Statements) {
 			return Err633
@@ -112,7 +111,7 @@ func (s *State) Run(input *IntercalReader, output io.Writer) *Error {
 	}
 }
 
-func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer) *Error {
+func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *IntercalWriter) *Error {
 	switch stmt.Type {
 	case StatementCalculate:
 		calc := stmt.Operands.(Calculation)
@@ -252,6 +251,11 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output io.Writer
 				return err.At(s, stmt)
 			}
 		}
+		s.StatementIndex = stmt.Index + 1
+		return nil
+
+	case StatementReadOutBit:
+		output.WriteBit(stmt.Operands.(bool))
 		s.StatementIndex = stmt.Index + 1
 		return nil
 

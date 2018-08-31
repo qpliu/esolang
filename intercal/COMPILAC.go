@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"./intercal"
@@ -26,11 +27,11 @@ func main() {
 	intercal.ListStatements(statements, os.Stdout)
 
 	input := intercal.NewIntercalReader(os.Stdin)
-
+	output := intercal.NewIntercalWriter(os.Stdout)
 	state := intercal.NewState(statements)
 
-	if err := state.Run(input, os.Stdout); err != nil {
-		println(err.Error())
+	if err := state.Run(input, output); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 }
