@@ -189,4 +189,11 @@ func TestTokenizer(t *testing.T) {
 		TokenIn,
 		TokenString,
 	})
+	testTokenizeTypes(t, "PLEASE NO TAB STAIN FROM CALCULATING", []TokenType{
+		TokenPlease,
+		TokenNot,
+		TokenAbstain,
+		TokenFrom,
+		TokenCalculating,
+	})
 }

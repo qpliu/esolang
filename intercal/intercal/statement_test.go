@@ -132,12 +132,12 @@ func TestParseStatements(t *testing.T) {
 	testParseStatements(t, "PLEASE ABSTAIN FROM CALCULATING", []StatementType{StatementAbstainGerundList})
 	testParseStatements(t, "DO ABSTAIN FROM ABSTAINING", []StatementType{StatementAbstainGerundList})
 	testParseStatements(t, "DO ABSTAIN FROM REINSTATING", []StatementType{StatementAbstainGerundList})
-	testParseStatements(t, "DO ABSTAIN FROM GIVING UP", []StatementType{StatementUnrecognizable}) // not accepted
+	testParseStatements(t, "DO ABSTAIN FROM GIVING UP", []StatementType{StatementReinstateGerundList}) // not accepted
 	testParseStatements(t, "DON'T GIVE UP", []StatementType{StatementGiveUp})
 	testParseStatements(t, "(1) DO ABSTAIN FROM (1)", []StatementType{StatementAbstainLabel})
 	testParseStatements(t, "(1) DO REINSTATE (1)", []StatementType{StatementReinstateLabel})
 	testParseStatements(t, "PLEASE REINSTATE REINSTATING", []StatementType{StatementReinstateGerundList})
-	testParseStatements(t, "DO REINSTATE GIVING UP", []StatementType{StatementUnrecognizable}) // invalid
+	testParseStatements(t, "DO REINSTATE GIVING UP", []StatementType{StatementReinstateGerundList}) // invalid
 	testParseStatements(t, "PLEASE REINSTATE (1) (1) DON'T GIVE UP", []StatementType{StatementReinstateLabel, StatementGiveUp})
 	testParseStatements(t, "PLEASE GIVE UP", []StatementType{StatementGiveUp})
 	testParseStatements(t, "PLEASE RESUME #80", []StatementType{StatementResume})
@@ -290,7 +290,7 @@ func testParseExpr(t *testing.T, src string, expected Expr) {
 }
 
 func testParseBadExpr(t *testing.T, src string) {
-	stmts := testParseStatements(t, "PLEASE DON'T FORGET"+src, []StatementType{StatementUnrecognizable})
+	stmts := testParseStatements(t, "PLEASE DON'T FORGET"+src, []StatementType{StatementForget})
 	if stmts[0].Error != Err017 {
 		t.Errorf("parse bad expr: %s %v", src, stmts[0].Error)
 	}

@@ -274,12 +274,13 @@ func codeGenDebugLocations(w io.Writer, statements []*Statement) (string, []stri
 func nextIndex(stmt *Statement, statements []*Statement) int {
 	switch stmt.Type {
 	case StatementNext:
-		return stmt.Operands.(int)
+		if stmt.Operands != nil {
+			return stmt.Operands.(int)
+		}
 	case StatementResume:
 		return len(statements)
-	default:
-		return stmt.Index + 1
 	}
+	return stmt.Index + 1
 }
 
 func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingIndexes [2]int, listingSize int, debugLocation string) error {
@@ -347,7 +348,7 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		return nil
 	}
 
-	if stmt.Type == StatementUnrecognizable {
+	if stmt.Type == StatementUnrecognizable || (stmt.Error != nil && stmt.Error.Code() == 0) {
 		if _, err := fmt.Fprintf(w, "    ;SYNTAX ERROR\n    call i32 @write(i32 2, i8* getelementptr([8 x i8], [8 x i8]* @error_message_000_prefix,i32 0,i32 0),i32 8)%s\n    call i32 @write(i32 2, i8* getelementptr([%d x i8], [%d x i8]* @program_listing,i32 0,i32 %d),i32 %d)%s\n", debugLocation, listingSize+4, listingSize+4, listingIndexes[0], listingIndexes[1], debugLocation); err != nil {
 			return err
 		}
@@ -411,7 +412,10 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 	}
 
 	if stmt.Error != nil {
-		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d)%s\n    br label %%stmt%d%s\n", stmt.Error.Code(), stmt.Index+1, debugLocation, stmt.Index+1, debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d)%s\n    br label %%stmt%d%s\n", stmt.Error.Code(), nextIndex(stmt, statements), debugLocation, nextIndex(stmt, statements), debugLocation); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, nextIndex(stmt, statements)); err != nil {
 			return err
 		}
 		return nil
@@ -1218,6 +1222,9 @@ func codeGenVariables(w io.Writer, statements []*Statement) error {
 }
 
 func collectStmtVariables(stmt *Statement, onespots map[Var16]bool, twospots map[Var32]bool, tails map[Array16]bool, hybrids map[Array32]bool) {
+	if stmt.Operands == nil {
+		return
+	}
 	switch stmt.Type {
 	case StatementCalculate:
 		calculation := stmt.Operands.(Calculation)

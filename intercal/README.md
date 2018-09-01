@@ -17,7 +17,9 @@ from the 1980s.  It seems reasonable to me to assume that these
 revisions are limited to the Notes On The Atari Implementation and
 the ASCII entries in the character set table.
 
-Please note that this implementation is very buggy.
+Please note that this implementation is very buggy.  Some of the bugs
+might be worked around by inserting `DO NOTHING MORE THAN KILLING THE
+BUGGY COMPILER` at various places in your program.
 
 Notes
 -----
@@ -72,7 +74,9 @@ for binary or text I/O in newer implementations.
 Section 4.4.1 says 16-bit variables can only be assigned 32-bit values if
 the value is less than 65535.  Presumably they can be assigned a 16-bit
 value equal to 65535.  This bizarre restriction remains in the 1996
-document.  This implementation will enforce it.
+document.  This implementation will enforce it by giving a fatal error
+if a 16-bit variable is assigned a 32-bit value greater than or equal to
+65535.
 
 This implementation treats a spark or a rabbit-ears that immediately
 follows a binary operator or is immediately followed by a unary operator
