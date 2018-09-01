@@ -135,18 +135,23 @@ func CodeGen(statements []*Statement, w io.Writer) error {
 		}
 	}
 
+	mainSubprogramDebugInfo, debugLocations, err := codeGenDebugLocations(w, statements)
+	if err != nil {
+		return err
+	}
+
 	// globals for variables and arrays
 	if err := codeGenVariables(w, statements); err != nil {
 		return err
 	}
 
 	// void @main()
-	if _, err := fmt.Fprintf(w, "define void @main() {\n    call i32 @write(i32 1, i8* getelementptr([%d x i8],[%d x i8]* @program_listing,i32 0,i32 0),i32 %d)\n    %%random_seed = call i32 @time(i8* null)\n    call void @srandom(i32 %%random_seed)\n    br label %%stmt0\n", listingSize+4, listingSize+4, listingSize); err != nil {
+	if _, err := fmt.Fprintf(w, "define void @main()%s {\n    call i32 @write(i32 2, i8* getelementptr([%d x i8],[%d x i8]* @program_listing,i32 0,i32 0),i32 %d)\n    %%random_seed = call i32 @time(i8* null)\n    call void @srandom(i32 %%random_seed)\n    br label %%stmt0\n", mainSubprogramDebugInfo, listingSize+4, listingSize+4, listingSize); err != nil {
 		return err
 	}
 
 	for i, stmt := range statements {
-		if err := codeGenStmt(w, stmt, statements, listingIndexes[i], listingSize); err != nil {
+		if err := codeGenStmt(w, stmt, statements, listingIndexes[i], listingSize, debugLocations[i]); err != nil {
 			return err
 		}
 	}
@@ -156,6 +161,114 @@ func CodeGen(statements []*Statement, w io.Writer) error {
 	}
 
 	return nil
+}
+
+func codeGenDebugLocations(w io.Writer, statements []*Statement) (string, []string, error) {
+	hasLocations := false
+	for _, stmt := range statements {
+		var stmtToken *Token
+		if stmt.Label == 0 && len(stmt.Tokens) > 0 {
+			stmtToken = stmt.Tokens[0]
+		} else if stmt.Label > 0 && len(stmt.Tokens) > 3 {
+			stmtToken = stmt.Tokens[3]
+		}
+		if stmtToken != nil && stmtToken.Location.Filename != "" {
+			hasLocations = true
+			break
+		}
+	}
+	if !hasLocations {
+		return "", make([]string, len(statements)), nil
+	}
+
+	if _, err := fmt.Fprintf(w, "!llvm.module.flags = !{!0, !1}\n"); err != nil {
+		return "", nil, err
+	}
+	if _, err := fmt.Fprintf(w, "!0 = !{i32 2, !\"Dwarf Version\", i32 4}\n"); err != nil {
+		return "", nil, err
+	}
+	if _, err := fmt.Fprintf(w, "!1 = !{i32 2, !\"Debug Info Version\", i32 3}\n"); err != nil {
+		return "", nil, err
+	}
+
+	mainSubprogramDebugInfo := ""
+	metainfoCounter := 2
+	files := make(map[string]int)
+	compileUnits := []int{}
+	for _, stmt := range statements {
+		var stmtToken *Token
+		if stmt.Label == 0 && len(stmt.Tokens) > 0 {
+			stmtToken = stmt.Tokens[0]
+		} else if stmt.Label > 0 && len(stmt.Tokens) > 3 {
+			stmtToken = stmt.Tokens[3]
+		}
+		if stmtToken == nil || stmtToken.Location.Filename == "" {
+			continue
+		}
+		if _, ok := files[stmtToken.Location.Filename]; ok {
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "!%d = !DIFile(filename: \"%s\", directory: \"%s\")\n", metainfoCounter, stmtToken.Location.Filename, stmtToken.Location.Dir); err != nil {
+			return "", nil, err
+		}
+		if _, err := fmt.Fprintf(w, "!%d = distinct !DICompileUnit(language: DW_LANG_C89, file: !%d, emissionKind: FullDebug)\n", metainfoCounter+1, metainfoCounter); err != nil {
+			return "", nil, err
+		}
+		if len(files) == 0 {
+			if _, err := fmt.Fprintf(w, "!%d = distinct !DISubprogram(name: \"PROGRAM\", linkageName: \"main\", file: !%d, unit: !%d, type: !%d)\n", metainfoCounter+2, metainfoCounter, metainfoCounter+1, metainfoCounter+3); err != nil {
+				return "", nil, err
+			}
+		} else {
+			if _, err := fmt.Fprintf(w, "!%d = distinct !DISubprogram(file: !%d, unit: !%d, type: !%d)\n", metainfoCounter+2, metainfoCounter, metainfoCounter+1, metainfoCounter+3); err != nil {
+				return "", nil, err
+			}
+		}
+		if _, err := fmt.Fprintf(w, "!%d = !DISubroutineType(types: !{})\n", metainfoCounter+3); err != nil {
+			return "", nil, err
+		}
+		files[stmtToken.Location.Filename] = metainfoCounter + 2
+		compileUnits = append(compileUnits, metainfoCounter+1)
+		if mainSubprogramDebugInfo == "" {
+			mainSubprogramDebugInfo = fmt.Sprintf(" !dbg !%d", metainfoCounter+2)
+		}
+		metainfoCounter += 4
+	}
+
+	if _, err := fmt.Fprintf(w, "!llvm.dbg.cu = !{"); err != nil {
+		return "", nil, err
+	}
+	for i, cu := range compileUnits {
+		comma := ","
+		if i == 0 {
+			comma = ""
+		}
+		if _, err := fmt.Fprintf(w, "%s!%d", comma, cu); err != nil {
+			return "", nil, err
+		}
+	}
+	if _, err := fmt.Fprintf(w, "}\n"); err != nil {
+		return "", nil, err
+	}
+
+	debugLocations := []string{}
+	for _, stmt := range statements {
+		var stmtToken *Token
+		if stmt.Label == 0 && len(stmt.Tokens) > 0 {
+			stmtToken = stmt.Tokens[0]
+		} else if stmt.Label > 0 && len(stmt.Tokens) > 3 {
+			stmtToken = stmt.Tokens[3]
+		}
+		if stmtToken == nil || stmtToken.Location.Filename == "" {
+			debugLocations = append(debugLocations, "")
+		} else {
+			if _, err := fmt.Fprintf(w, "!%d = !DILocation(line: %d, column: %d, scope: !%d)\n", metainfoCounter, stmtToken.Location.Line, stmtToken.Location.Column, files[stmtToken.Location.Filename]); err != nil {
+				return "", nil, err
+			}
+			debugLocations = append(debugLocations, fmt.Sprintf(", !dbg !%d", metainfoCounter))
+			metainfoCounter++
+		}
+	}
+	return mainSubprogramDebugInfo, debugLocations, nil
 }
 
 func nextIndex(stmt *Statement, statements []*Statement) int {
@@ -169,9 +282,18 @@ func nextIndex(stmt *Statement, statements []*Statement) int {
 	}
 }
 
-func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingIndexes [2]int, listingSize int) error {
+func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingIndexes [2]int, listingSize int, debugLocation string) error {
 	if _, err := fmt.Fprintf(w, "  stmt%d:\n", stmt.Index); err != nil {
 		return err
+	}
+	if stmt.Label != 0 && len(stmt.Tokens) > 3 {
+		if _, err := fmt.Fprintf(w, "    ; %s:%d:%d\n", stmt.Tokens[3].Location.Filename, stmt.Tokens[3].Location.Line, stmt.Tokens[3].Location.Column); err != nil {
+			return err
+		}
+	} else if len(stmt.Tokens) > 0 {
+		if _, err := fmt.Fprintf(w, "    ; %s:%d:%d\n", stmt.Tokens[0].Location.Filename, stmt.Tokens[0].Location.Line, stmt.Tokens[0].Location.Column); err != nil {
+			return err
+		}
 	}
 	labelCounter := 0
 
@@ -186,7 +308,16 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			label1 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
 			label2 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
 			labelCounter += 3
-			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 9)\n    br i1 %s, label %%%s, label %%%s\n  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 774,1),i32 %d) noreturn\n    ret void\n  %s:\n", ident1, ident1, label1, label2, label1, nextIndex(stmt, statements), label2); err != nil {
+			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 9)%s\n", ident1, debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br i1 %s, label %%%s, label %%%s%s\n", ident1, label1, label2, debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 774,1),i32 %d) noreturn%s\n", label1, nextIndex(stmt, statements), debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    ret void%s\n  %s:\n", debugLocation, label2); err != nil {
 				return err
 			}
 		}
@@ -198,29 +329,29 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		ident2 := fmt.Sprintf("%%abstain%d.%d", stmt.Index, labelCounter+1)
 		label1 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
 		labelCounter += 3
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1], [%d x i1]* @abstain_flags,i32 0,i32 %d\n    %s = load i1, i1* %s\n    br i1 %s, label %%stmt%d, label %%%s\n  %s:\n", ident1, len(statements)+1, len(statements)+1, stmt.Index, ident2, ident1, ident2, stmt.Index+1, label1, label1); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1], [%d x i1]* @abstain_flags,i32 0,i32 %d%s\n    %s = load i1, i1* %s%s\n    br i1 %s, label %%stmt%d, label %%%s%s\n  %s:\n", ident1, len(statements)+1, len(statements)+1, stmt.Index, debugLocation, ident2, ident1, debugLocation, ident2, stmt.Index+1, label1, debugLocation, label1); err != nil {
 			return err
 		}
 	}
 
 	if stmt.Chance == 0 {
-		if _, err := fmt.Fprintf(w, "    br label %%stmt%d\n", stmt.Index+1); err != nil {
+		if _, err := fmt.Fprintf(w, "    br label %%stmt%d%s\n", stmt.Index+1, debugLocation); err != nil {
 			return err
 		}
 	}
 
 	if stmt.Error != nil && stmt.Error.Message() != "" {
-		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d) noreturn\n    br label %%stmt%d\n", stmt.Error.Code(), stmt.Index+1, stmt.Index+1); err != nil {
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d) noreturn%s\n    br label %%stmt%d%s\n", stmt.Error.Code(), stmt.Index+1, debugLocation, stmt.Index+1, debugLocation); err != nil {
 			return err
 		}
 		return nil
 	}
 
 	if stmt.Type == StatementUnrecognizable {
-		if _, err := fmt.Fprintf(w, "    ;SYNTAX ERROR\n    call i32 @write(i32 2, i8* getelementptr([8 x i8], [8 x i8]* @error_message_000_prefix,i32 0,i32 0),i32 8)\n    call i32 @write(i32 2, i8* getelementptr([%d x i8], [%d x i8]* @program_listing,i32 0,i32 %d),i32 %d)\n", listingSize+4, listingSize+4, listingIndexes[0], listingIndexes[1]); err != nil {
+		if _, err := fmt.Fprintf(w, "    ;SYNTAX ERROR\n    call i32 @write(i32 2, i8* getelementptr([8 x i8], [8 x i8]* @error_message_000_prefix,i32 0,i32 0),i32 8)%s\n    call i32 @write(i32 2, i8* getelementptr([%d x i8], [%d x i8]* @program_listing,i32 0,i32 %d),i32 %d)%s\n", debugLocation, listingSize+4, listingSize+4, listingIndexes[0], listingIndexes[1], debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 3,0),i32 0,1),i32 %d) noreturn\n    br label %%stmt%d\n", stmt.Index+1, stmt.Index+1); err != nil {
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 3,0),i32 0,1),i32 %d) noreturn%s\n    br label %%stmt%d%s\n", stmt.Index+1, debugLocation, stmt.Index+1, debugLocation); err != nil {
 			return err
 		}
 		return nil
@@ -237,32 +368,32 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		countIdent := fmt.Sprintf("%%docount%d.%d", stmt.Index, labelCounter+3)
 		nextCountIdent := fmt.Sprintf("%%nextdocount%d.%d", stmt.Index, labelCounter+4)
 		labelCounter += 5
-		if _, err := fmt.Fprintf(w, "    br label %%%s\n  %s:\n    br label %%%s\n  %s:\n    br label %%%s\n  %s:\n", doLabel, doLabel, countCheckLabel, redoLabel, countCheckLabel, countCheckLabel); err != nil {
+		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n    br label %%%s%s\n  %s:\n    br label %%%s%s\n  %s:\n", doLabel, debugLocation, doLabel, countCheckLabel, debugLocation, redoLabel, countCheckLabel, debugLocation, countCheckLabel); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    %s = phi i32 [0,%%%s], [%s,%%%s]\n", countIdent, doLabel, nextCountIdent, redoLabel); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = phi i32 [0,%%%s], [%s,%%%s]%s\n", countIdent, doLabel, nextCountIdent, redoLabel, debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    %s = add i32 %s, 1\n", nextCountIdent, countIdent); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = add i32 %s, 1%s\n", nextCountIdent, countIdent, debugLocation); err != nil {
 			return err
 		}
 
 		countLimitIdent := fmt.Sprintf("%%countcheck%d.%d", stmt.Index, labelCounter)
 		randomCheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
 		labelCounter += 2
-		if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s, %d\n    br i1 %s, label %%%s, label %%%s\n  %s:\n", countLimitIdent, countIdent, stmt.Chance/100, countLimitIdent, startStmtLabel, randomCheckLabel, randomCheckLabel); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s, %d%s\n    br i1 %s, label %%%s, label %%%s%s\n  %s:\n", countLimitIdent, countIdent, stmt.Chance/100, debugLocation, countLimitIdent, startStmtLabel, randomCheckLabel, debugLocation, randomCheckLabel); err != nil {
 			return err
 		}
 
 		if stmt.Chance%100 == 0 {
-			if _, err := fmt.Fprintf(w, "    br label %%%s\n", redoDoneLabel); err != nil {
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoDoneLabel, debugLocation); err != nil {
 				return err
 			}
 		} else {
 			issecondRandomCheckIdent := fmt.Sprintf("%%issecondrandomcheck%d.%d", stmt.Index, labelCounter)
 			firstRandomCheckLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
 			labelCounter += 2
-			if _, err := fmt.Fprintf(w, "    %s = icmp ugt i32 %s, %d\n    br i1 %s, label %%%s, label %%%s\n  %s:\n", issecondRandomCheckIdent, countIdent, stmt.Chance/100, issecondRandomCheckIdent, redoDoneLabel, firstRandomCheckLabel, firstRandomCheckLabel); err != nil {
+			if _, err := fmt.Fprintf(w, "    %s = icmp ugt i32 %s, %d%s\n    br i1 %s, label %%%s, label %%%s%s\n  %s:\n", issecondRandomCheckIdent, countIdent, stmt.Chance/100, debugLocation, issecondRandomCheckIdent, redoDoneLabel, firstRandomCheckLabel, debugLocation, firstRandomCheckLabel); err != nil {
 				return err
 			}
 			randomCheckResult := fmt.Sprintf("%%randomcheck%d.%d", stmt.Index, labelCounter)
@@ -271,7 +402,7 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 			if stmt.Chance <= 100 {
 				doneLabel = fmt.Sprintf("stmt%d", stmt.Index+1)
 			}
-			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 %d)\n    br i1 %s, label %%%s, label %%%s\n", randomCheckResult, 10*(stmt.Chance%100), randomCheckResult, startStmtLabel, doneLabel); err != nil {
+			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 %d)%s\n    br i1 %s, label %%%s, label %%%s%s\n", randomCheckResult, 10*(stmt.Chance%100), debugLocation, randomCheckResult, startStmtLabel, doneLabel, debugLocation); err != nil {
 			}
 		}
 		if _, err := fmt.Fprintf(w, "  %s:\n", startStmtLabel); err != nil {
@@ -280,7 +411,7 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 	}
 
 	if stmt.Error != nil {
-		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d)\n    br label %%stmt%d\n", stmt.Error.Code(), stmt.Index+1, stmt.Index+1); err != nil {
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d)%s\n    br label %%stmt%d%s\n", stmt.Error.Code(), stmt.Index+1, debugLocation, stmt.Index+1, debugLocation); err != nil {
 			return err
 		}
 		return nil

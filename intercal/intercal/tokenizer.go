@@ -8,10 +8,14 @@ import (
 )
 
 type Tokenizer struct {
-	r     io.Reader
-	atEOF bool
+	r io.Reader
+
+	atEOF        bool
+	filename     string
+	line, column int
 
 	buffer       []byte
+	byteLocation []Location
 	index        int
 	tokenBuffer  []byte
 	tokenIndexes []int
@@ -19,10 +23,11 @@ type Tokenizer struct {
 	f         *os.File
 	filenames []string
 	fileIndex int
+	dir       string
 }
 
 func NewTokenizer(r io.Reader) *Tokenizer {
-	return &Tokenizer{r: r}
+	return &Tokenizer{r: r, line: 1, column: 1}
 }
 
 func NewFileTokenizer(filenames []string) (*Tokenizer, error) {
@@ -30,11 +35,19 @@ func NewFileTokenizer(filenames []string) (*Tokenizer, error) {
 	if err != nil {
 		return nil, err
 	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
 	return &Tokenizer{
 		r:         f,
+		filename:  filenames[0],
+		line:      1,
+		column:    1,
 		f:         f,
 		filenames: filenames,
 		fileIndex: 0,
+		dir:       dir,
 	}, nil
 }
 
@@ -59,13 +72,22 @@ func (t *Tokenizer) Next() (*Token, error) {
 					} else {
 						t.f = f
 						t.r = f
+						t.filename = t.filenames[t.fileIndex]
+						t.line = 1
+						t.column = 1
 					}
 				} else {
 					t.atEOF = true
 				}
 			} else {
 				t.buffer = append(t.buffer, buf[0])
+				t.byteLocation = append(t.byteLocation, Location{t.filename, t.dir, t.line, t.column})
 				t.index++
+				t.column++
+				if buf[0] == '\n' {
+					t.column = 1
+					t.line++
+				}
 				if isSpace(buf[0]) {
 					atTrailingWhitespace = true
 				} else {
@@ -79,13 +101,15 @@ func (t *Tokenizer) Next() (*Token, error) {
 		}
 
 		if len(t.tokenBuffer) == 0 {
-			for _, b := range t.buffer {
+			for i, b := range t.buffer {
 				if !isSpace(b) {
 					token := &Token{
 						Type:        TokenString,
 						StringValue: string(t.buffer),
+						Location:    t.byteLocation[i],
 					}
 					t.buffer = t.buffer[:0]
+					t.byteLocation = t.byteLocation[:0]
 					return token, nil
 				}
 			}
@@ -176,9 +200,13 @@ func (t *Tokenizer) leadingJunk(tokenStartIndex int) *Token {
 	leadingLen := tokenStartIndex - (t.index - len(t.buffer))
 	lastNewline := -1
 	lastJunk := -1
+	firstJunk := leadingLen
 	for i := 0; i < leadingLen; i++ {
 		if !isSpace(t.buffer[i]) {
 			lastJunk = i
+			if i < firstJunk {
+				firstJunk = i
+			}
 		} else if t.buffer[i] == '\n' {
 			lastNewline = i
 		}
@@ -190,10 +218,13 @@ func (t *Tokenizer) leadingJunk(tokenStartIndex int) *Token {
 		junkToken := &Token{
 			Type:        TokenString,
 			StringValue: string(t.buffer[:leadingLen]),
+			Location:    t.byteLocation[firstJunk],
 		}
 		newLen := len(t.buffer) - leadingLen
 		copy(t.buffer, t.buffer[leadingLen:])
 		t.buffer = t.buffer[:newLen]
+		copy(t.byteLocation, t.byteLocation[leadingLen:])
+		t.byteLocation = t.byteLocation[:newLen]
 		return junkToken
 	}
 	return nil
@@ -208,11 +239,17 @@ func (t *Tokenizer) nextToken(tokenBufferIndex int) *Token {
 		}
 		tokenLen++
 	}
-	token := &Token{StringValue: string(t.buffer[:tokenLen])}
+	tokenStart := t.tokenIndexes[0] - (t.index - len(t.buffer))
+	token := &Token{
+		StringValue: string(t.buffer[:tokenLen]),
+		Location:    t.byteLocation[tokenStart],
+	}
 
 	newLen := len(t.buffer) - tokenLen
 	copy(t.buffer, t.buffer[tokenLen:])
 	t.buffer = t.buffer[:newLen]
+	copy(t.byteLocation, t.byteLocation[tokenLen:])
+	t.byteLocation = t.byteLocation[:newLen]
 
 	newLen = len(t.tokenBuffer) - tokenBufferIndex
 	copy(t.tokenBuffer, t.tokenBuffer[tokenBufferIndex:])
@@ -229,6 +266,12 @@ type Token struct {
 	Type        TokenType
 	NumberValue uint16
 	StringValue string
+	Location    Location
+}
+
+type Location struct {
+	Filename, Dir string
+	Line, Column  int
 }
 
 func (t *Token) IsUnaryOp() bool {

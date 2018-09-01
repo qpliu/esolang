@@ -73,9 +73,9 @@ func main() {
 	os.Remove(tmpFile + ".ll")
 
 	if exeFile == "" {
-		cmd = exec.Command("cc", tmpFile+".s")
+		cmd = exec.Command("cc", "-g", tmpFile+".s")
 	} else {
-		cmd = exec.Command("cc", "-o", exeFile, tmpFile+".s")
+		cmd = exec.Command("cc", "-o", exeFile, "-g", tmpFile+".s")
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

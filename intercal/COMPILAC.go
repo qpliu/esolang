@@ -24,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	intercal.ListStatements(statements, os.Stdout)
+	intercal.ListStatements(statements, os.Stderr)
 
 	input := intercal.NewIntercalReader(os.Stdin)
 	output := intercal.NewIntercalWriter(os.Stdout)
