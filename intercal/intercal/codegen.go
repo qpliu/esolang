@@ -135,6 +135,37 @@ func CodeGen(statements []*Statement, w io.Writer) error {
 		}
 	}
 
+	// void @fatal_error_on_the_way_to(i32 %err_code, i8* %stmt_ptr) noreturn
+	if _, err := fmt.Fprintf(w, "define void @fatal_error_on_the_way_to(i32 %%err_code, i8* %%stmt_ptr) {\n"); err != nil {
+		return err
+	}
+	for i := range statements {
+		if _, err := fmt.Fprintf(w, "    %%check_stmt%d = icmp eq i8* %%stmt_ptr,blockaddress(@main,%%stmt%d)\n", i, i); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br i1 %%check_stmt%d,label %%is_stmt%d,label %%not_stmt%d\n", i, i, i); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  is_stmt%d:\n    %%err%d = insertvalue %%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %%err_code,1\n", i, i); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val %%err%d,i32 %d)\n", i, i); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    ret void\n"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  not_stmt%d:\n", i); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)\n", len(statements)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "    ret void\n}\n"); err != nil {
+		return err
+	}
+
 	mainSubprogramDebugInfo, debugLocations, err := codeGenDebugLocations(w, statements)
 	if err != nil {
 		return err
@@ -299,17 +330,18 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 	labelCounter := 0
 
 	// Err774 check
+	err774Ident := ""
 	{
 		doErr774 := stmt.Please && stmt.Type != StatementUnrecognizable
 		for i := stmt.Index + 1; i < len(statements) && i <= stmt.Index+10; i++ {
 			doErr774 = doErr774 && !statements[i].Thank
 		}
-		if doErr774 {
+		if doErr774 && stmt.Type != StatementResume {
 			ident1 := fmt.Sprintf("%%stmt%d.%d", stmt.Index, labelCounter)
 			label1 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
 			label2 := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+2)
 			labelCounter += 3
-			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 9)%s\n", ident1, debugLocation); err != nil {
+			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 5)%s\n", ident1, debugLocation); err != nil {
 				return err
 			}
 			if _, err := fmt.Fprintf(w, "    br i1 %s, label %%%s, label %%%s%s\n", ident1, label1, label2, debugLocation); err != nil {
@@ -319,6 +351,12 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 				return err
 			}
 			if _, err := fmt.Fprintf(w, "    ret void%s\n  %s:\n", debugLocation, label2); err != nil {
+				return err
+			}
+		} else if doErr774 && stmt.Type == StatementResume {
+			err774Ident = fmt.Sprintf("%%stmt%d.%d", stmt.Index, labelCounter)
+			labelCounter++
+			if _, err := fmt.Fprintf(w, "    %s = call i1 @random_check(i32 14)%s\n", err774Ident, debugLocation); err != nil {
 				return err
 			}
 		}
@@ -776,6 +814,21 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		if _, err := fmt.Fprintf(w, "    %s = load i8*, i8** %s%s\n", nextStmtIdent, finalstackentryptrIdent, debugLocation); err != nil {
 			return err
 		}
+
+		if err774Ident != "" {
+			err774Label := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter)
+			noErr774Label := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+1)
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s", err774Ident, err774Label, noErr774Label, debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error_on_the_way_to(i32 774,i8* %s)%s\n", err774Label, nextStmtIdent, debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n", noErr774Label, debugLocation, noErr774Label); err != nil {
+				return err
+			}
+		}
+
 		if _, err := fmt.Fprintf(w, "    indirectbr i8* %s, [", nextStmtIdent); err != nil {
 			return err
 		}

@@ -85,7 +85,10 @@ func (e *Error) Error() string {
 }
 
 func (e *Error) At(state *State, statement *Statement) *Error {
-	nextIndex := statement.Index + 1
+	return e.OnTheWayTo(state, statement, statement.Index+1)
+}
+
+func (e *Error) OnTheWayTo(state *State, statement *Statement, nextIndex int) *Error {
 	if statement.Type == StatementNext {
 		if next, ok := statement.Operands.(int); ok {
 			nextIndex = next

@@ -83,7 +83,11 @@ func (s *State) Run(input *IntercalReader, output *IntercalWriter) *Error {
 				thank = thank || s.Statements[i].Thank
 			}
 			if !thank && s.Random.Intn(100) == 0 {
-				return Err774.At(s, stmt)
+				if stmt.Type != StatementResume {
+					return Err774.At(s, stmt)
+				} else {
+					stmt.Error = Err774
+				}
 			}
 		}
 		chance := stmt.Chance
@@ -94,7 +98,7 @@ func (s *State) Run(input *IntercalReader, output *IntercalWriter) *Error {
 				}
 				break
 			}
-			if stmt.Error != nil {
+			if stmt.Error != nil && stmt.Type != StatementResume {
 				return stmt.Error.At(s, stmt)
 			}
 			if err := s.runStmt(stmt, input, output); err != nil {
@@ -181,6 +185,9 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		newlen := len(s.NEXTingStack) - int(val)
 		if newlen < 0 {
 			return Err632
+		}
+		if stmt.Error != nil {
+			return stmt.Error.OnTheWayTo(s, stmt, s.NEXTingStack[newlen])
 		}
 		s.StatementIndex = s.NEXTingStack[newlen]
 		s.NEXTingStack = s.NEXTingStack[:newlen]
