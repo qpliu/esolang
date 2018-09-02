@@ -205,3 +205,6 @@ However, if an array is never `STASHed`, then checking the COPY-ON-WRITE
 counter with every array element assignment would be a waste, so a slightly
 more sophisticated implementation would only add the COPY-ON-WRITE checks
 to arrays that can be `STASHed`.
+
+Another optimization is to turn `STASH` into a NO-OP for variables that are
+never `RETRIEVEd`.

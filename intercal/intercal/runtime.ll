@@ -21,11 +21,13 @@ declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i32, i1)
 
 ; ignore flag, value linked-list
 %vrbl = type {i1,%vrbl_val*}
-%vrbl_val = type {%vrbl_val*,i32}
+; link,stash count,value
+%vrbl_val = type {%vrbl_val*,i32,i32}
 
 %arr_vrbl = type {i1,%arr_val*}
-; in the [0 x i32], 0 is n, the number of dimensions, 1..n are the dimensions, n+1... are the values
-%arr_val = type {%arr_val*,[0 x i32]}
+; link,stash count,dimensions,
+; in the [0 x i32], 0..ndims-1 are the dimensions, ndims... are the values
+%arr_val = type {%arr_val*,i32,i32,[0 x i32]}
 
 @stack = global [79 x i8*] zeroinitializer
 @stackptr = global i32 0
@@ -2137,11 +2139,11 @@ define void @stash_var(%vrbl* %var) {
     ret void
 
   push_newval:
-    %oldi32valptr = getelementptr %vrbl_val,%vrbl_val* %oldval,i32 0,i32 1
+    %oldi32valptr = getelementptr %vrbl_val,%vrbl_val* %oldval,i32 0,i32 2
     %oldi32val = load i32,i32* %oldi32valptr
     %newvallinkptr = getelementptr %vrbl_val,%vrbl_val* %newval,i32 0,i32 0
     store %vrbl_val* %oldval,%vrbl_val** %newvallinkptr
-    %newi32valptr = getelementptr %vrbl_val,%vrbl_val* %newval,i32 0,i32 1
+    %newi32valptr = getelementptr %vrbl_val,%vrbl_val* %newval,i32 0,i32 2
     store i32 %oldi32val,i32* %newi32valptr
     br label %store_newval
 
@@ -2158,37 +2160,36 @@ define void @stash_arr(%arr_vrbl* %arr) {
 
   stash_uninitialized:
     ; push 0-dim value to distinguish from unstashed
-    %zerodim_mallocresult = call i8* @malloc(i32 ptrtoint(i32* getelementptr(%arr_val,%arr_val* null,i32 0,i32 1,i32 1) to i32))
-    call void @llvm.memset.p0i8.i32(i8* %zerodim_mallocresult,i8 0,i32 ptrtoint(i32* getelementptr(%arr_val,%arr_val* null,i32 0,i32 1,i32 0) to i32),i32 0,i1 0)
+    %zerodim_mallocresult = call i8* @malloc(i32 ptrtoint(i32* getelementptr(%arr_val,%arr_val* null,i32 0,i32 3,i32 0) to i32))
+    call void @llvm.memset.p0i8.i32(i8* %zerodim_mallocresult,i8 0,i32 ptrtoint(i32* getelementptr(%arr_val,%arr_val* null,i32 0,i32 3,i32 0) to i32),i32 0,i1 0)
     %zerodim_arr_val = bitcast i8* %zerodim_mallocresult to %arr_val*
     store %arr_val* %zerodim_arr_val,%arr_val** %arr_val_ptr
     call void @stash_arr(%arr_vrbl* %arr)
     ret void
 
   push_newval:
-    %olddims_ptr = getelementptr %arr_val,%arr_val* %old_arr_val,i32 0,i32 1,i32 0
+    %olddims_ptr = getelementptr %arr_val,%arr_val* %old_arr_val,i32 0,i32 2
     %olddims = load i32,i32* %olddims_ptr
     %olddims_iszero = icmp eq i32 %olddims,0
     br i1 %olddims_iszero,label %malloc_newval,label %calc_newval_size
 
   calc_newval_size:
-    %current_dim_index = phi i32 [1,%push_newval],[%next_dim_index,%calc_next_newval_size]
-    %current_size = phi i32 [1,%push_newval],[%next_size,%calc_next_newval_size]
-    %current_mallocsize_indexminus1 = add i32 %current_size,%olddims
-    %current_mallocsize_index = add i32 %current_mallocsize_indexminus1,1
-    %current_dims_done = icmp ugt i32 %current_dim_index,%olddims
+    %current_dim_index = phi i32 [0,%push_newval],[%next_dim_index,%calc_next_newval_size]
+    %current_size = phi i32 [0,%push_newval],[%next_size,%calc_next_newval_size]
+    %current_mallocsize_index = add i32 %current_size,%olddims
+    %current_dims_done = icmp uge i32 %current_dim_index,%olddims
     br i1 %current_dims_done,label %malloc_newval,label %calc_next_newval_size
 
   calc_next_newval_size:
     %next_dim_index = add i32 %current_dim_index,1
-    %current_dim_ptr = getelementptr %arr_val,%arr_val* %old_arr_val,i32 0,i32 1,i32 %current_dim_index
+    %current_dim_ptr = getelementptr %arr_val,%arr_val* %old_arr_val,i32 0,i32 3,i32 %current_dim_index
     %current_dim = load i32,i32* %current_dim_ptr
     %next_size = mul i32 %current_dim,%current_size
     br label %calc_newval_size
 
   malloc_newval:
-    %mallocsize_index = phi i32 [1,%push_newval],[%current_mallocsize_index,%calc_newval_size]
-    %mallocsize_addr = getelementptr %arr_val,%arr_val* null,i32 0, i32 1,i32 %mallocsize_index
+    %mallocsize_index = phi i32 [0,%push_newval],[%current_mallocsize_index,%calc_newval_size]
+    %mallocsize_addr = getelementptr %arr_val,%arr_val* null,i32 0, i32 3,i32 %mallocsize_index
     %mallocsize = ptrtoint i32* %mallocsize_addr to i32
     %mallocresult = call i8* @malloc(i32 %mallocsize)
     %oldval_i8star = bitcast %arr_val* %old_arr_val to i8*
@@ -2258,26 +2259,26 @@ define {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr) {
     ret {i32,i32,i1} zeroinitializer
 
   calc_range:
-    %dims_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1,i32 0
+    %dims_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 2
     %dims = load i32,i32* %dims_ptr
     %dims_iszero = icmp eq i32 %dims,0
     br i1 %dims_iszero,label %ret_fail,label %loop
 
   loop:
-    %current_index = phi i32 [1,%calc_range],[%next_index,%next_loop]
+    %current_index = phi i32 [0,%calc_range],[%next_index,%next_loop]
     %current_size = phi i32 [1,%calc_range],[%next_size,%next_loop]
-    %last_index_done = icmp ugt i32 %current_index,%dims
+    %last_index_done = icmp uge i32 %current_index,%dims
     br i1 %last_index_done,label %ret_result,label %next_loop
 
   next_loop:
     %next_index = add i32 %current_index,1
-    %current_dim_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1,i32 %current_index
+    %current_dim_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 3,i32 %current_index
     %current_dim = load i32,i32* %current_dim_ptr
     %next_size = mul i32 %current_size,%current_dim
     br label %loop
 
   ret_result:
-    %start_index = add i32 %dims,1
+    %start_index = select i1 1,i32 %dims,i32 %dims
     %end_index = add i32 %start_index,%current_size
     %result1 = insertvalue {i32,i32,i1} insertvalue({i32,i32,i1} zeroinitializer,i1 1,2), i32 %start_index, 0
     %result = insertvalue {i32,i32,i1} %result1, i32 %end_index, 1
@@ -2312,7 +2313,7 @@ define %val @writein16(%arr_vrbl* %arr) {
 
   next_loop:
     %next_index = add i32 %index,1
-    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 1,i32 %index
+    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 3,i32 %index
     %new_elem = extractvalue %val %input_val, 1
     store i32 %new_elem,i32* %elem_ptr
     br label %loop
@@ -2352,7 +2353,7 @@ define %val @writein32(%arr_vrbl* %arr) {
 
   next_loop:
     %next_index = add i32 %index,1
-    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 1,i32 %index
+    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 3,i32 %index
     %new_elem = extractvalue %val %input_val, 1
     store i32 %new_elem,i32* %elem_ptr
     br label %loop

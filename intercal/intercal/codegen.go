@@ -555,10 +555,10 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		mallocsizeaddrIdent := fmt.Sprintf("%%mallocsizeaddr%d.%d", stmt.Index, labelCounter+1)
 		mallocsizeIdent := fmt.Sprintf("%%mallocsize%d.%d", stmt.Index, labelCounter+2)
 		labelCounter += 3
-		if _, err := fmt.Fprintf(w, "    %s = add i32 %d,%s%s\n", i32arrsizeIdent, 1+len(dim.RHS), totaldimIdent, debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = add i32 %d,%s%s\n", i32arrsizeIdent, len(dim.RHS), totaldimIdent, debugLocation); err != nil {
 			return nil
 		}
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* null,i32 0,i32 1,i32 %s%s\n", mallocsizeaddrIdent, i32arrsizeIdent, debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* null,i32 0,i32 3,i32 %s%s\n", mallocsizeaddrIdent, i32arrsizeIdent, debugLocation); err != nil {
 			return nil
 		}
 		if _, err := fmt.Fprintf(w, "    %s = ptrtoint i32* %s to i32%s\n", mallocsizeIdent, mallocsizeaddrIdent, debugLocation); err != nil {
@@ -578,13 +578,13 @@ func codeGenStmt(w io.Writer, stmt *Statement, statements []*Statement, listingI
 		if _, err := fmt.Fprintf(w, "    %s = bitcast i8* %s to %%arr_val*%s\n", newarrvalIdent, mallocresultIdent, debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 1,i32 0%s\n    store i32 %d,i32* %s%s\n", newarrvaldimptrIdent, newarrvalIdent, debugLocation, len(dim.RHS), newarrvaldimptrIdent, debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 2%s\n    store i32 %d,i32* %s%s\n", newarrvaldimptrIdent, newarrvalIdent, debugLocation, len(dim.RHS), newarrvaldimptrIdent, debugLocation); err != nil {
 			return err
 		}
 		for i, dimIdent := range dimIdents {
 			newdimptrIdent := fmt.Sprintf("%%newdimptr%d.%d", stmt.Index, labelCounter)
 			labelCounter++
-			if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 1,i32 %d%s\n", newdimptrIdent, newarrvalIdent, i+1, debugLocation); err != nil {
+			if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 3,i32 %d%s\n", newdimptrIdent, newarrvalIdent, i, debugLocation); err != nil {
 				return err
 			}
 			if _, err := fmt.Fprintf(w, "    store i32 %s,i32* %s%s\n", dimIdent, newdimptrIdent, debugLocation); err != nil {
@@ -1447,7 +1447,7 @@ func codeGenAccessVar(w io.Writer, stmt *Statement, resultIdent, varIdent string
 	loadresultptrIdent := fmt.Sprintf("%%loadresultptr%d.%d", stmt.Index, labelCounter)
 	loadedresultIdent := fmt.Sprintf("%%loadedresult%d.%d", stmt.Index, labelCounter+1)
 	labelCounter += 2
-	if _, err := fmt.Fprintf(w, "  %s:\n    %s = getelementptr %%vrbl_val, %%vrbl_val* %s,i32 0,i32 1%s\n", loadResultValueLabel, loadresultptrIdent, valptrIdent, debugLocation); err != nil {
+	if _, err := fmt.Fprintf(w, "  %s:\n    %s = getelementptr %%vrbl_val, %%vrbl_val* %s,i32 0,i32 2%s\n", loadResultValueLabel, loadresultptrIdent, valptrIdent, debugLocation); err != nil {
 		return 0, err
 	}
 	if _, err := fmt.Fprintf(w, "    %s = load i32, i32* %s%s\n", loadedresultIdent, loadresultptrIdent, debugLocation); err != nil {
@@ -1562,7 +1562,7 @@ func codeGenFindArrayElement(w io.Writer, stmt *Statement, boundsErrorLabel stri
 	dimscheckIdent := fmt.Sprintf("%%dimscheck%d.%d", stmt.Index, labelCounter+2)
 	getIndexesLabel := fmt.Sprintf("stmt%d.%d", stmt.Index, labelCounter+3)
 	labelCounter += 4
-	if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val, %%arr_val* %s,i32 0,i32 1,i32 0%s\n", dimsptrIdent, valptrIdent, debugLocation); err != nil {
+	if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val, %%arr_val* %s,i32 0,i32 2%s\n", dimsptrIdent, valptrIdent, debugLocation); err != nil {
 		return 0, nil, "", err
 	}
 	if _, err := fmt.Fprintf(w, "    %s = load i32, i32* %s%s\n", dimsIdent, dimsptrIdent, debugLocation); err != nil {
@@ -1627,7 +1627,7 @@ func codeGenFindArrayElement(w io.Writer, stmt *Statement, boundsErrorLabel stri
 		currentindexboundptrIdent := fmt.Sprintf("%%currentindexboundptr%d.%d", stmt.Index, labelCounter)
 		currentindexboundIdent := fmt.Sprintf("%%currentindexbound%d.%d", stmt.Index, labelCounter+1)
 		labelCounter += 2
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val, %%arr_val* %s,i32 0,i32 1,i32 %d%s\n", currentindexboundptrIdent, valptrIdent, i+1, debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val, %%arr_val* %s,i32 0,i32 3,i32 %d%s\n", currentindexboundptrIdent, valptrIdent, i, debugLocation); err != nil {
 			return 0, nil, "", err
 		}
 		if _, err := fmt.Fprintf(w, "    %s = load i32,i32* %s%s\n", currentindexboundIdent, currentindexboundptrIdent, debugLocation); err != nil {
@@ -1678,10 +1678,10 @@ func codeGenFindArrayElement(w io.Writer, stmt *Statement, boundsErrorLabel stri
 	actualindexIdent := fmt.Sprintf("%%actualindex%d.%d", stmt.Index, labelCounter)
 	arrayelementptrIdent := fmt.Sprintf("%%arrayelementptr%d.%d", stmt.Index, labelCounter+1)
 	labelCounter += 2
-	if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%d%s\n", actualindexIdent, currentindextotalIdent, 1+len(arrayElement.Index), debugLocation); err != nil {
+	if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%d%s\n", actualindexIdent, currentindextotalIdent, len(arrayElement.Index), debugLocation); err != nil {
 		return 0, nil, "", err
 	}
-	if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val, %%arr_val* %s, i32 0, i32 1, i32 %s%s\n", arrayelementptrIdent, valptrIdent, actualindexIdent, debugLocation); err != nil {
+	if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val, %%arr_val* %s, i32 0, i32 3, i32 %s%s\n", arrayelementptrIdent, valptrIdent, actualindexIdent, debugLocation); err != nil {
 		return 0, nil, "", err
 	}
 	return labelCounter, indexIdentSrcLabels, arrayelementptrIdent, nil
@@ -1828,7 +1828,7 @@ func codeGenGets(w io.Writer, stmt *Statement, lhs LValue, rhsIdent string, done
 		if _, err := fmt.Fprintf(w, "  %s:\n    %s = phi %%vrbl_val* [%s,%%%s],[%s,%%%s]%s\n", storevalueLabel, finalvalueptrIdent, valueptrIdent, valueptrnotnullLabel, newvalueptrIdent, valueptrisnullLabel, debugLocation); err != nil {
 			return 0, err
 		}
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl_val, %%vrbl_val* %s, i32 0, i32 1%s\n", finali32valueptrIdent, finalvalueptrIdent, debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl_val, %%vrbl_val* %s, i32 0, i32 2%s\n", finali32valueptrIdent, finalvalueptrIdent, debugLocation); err != nil {
 			return 0, err
 		}
 		if _, err := fmt.Fprintf(w, "    store i32 %s,i32* %s%s\n    br label %%%s%s\n", rhsi32valueIdent, finali32valueptrIdent, debugLocation, doneLabel, debugLocation); err != nil {
