@@ -178,3 +178,30 @@ a bit causes the 8 bits to be written and the buffer to be cleared.  The
 8 bits are written as a byte with the first bit buffered as the least
 significant bit and the last bit as the most significant bit.  Any bits in
 the buffer when the program terminates are discarded.
+
+Note for optimization
+---------------------
+If an array is `STASHed`, then immediately redimensioned, allocating and
+copying into a new array when `STASHing` would be a waste, since it would
+be freed when redimensioning.
+
+Alternatively, an array can have a COPY-ON-WRITE counter, which can be
+incremented on `STASH`.
+
+When `RETRIEVEing`, if the COPY-ON-WRITE counter is greater than zero, it is
+decremented, otherwise, the value is popped.
+
+When assigning to an element of the array, if the COPY-ON-WRITE counter is
+greater than zero, decrement it, then push a copy of the array with the
+COPY-ON-WRITE counter set to zero in the copy.  In either case, the element
+can then be assigned.
+
+When redimensioning an array, if the COPY-ON-WRITE counter is greater than
+zero, decrement it, then push a new array with the new dimensions.  Otherwise,
+if the COPY-ON-WRITE counter is zero, pop the current array, then push the
+new array with the new dimensions.
+
+However, if an array is never `STASHed`, then checking the COPY-ON-WRITE
+counter with every array element assignment would be a waste, so a slightly
+more sophisticated implementation would only add the COPY-ON-WRITE checks
+to arrays that can be `STASHed`.
