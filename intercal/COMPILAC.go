@@ -7,21 +7,39 @@ import (
 	"./intercal"
 )
 
+func usage() {
+	println("Usage:", os.Args[0], "[-strict] SRCFILE [SRCFILE...]")
+	os.Exit(1)
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		println("Usage:", os.Args[0], "SRCFILE [SRCFILE...]")
-		os.Exit(1)
+	srcFileIndex := 1
+	strictFlag := false
+	for {
+		if srcFileIndex >= len(os.Args) {
+			usage()
+		} else if os.Args[srcFileIndex] == "-strict" {
+			strictFlag = true
+			srcFileIndex++
+		} else {
+			break
+		}
 	}
-	tokenizer, err := intercal.NewFileTokenizer(os.Args[1:])
+
+	tokenizer, err := intercal.NewFileTokenizer(os.Args[srcFileIndex:])
 	if err != nil {
-		println(err.Error())
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 		os.Exit(1)
 	}
 
 	statements, err := intercal.Parse(tokenizer)
 	if err != nil {
-		println(err.Error())
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 		os.Exit(1)
+	}
+
+	if strictFlag {
+		intercal.Strict(statements)
 	}
 
 	intercal.ListStatements(statements, os.Stderr)

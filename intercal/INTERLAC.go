@@ -9,20 +9,34 @@ import (
 	"./intercal"
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [-strict] [-ll|-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
+	os.Exit(1)
+}
+
 func main() {
-	if len(os.Args) < 2 || (os.Args[1] == "-o" && len(os.Args) < 3) {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-ll|-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
-		os.Exit(1)
-	}
 	srcFileIndex := 1
 	exeFile := ""
 	llFlag := false
-	if os.Args[1] == "-o" {
-		exeFile = os.Args[2]
-		srcFileIndex = 3
-	} else if os.Args[1] == "-ll" {
-		llFlag = true
-		srcFileIndex = 2
+	strictFlag := false
+	for {
+		if srcFileIndex >= len(os.Args) {
+			usage()
+		} else if os.Args[srcFileIndex] == "-o" {
+			if srcFileIndex+1 >= len(os.Args) {
+				usage()
+			}
+			exeFile = os.Args[srcFileIndex+1]
+			srcFileIndex += 2
+		} else if os.Args[srcFileIndex] == "-ll" {
+			llFlag = true
+			srcFileIndex++
+		} else if os.Args[srcFileIndex] == "-strict" {
+			strictFlag = true
+			srcFileIndex++
+		} else {
+			break
+		}
 	}
 
 	tokenizer, err := intercal.NewFileTokenizer(os.Args[srcFileIndex:])
@@ -35,6 +49,10 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 		os.Exit(1)
+	}
+
+	if strictFlag {
+		intercal.Strict(statements)
 	}
 
 	if llFlag {

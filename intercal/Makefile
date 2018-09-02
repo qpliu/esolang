@@ -14,6 +14,7 @@ runtime: runtime.go
 clean:
 	go clean
 	$(RM) coverage.out coverage2.out runtime.go src _
+	$(RM) -r a.out.dSYM
 
 test:
 	go fmt ./... && go vet ./... && go test -cover ./intercal

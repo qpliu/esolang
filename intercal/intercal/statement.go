@@ -1007,6 +1007,14 @@ func ListStatements(statements []*Statement, out io.Writer) error {
 	return nil
 }
 
+func Strict(statements []*Statement) {
+	for _, stmt := range statements {
+		if stmt.Chance == 0 || stmt.Chance >= 100 || stmt.Type == StatementReadOutBit {
+			stmt.Error = Err000
+		}
+	}
+}
+
 type Calculation struct {
 	LHS LValue
 	RHS Expr
