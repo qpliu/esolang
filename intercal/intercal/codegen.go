@@ -55,8 +55,10 @@ type codeGenStmt struct {
 }
 
 type codeGenVar struct {
-	ident string
-	is16  bool
+	ident   string
+	is16    bool
+	varType string
+	valType string
 
 	assigned    bool
 	accessed    bool
@@ -146,28 +148,48 @@ func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementT
 	case Var16:
 		info, ok := cgs.spots[e]
 		if !ok {
-			info = &codeGenVar{ident: fmt.Sprintf("@onespot%d", e), is16: true}
+			info = &codeGenVar{
+				ident:   fmt.Sprintf("@onespot%d", e),
+				is16:    true,
+				varType: "%vrbl",
+				valType: "%vrbl_val",
+			}
 			cgs.spots[e] = info
 		}
 		varInfo = info
 	case Var32:
 		info, ok := cgs.twospots[e]
 		if !ok {
-			info = &codeGenVar{ident: fmt.Sprintf("@twospot%d", e), is16: false}
+			info = &codeGenVar{
+				ident:   fmt.Sprintf("@twospot%d", e),
+				is16:    false,
+				varType: "%vrbl",
+				valType: "%vrbl_val",
+			}
 			cgs.twospots[e] = info
 		}
 		varInfo = info
 	case Array16:
 		info, ok := cgs.tails[e]
 		if !ok {
-			info = &codeGenVar{ident: fmt.Sprintf("@tail%d", e), is16: true}
+			info = &codeGenVar{
+				ident:   fmt.Sprintf("@tail%d", e),
+				is16:    true,
+				varType: "%arr_vrbl",
+				valType: "%arr_val",
+			}
 			cgs.tails[e] = info
 		}
 		varInfo = info
 	case Array32:
 		info, ok := cgs.hybrids[e]
 		if !ok {
-			info = &codeGenVar{ident: fmt.Sprintf("@hybrid%d", e), is16: false}
+			info = &codeGenVar{
+				ident:   fmt.Sprintf("@hybrid%d", e),
+				is16:    false,
+				varType: "%arr_vrbl",
+				valType: "%arr_val",
+			}
 			cgs.hybrids[e] = info
 		}
 		varInfo = info
@@ -223,21 +245,30 @@ func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementT
 
 func (cgs *codeGenState) collectVarDimInfo(dim Dimensioning) {
 	cgs.collectStmtVarInfo(dim.LHS, StatementCalculateArrayDimension)
-	var varInfo *codeGenVar
-	switch v := dim.LHS.(type) {
-	case Array16:
-		varInfo = cgs.tails[v]
-	case Array32:
-		varInfo = cgs.hybrids[v]
-	default:
-		panic("VarDimInfo")
-	}
+	varInfo := cgs.varInfo(dim.LHS)
 	for _, d := range varInfo.dims {
 		if d == len(dim.RHS) {
 			return
 		}
 	}
 	varInfo.dims = append(varInfo.dims, len(dim.RHS))
+}
+
+func (cgs *codeGenState) varInfo(vrbl Ignoredable) *codeGenVar {
+	switch v := vrbl.(type) {
+	case Var16:
+		return cgs.spots[v]
+	case Var32:
+		return cgs.twospots[v]
+	case Array16:
+		return cgs.tails[v]
+	case Array32:
+		return cgs.hybrids[v]
+	case ArrayElement:
+		return cgs.varInfo(v.Array)
+	default:
+		panic("VarInfo")
+	}
 }
 
 func (cgs *codeGenState) genListing(w io.Writer) error {
@@ -407,22 +438,22 @@ func (cgs *codeGenState) genGlobals(w io.Writer) error {
 
 	// future optimization: omit never assigned, never dimensioned
 	for _, info := range cgs.spots {
-		if _, err := fmt.Fprintf(w, "%s = global %%vrbl zeroinitializer\n", info.ident); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = global %s zeroinitializer\n", info.ident, info.varType); err != nil {
 			return err
 		}
 	}
 	for _, info := range cgs.twospots {
-		if _, err := fmt.Fprintf(w, "%s = global %%vrbl zeroinitializer\n", info.ident); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = global %s zeroinitializer\n", info.ident, info.varType); err != nil {
 			return err
 		}
 	}
 	for _, info := range cgs.tails {
-		if _, err := fmt.Fprintf(w, "%s = global %%arr_vrbl zeroinitializer\n", info.ident); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = global %s zeroinitializer\n", info.ident, info.varType); err != nil {
 			return err
 		}
 	}
 	for _, info := range cgs.hybrids {
-		if _, err := fmt.Fprintf(w, "%s = global %%arr_vrbl zeroinitializer\n", info.ident); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = global %s zeroinitializer\n", info.ident, info.varType); err != nil {
 			return err
 		}
 	}
@@ -705,16 +736,6 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		if _, err := fmt.Fprintf(w, "  %s:\n", startStmtLabel); err != nil {
 			return err
 		}
-	}
-
-	if cgs.stmt.Error != nil {
-		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 %d,1),i32 %d)%s\n    br label %%stmt%d%s\n", cgs.stmt.Error.Code(), cgs.nextIndex(), cgs.debugLocation, cgs.nextIndex(), cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d\n", redoDoneLabel, cgs.nextIndex()); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	switch cgs.stmt.Type {
@@ -1075,6 +1096,14 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			return err
 		}
 		for _, operand := range cgs.stmt.Operands.([]Stashable) {
+			varInfo := cgs.varInfo(operand)
+			if !varInfo.retrieved {
+				if _, err := fmt.Fprintf(w, "    ;%s never RETRIEVEd, not STASHING\n", varInfo.ident); err != nil {
+					return err
+				}
+				continue
+			}
+
 			notignoredLabel := cgs.label("stmt")
 			nextLabel := cgs.label("stmt")
 			if ignoredIdent, err := cgs.genCheckIgnored(w, operand); err != nil {
@@ -1085,21 +1114,13 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 				}
 			}
 
-			switch v := operand.(type) {
-			case Var16:
-				if _, err := fmt.Fprintf(w, "    call void @stash_var(%%vrbl* @onespot%d)%s\n", v, cgs.debugLocation); err != nil {
+			switch operand.(type) {
+			case Var16, Var32:
+				if _, err := fmt.Fprintf(w, "    call void @stash_var(%s* %s)%s\n", varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 					return err
 				}
-			case Var32:
-				if _, err := fmt.Fprintf(w, "    call void @stash_var(%%vrbl* @twospot%d)%s\n", v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Array16:
-				if _, err := fmt.Fprintf(w, "    call void @stash_arr(%%arr_vrbl* @tail%d)%s\n", v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Array32:
-				if _, err := fmt.Fprintf(w, "    call void @stash_arr(%%arr_vrbl* @hybrid%d)%s\n", v, cgs.debugLocation); err != nil {
+			case Array16, Array32:
+				if _, err := fmt.Fprintf(w, "    call void @stash_arr(%s* %s)%s\n", varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 					return err
 				}
 			default:
@@ -1119,6 +1140,8 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			return err
 		}
 		for _, operand := range cgs.stmt.Operands.([]Stashable) {
+			varInfo := cgs.varInfo(operand)
+
 			notignoredLabel := cgs.label("stmt")
 			nextLabel := cgs.label("stmt")
 			if ignoredIdent, err := cgs.genCheckIgnored(w, operand); err != nil {
@@ -1129,30 +1152,22 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 				}
 			}
 
+			retrievefailedLabel := cgs.label("stmt")
 			retrievesucceededIdent := cgs.ident("retrieve_succeeded")
 
-			switch v := operand.(type) {
-			case Var16:
-				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_var(%%vrbl* @onespot%d)%s\n", retrievesucceededIdent, v, cgs.debugLocation); err != nil {
+			switch operand.(type) {
+			case Var16, Var32:
+				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_var(%s* %s)%s\n", retrievesucceededIdent, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 					return err
 				}
-			case Var32:
-				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_var(%%vrbl* @twospot%d)%s\n", retrievesucceededIdent, v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Array16:
-				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_arr(%%arr_vrbl* @tail%d)%s\n", retrievesucceededIdent, v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Array32:
-				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_arr(%%arr_vrbl* @hybrid%d)%s\n", retrievesucceededIdent, v, cgs.debugLocation); err != nil {
+			case Array16, Array32:
+				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_arr(%s* %s)%s\n", retrievesucceededIdent, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 					return err
 				}
 			default:
 				panic("Retrieve")
 			}
 
-			retrievefailedLabel := cgs.label("stmt")
 			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", retrievesucceededIdent, nextLabel, retrievefailedLabel, cgs.debugLocation); err != nil {
 				return err
 			}
@@ -1351,30 +1366,18 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 }
 
 func (cgs *codeGenState) genCheckIgnored(w io.Writer, ignoredable Ignoredable) (string, error) {
-	vIdent := ""
-	vType := ""
-	switch v := ignoredable.(type) {
-	case Array16:
-		vIdent = fmt.Sprintf("@tail%d", v)
-		vType = "%arr_vrbl"
-	case Array32:
-		vIdent = fmt.Sprintf("@hybrid%d", v)
-		vType = "%arr_vrbl"
-	case Var16:
-		vIdent = fmt.Sprintf("@onespot%d", v)
-		vType = "%vrbl"
-	case Var32:
-		vIdent = fmt.Sprintf("@twospot%d", v)
-		vType = "%vrbl"
-	case ArrayElement:
-		return cgs.genCheckIgnored(w, v.Array)
-	default:
-		panic("CheckIgnored")
+	varInfo := cgs.varInfo(ignoredable)
+	if !varInfo.ignored {
+		neverIgnoredIdent := cgs.ident("never_ignored")
+		if _, err := fmt.Fprintf(w, "    %s = select i1 1,i1 0,i1 0%s", neverIgnoredIdent, cgs.debugLocation); err != nil {
+			return "", err
+		}
+		return neverIgnoredIdent, nil
 	}
 
 	ignoredptrIdent := cgs.ident("ignored_ptr")
 	ignoredIdent := cgs.ident("ignored")
-	if _, err := fmt.Fprintf(w, "    %s = getelementptr %s, %s* %s, i32 0, i32 0%s\n", ignoredptrIdent, vType, vType, vIdent, cgs.debugLocation); err != nil {
+	if _, err := fmt.Fprintf(w, "    %s = getelementptr %s, %s* %s, i32 0, i32 0%s\n", ignoredptrIdent, varInfo.varType, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 		return "", err
 	}
 	if _, err := fmt.Fprintf(w, "    %s = load i1,i1* %s%s\n", ignoredIdent, ignoredptrIdent, cgs.debugLocation); err != nil {
@@ -1400,14 +1403,14 @@ func (cgs *codeGenState) genExpr(w io.Writer, expr Expr) (string, error) {
 
 	switch e := expr.(type) {
 	case Var16:
-		if err := cgs.genAccessVar(w, ident, cgs.spots[e]); err != nil {
+		if err := cgs.genAccessVar(w, ident, cgs.varInfo(e)); err != nil {
 			return "", err
 		} else {
 			return ident, nil
 		}
 
 	case Var32:
-		if err := cgs.genAccessVar(w, ident, cgs.twospots[e]); err != nil {
+		if err := cgs.genAccessVar(w, ident, cgs.varInfo(e)); err != nil {
 			return "", err
 		} else {
 			return ident, nil
@@ -1640,6 +1643,17 @@ func (cgs *codeGenState) genGets(w io.Writer, lhs LValue, rhsIdent string, doneL
 }
 
 func (cgs *codeGenState) genAccessVar(w io.Writer, resultIdent string, varInfo *codeGenVar) error {
+	if !varInfo.assigned {
+		tag := 0
+		if !varInfo.is16 {
+			tag = 1
+		}
+		if _, err := fmt.Fprintf(w, "    %s = select i1 1,%%val insertvalue(%%val zeroinitializer,i2 %d,0),%%val zeroinitializer%s\n", resultIdent, tag, cgs.debugLocation); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	accessLabel := cgs.label("stmt")
 	if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s: ; access %s\n", accessLabel, cgs.debugLocation, accessLabel, varInfo.ident); err != nil {
 		return err
