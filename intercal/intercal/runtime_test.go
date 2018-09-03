@@ -41,6 +41,10 @@ func testRuntime(t *testing.T, srcFile string) {
 }
 
 func TestRuntime(t *testing.T) {
+	if testing.Short() {
+		return
+	}
+
 	f, err := os.Open(filepath.Join("testdata", "runtime"))
 	if err != nil {
 		t.Error(err.Error())

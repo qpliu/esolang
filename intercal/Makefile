@@ -19,11 +19,14 @@ clean:
 test:
 	go fmt ./... && go vet ./... && go test -cover ./intercal
 
+quicktest:
+	go fmt ./... && go vet ./... && go test -short -cover ./intercal
+
 cover:
 	$(RM) _ src
 	ln -s . _
 	ln -s . src
-	go test ./intercal -coverprofile=coverage.out
+	go test -short ./intercal -coverprofile=coverage.out
 	sed -e 's/^\(_[/]\).*[/]intercal/\1intercal/g' < coverage.out > coverage2.out
 	GOPATH=$(PWD) go tool cover -html=coverage2.out
 	$(RM) _ src coverage.out coverage2.out

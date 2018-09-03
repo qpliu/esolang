@@ -39,6 +39,11 @@ func testCodeGen(t *testing.T, srcFile string) {
 		return
 	}
 
+	if testing.Short() {
+		os.Remove(tmpFile)
+		return
+	}
+
 	cmd := fmt.Sprintf("cat runtime.ll %s.ll | llc > %s.s", tmpFile, tmpFile)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
 		t.Errorf("%s", cmd)
