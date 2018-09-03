@@ -627,7 +627,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 	err774Ident := ""
 	{
 		doErr774 := cgs.stmt.Please && cgs.stmt.Type != StatementUnrecognizable
-		for i := cgs.stmt.Index + 1; i < len(cgs.statements) && i <= cgs.stmt.Index+10; i++ {
+		for i := cgs.stmt.Index; i < len(cgs.statements) && i <= cgs.stmt.Index+10; i++ {
 			doErr774 = doErr774 && !cgs.statements[i].Thank
 		}
 		if doErr774 && cgs.stmt.Type != StatementResume {
@@ -692,7 +692,12 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 	// probability check
 	redoLabel := cgs.label("stmt")
 	redoDoneLabel := cgs.label("stmt")
-	{
+	if cgs.stmt.Chance == 100 {
+		startStmtLabel := cgs.label("stmt")
+		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n    br label %%%s%s\n  %s:\n", startStmtLabel, cgs.debugLocation, redoLabel, redoDoneLabel, cgs.debugLocation, startStmtLabel); err != nil {
+			return err
+		}
+	} else {
 		doLabel := cgs.label("stmt")
 		startStmtLabel := cgs.label("stmt")
 		countCheckLabel := cgs.label("stmt")
@@ -1195,25 +1200,9 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			}
 		}
 		for _, operand := range cgs.stmt.Operands.([]Stashable) {
-			switch v := operand.(type) {
-			case Var16:
-				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%vrbl* @onespot%d,i32 0,i32 0)%s\n", flag, v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Var32:
-				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%vrbl, %%vrbl* @twospot%d,i32 0,i32 0)%s\n", flag, v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Array16:
-				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%arr_vrbl, %%arr_vrbl* @tail%d,i32 0,i32 0)%s\n", flag, v, cgs.debugLocation); err != nil {
-					return err
-				}
-			case Array32:
-				if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%%arr_vrbl, %%arr_vrbl* @hybrid%d,i32 0,i32 0)%s\n", flag, v, cgs.debugLocation); err != nil {
-					return err
-				}
-			default:
-				panic("Ignore/Remember")
+			varInfo := cgs.varInfo(operand)
+			if _, err := fmt.Fprintf(w, "    store i1 %d,i1* getelementptr(%s,%s* %s,i32 0,i32 0)%s\n", flag, varInfo.varType, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
+				return err
 			}
 		}
 		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n    br label %%stmt%d%s\n", redoLabel, cgs.debugLocation, redoDoneLabel, cgs.nextIndex(), cgs.debugLocation); err != nil {
@@ -1245,7 +1234,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		if _, err := fmt.Fprintf(w, "    ;GIVE UP\n    call void @exit(i32 0) noreturn%s\n    br label %%%s%s\n", cgs.debugLocation, redoLabel, cgs.debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "  %s:\n    call void @exit(i32 0) noreturn%s\n    br label %%stmt%d%s\n", redoDoneLabel, cgs.debugLocation, cgs.nextIndex(), cgs.debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d%s\n", redoDoneLabel, cgs.nextIndex(), cgs.debugLocation); err != nil {
 			return err
 		}
 

@@ -79,7 +79,7 @@ func (s *State) Run(input *IntercalReader, output *IntercalWriter) *Error {
 		}
 		if stmt.Please {
 			thank := false
-			for i := stmt.Index + 1; i < stmt.Index+10 && i < len(s.Statements); i++ {
+			for i := stmt.Index; i < stmt.Index+10 && i < len(s.Statements); i++ {
 				thank = thank || s.Statements[i].Thank
 			}
 			if !thank && s.Random.Intn(100) == 0 {

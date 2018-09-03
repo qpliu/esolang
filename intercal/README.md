@@ -111,13 +111,14 @@ in error 241, and `STASHING` an undimensioned array will stash a
 the array elements contain `#0`.
 
 The C-INTERCAL documentation says that spaces cannot be added inside a
-keyword or a decimal number in an INTERCAL program.  In section 4.1 of the
-1973 and 1996 document, the only restriction on spaces is that no word of
-a statement identifier (`DO`, `PLEASE`, or `PLEASE DO`) may contain any
-spaces.  In order to follow the original documents more closely, this
-implementation allows spaces anywhere except within `DO` or `PLEASE`, or
-within overpunches, i.e. `c<BACKSPACE><SPACE><BACKSPACE>/` will not be
-recognized as change.
+keyword or a decimal number in an INTERCAL program.  Apparently C-INTERCAL
+has no problems with spaces within numbers (labels, variables, constants).
+In section 4.1 of the 1973 and 1996 document, the only restriction on spaces
+is that no word of a statement identifier (`DO`, `PLEASE`, or `PLEASE DO`)
+may contain any spaces.  In order to follow the original documents more
+closely, this implementation allows spaces anywhere except within `DO` or
+`PLEASE`, or within overpunches, i.e. `c<BACKSPACE><SPACE><BACKSPACE>/`
+will not be recognized as change.
 
 Since the errors in section 7 does not include the actual error messages,
 and the messages for errors other than 000, 123, 275, and 436 are not
