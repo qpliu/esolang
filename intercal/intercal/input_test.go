@@ -51,3 +51,20 @@ func TestInput(t *testing.T) {
 	testInput32(t, " SIX FIVE  FIVE THREE SIX \n", []uint32{65536}, Err562)
 	testInput32(t, " FOUR  TWO NINE FOUR  NINE SIX SEVEN  TWO NINE SIX \n", []uint32{}, Err533)
 }
+
+func TestBinaryInput(t *testing.T) {
+	r := NewIntercalReader(bytes.NewBufferString("~"))
+	for i, bit := range []bool{false, true, true, true, true, true, true, false} {
+		b, eof := r.InputBit()
+		if eof {
+			t.Errorf("unexpected eof[%d]", i)
+		}
+		if b != bit {
+			t.Errorf("unexpected bit[%d] %v", i, b)
+		}
+	}
+	_, eof := r.InputBit()
+	if !eof {
+		t.Errorf("failed to get expected eof")
+	}
+}

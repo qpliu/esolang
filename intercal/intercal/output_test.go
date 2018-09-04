@@ -64,3 +64,19 @@ func TestOutput(t *testing.T) {
 	testOutput(t, 2147483648, "mmcxlviiC\u0305D\u0305L\u0305X\u0305X\u0305X\u0305I\u0305I\u0305I\u0305DCXLVIII")
 	testOutput(t, 4294967295, "i\u0305v\u0305ccxcivC\u0305M\u0305L\u0305X\u0305V\u0305I\u0305I\u0305CCXCV")
 }
+
+func TestBinaryOutput(t *testing.T) {
+	var b bytes.Buffer
+	w := NewIntercalWriter(&b)
+	w.WriteBit(true)
+	w.WriteBit(false)
+	w.WriteBit(false)
+	w.WriteBit(false)
+	w.WriteBit(true)
+	w.WriteBit(true)
+	w.WriteBit(false)
+	w.WriteBit(false)
+	if b.String() != "1" {
+		t.Errorf("got %s, expected 1", b.String())
+	}
+}

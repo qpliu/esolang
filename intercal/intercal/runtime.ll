@@ -2393,3 +2393,35 @@ define void @output_binary(i1 %bit) {
     store i8 %next_index,i8* @binary_output_index
     ret void
 }
+
+@binary_input_index = global i8 0
+@binary_input_buffer = global i8 0
+
+; {bit,eof/error flag}
+define {i1,i1} @input_binary() {
+    %current_index = load i8,i8* @binary_input_index
+    %next_byte_check = icmp eq i8 %current_index,0
+    br i1 %next_byte_check,label %read_next_byte,label %advance_index
+
+  read_next_byte:
+    store i8 2,i8* @binary_input_index
+    %read_result = call i32 @read(i32 0, i8* @binary_input_buffer, i32 1)
+    %read_success = icmp eq i32 %read_result,1
+    br i1 %read_success,label %ret_bit,label %ret_error
+
+  advance_index:
+    %next_index = shl i8 %current_index,1
+    store i8 %next_index,i8* @binary_input_index
+    br label %ret_bit
+
+  ret_bit:
+    %index = phi i8 [%current_index,%advance_index],[1,%read_next_byte]
+    %buffer_byte = load i8,i8* @binary_input_buffer
+    %buffer_bit = and i8 %buffer_byte,%index
+    %result_bit = icmp ne i8 %buffer_bit,0
+    %result = insertvalue {i1,i1} zeroinitializer,i1 %result_bit,0
+    ret {i1,i1} %result
+
+  ret_error:
+    ret {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1)
+}

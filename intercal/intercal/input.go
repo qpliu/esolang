@@ -11,16 +11,19 @@ var (
 	eol = errors.New("END OF LINE.")
 )
 
-type IntercalReader bufio.Reader
+type IntercalReader struct {
+	*bufio.Reader
+	binaryBuffer, binaryBufferIndex byte
+}
 
 func NewIntercalReader(r io.Reader) *IntercalReader {
-	return (*IntercalReader)(bufio.NewReaderSize(r, 1))
+	return &IntercalReader{Reader: bufio.NewReaderSize(r, 1)}
 }
 
 func (r *IntercalReader) inputToken(buf *bytes.Buffer) error {
 	buf.Reset()
 	for {
-		b, err := (*bufio.Reader)(r).ReadByte()
+		b, err := r.Reader.ReadByte()
 		if err != nil {
 			return err
 		}
@@ -32,7 +35,7 @@ func (r *IntercalReader) inputToken(buf *bytes.Buffer) error {
 		default:
 			buf.WriteByte(b)
 			for {
-				b, err := (*bufio.Reader)(r).ReadByte()
+				b, err := r.Reader.ReadByte()
 				if err != nil {
 					if err == io.EOF && buf.Len() > 0 {
 						return nil
@@ -41,7 +44,7 @@ func (r *IntercalReader) inputToken(buf *bytes.Buffer) error {
 				}
 				switch b {
 				case ' ', '\n':
-					(*bufio.Reader)(r).UnreadByte()
+					r.Reader.UnreadByte()
 					return nil
 				default:
 					buf.WriteByte(b)
@@ -116,4 +119,19 @@ func (r *IntercalReader) Input16() (uint16, error) {
 
 func (r *IntercalReader) Input32() (uint32, error) {
 	return r.input(4294967295, Err533)
+}
+
+func (r *IntercalReader) InputBit() (bool, bool) {
+	if r.binaryBufferIndex == 0 {
+		r.binaryBufferIndex = 2
+		b, err := r.Reader.ReadByte()
+		if err != nil {
+			return false, true
+		}
+		r.binaryBuffer = b
+		return b&1 != 0, false
+	}
+	bit := r.binaryBuffer&r.binaryBufferIndex != 0
+	r.binaryBufferIndex <<= 1
+	return bit, false
 }
