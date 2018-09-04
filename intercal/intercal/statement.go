@@ -76,7 +76,6 @@ const (
 
 const (
 	mkStmtStateOther = iota
-	mkStmtStateFromOrReinstate
 	mkStmtStateWax
 	mkStmtStateWaxNumber
 	mkStmtStateWaxNumberWane
@@ -101,7 +100,7 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				labelTable := make(map[uint16]int)
 				gerundTable := make(map[TokenType][]int)
 				for i, s := range statements {
-					s.Parse(i, labelTable, gerundTable)
+					s.Parse(statements, i, labelTable, gerundTable)
 				}
 				for _, s := range statements {
 					s.Resolve(statements, labelTable, gerundTable)
@@ -138,12 +137,12 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				state = mkStmtStateOther
 			}
 		case TokenWax:
-			tokens = append(tokens, token)
-			if state != mkStmtStateFromOrReinstate {
-				state = mkStmtStateWax
-			} else {
+			if statementTakesTrailingLabel(tokens) {
 				state = mkStmtStateOther
+			} else {
+				state = mkStmtStateWax
 			}
+			tokens = append(tokens, token)
 		case TokenNumber:
 			tokens = append(tokens, token)
 			if state == mkStmtStateWax {
@@ -165,9 +164,6 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				NumberValue: 0,
 				StringValue: "",
 			})
-		case TokenFrom, TokenReinstate:
-			tokens = append(tokens, token)
-			state = mkStmtStateFromOrReinstate
 		case TokenThank:
 			tokens = append(tokens, token)
 			thank = true
@@ -180,6 +176,41 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 			}
 		}
 	}
+}
+
+func statementTakesTrailingLabel(tokens []*Token) bool {
+	i := 0
+	if i+2 < len(tokens) && tokens[i].Type == TokenWax && tokens[i+2].Type == TokenWane {
+		i += 3
+	}
+
+	if i+1 < len(tokens) && tokens[i].Type == TokenPlease && tokens[i+1].Type == TokenDo {
+		i += 2
+	} else if i < len(tokens) && (tokens[i].Type == TokenPlease || tokens[i].Type == TokenDo) {
+		i++
+	} else {
+		return false
+	}
+
+	if i+2 < len(tokens) && tokens[i].Type == TokenNot && tokens[i+1].Type == TokenDoubleOhSeven {
+		i += 3
+	} else if i+2 < len(tokens) && tokens[i].Type == TokenDoubleOhSeven && tokens[i+2].Type == TokenNot {
+		i += 3
+	} else if i < len(tokens) && tokens[i].Type == TokenNot {
+		i++
+	} else if i+1 < len(tokens) && tokens[i].Type == TokenDoubleOhSeven {
+		i += 2
+	}
+
+	if i+2 == len(tokens) && tokens[i].Type == TokenAbstain && tokens[i+1].Type == TokenFrom {
+		return true
+	}
+
+	if i+1 == len(tokens) && tokens[i].Type == TokenReinstate {
+		return true
+	}
+
+	return false
 }
 
 func (s *Statement) String() string {
@@ -200,7 +231,7 @@ func (s *Statement) String() string {
 	return b.String()
 }
 
-func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundTable map[TokenType][]int) {
+func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTable map[uint16]int, gerundTable map[TokenType][]int) {
 	s.Index = statementIndex
 	index := 0
 	if len(s.Tokens) >= 3 && s.Tokens[0].Type == TokenWax && s.Tokens[2].Type == TokenWane {
@@ -209,7 +240,8 @@ func (s *Statement) Parse(statementIndex int, labelTable map[uint16]int, gerundT
 		if s.Label == 0 {
 			s.Error = Err197
 			return
-		} else if _, ok := labelTable[s.Label]; ok {
+		} else if dupIndex, ok := labelTable[s.Label]; ok {
+			statements[dupIndex].Error = Err182
 			s.Error = Err182
 			return
 		}
