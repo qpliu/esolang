@@ -153,8 +153,8 @@ optimized INTERCAL System Library.
 
 Extensions to INTERCAL
 ----------------------
+### Binary output
 This implementation extends INTERCAL to allow binary output.
-
 ```
     PLEASE READ OUT
 ```
@@ -179,6 +179,20 @@ a bit causes the 8 bits to be written and the buffer to be cleared.  The
 8 bits are written as a byte with the first bit buffered as the least
 significant bit and the last bit as the most significant bit.  Any bits in
 the buffer when the program terminates are discarded.
+
+### Binary input
+This implementation extends INTERCAL to allow binary input.
+```
+    PLEASE WRITE IN TO (label1+label2)
+```
+reads a bit.  If the bit is zero, jump to (label1).  If the bit is one,
+jump to (label2).  If no bit can be read, continue to the next statement.
+
+This implementation has a 7 bit buffer.  If the buffer is empty, inputting
+a bit causes 8 bits to be read as a byte.  The least significant bit is
+returned, and the remaining bits are put in the buffer.  Subsequent inputs
+removes the least significant remaining bit from the buffer and returns it
+until the buffer is empty.
 
 Note for optimization
 ---------------------

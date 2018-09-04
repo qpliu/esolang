@@ -134,7 +134,7 @@ func (cgs *codeGenState) collectVarInfo() {
 			for _, arg := range stmt.Operands.([]ReadOutable) {
 				cgs.collectStmtVarInfo(arg, stmt.Type)
 			}
-		case StatementReadOutBit:
+		case StatementReadOutBit, StatementWriteIntoBit:
 
 		default:
 			panic("VarInfo")
@@ -232,7 +232,6 @@ func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementT
 			varInfo.ignored = true
 		case StatementRemember:
 			varInfo.remembered = true
-		case StatementGiveUp:
 		case StatementWriteIn:
 			varInfo.assigned = true
 		case StatementReadOut:
@@ -864,17 +863,9 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		}
 
 		arrvalptrIdent := cgs.ident("arr_val_ptr")
-		switch arr := dim.LHS.(type) {
-		case Array16:
-			if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_vrbl,%%arr_vrbl* @tail%d,i32 0,i32 1%s\n", arrvalptrIdent, arr, cgs.debugLocation); err != nil {
-				return err
-			}
-		case Array32:
-			if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_vrbl,%%arr_vrbl* @hybrid%d,i32 0,i32 1%s\n", arrvalptrIdent, arr, cgs.debugLocation); err != nil {
-				return err
-			}
-		default:
-			panic("Calculate Array Dimensions")
+		varInfo := cgs.varInfo(dim.LHS)
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %s,%s* %s,i32 0,i32 1%s\n", arrvalptrIdent, varInfo.varType, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
+			return err
 		}
 
 		oldarrvalIdent := cgs.ident("old_arr_val")
@@ -1293,11 +1284,12 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 				}
 
 			case Array16, Array32:
+				varInfo := cgs.varInfo(v)
 				writeinCall := ""
 				if v.Is16() {
-					writeinCall = fmt.Sprintf("@writein16(%%arr_vrbl* @tail%d)", v)
+					writeinCall = fmt.Sprintf("@writein16(%s* %s)", varInfo.varType, varInfo.ident)
 				} else {
-					writeinCall = fmt.Sprintf("@writein32(%%arr_vrbl* @hybrid%d)", v)
+					writeinCall = fmt.Sprintf("@writein32(%s* %s)", varInfo.varType, varInfo.ident)
 				}
 
 				errIdent := cgs.ident("write_in_err")
@@ -1340,6 +1332,33 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d%s\n", redoDoneLabel, cgs.nextIndex(), cgs.debugLocation); err != nil {
+			return err
+		}
+
+	case StatementWriteIntoBit:
+		if _, err := fmt.Fprintf(w, "    ;WRITE IN\n"); err != nil {
+			return err
+		}
+		inputIdent := cgs.ident("input")
+		if _, err := fmt.Fprintf(w, "    %s = call {i1,i1} @input_binary()%s\n", inputIdent, cgs.debugLocation); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoLabel, cgs.debugLocation); err != nil {
+			return err
+		}
+		inputeofIdent := cgs.ident("input_eof")
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = extractvalue {i1,i1} %s,1%s\n", redoDoneLabel, inputeofIdent, inputIdent, cgs.debugLocation); err != nil {
+			return err
+		}
+		checkbitLabel := cgs.label("stmt")
+		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%stmt%d,label %%%s%s\n", inputeofIdent, cgs.nextIndex(), checkbitLabel, cgs.debugLocation); err != nil {
+			return err
+		}
+		inputbitIdent := cgs.ident("input_bit")
+		if _, err := fmt.Fprintf(w, "  %s:\n    %s = extractvalue {i1,i1} %s,0%s\n", checkbitLabel, inputbitIdent, inputIdent, cgs.debugLocation); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%stmt%d,label %%stmt%d%s\n", inputbitIdent, cgs.stmt.Operands.([2]int)[1], cgs.stmt.Operands.([2]int)[0], cgs.debugLocation); err != nil {
 			return err
 		}
 
@@ -1523,18 +1542,13 @@ func (cgs *codeGenState) genGets(w io.Writer, lhs LValue, rhsIdent string, doneL
 		}
 	}
 
+	varInfo := cgs.varInfo(lhs)
 	switch lhs.(type) {
 	case Var16, Var32:
-		vIdent := ""
-		if lhs.Is16() {
-			vIdent = fmt.Sprintf("@onespot%d", lhs)
-		} else {
-			vIdent = fmt.Sprintf("@twospot%d", lhs)
-		}
 		valueptrptrIdent := cgs.ident("valueptr_ptr")
 		valueptrIdent := cgs.ident("valueptr")
 		valueptrisnullIdent := cgs.ident("valueptr_is_null")
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl, %%vrbl* %s,i32 0,i32 1%s\n", valueptrptrIdent, vIdent, cgs.debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl, %%vrbl* %s,i32 0,i32 1%s\n", valueptrptrIdent, varInfo.ident, cgs.debugLocation); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "    %s = load %%vrbl_val*, %%vrbl_val** %s%s\n", valueptrIdent, valueptrptrIdent, cgs.debugLocation); err != nil {
@@ -1740,18 +1754,9 @@ func (cgs *codeGenState) genAccessArrayElt(w io.Writer, resultIdent string, arra
 
 // returns [][2]string{[2]string{indexIdent(%val),indexErrorLabel(label)}}, arrayElementPtrIdent(i32*), error
 func (cgs *codeGenState) genFindArrayElement(w io.Writer, boundsErrorLabel, indexErrorLabel string, arrayElement ArrayElement) ([][2]string, string, error) {
-	varIdent := ""
-	switch arr := arrayElement.Array.(type) {
-	case Array16:
-		varIdent = fmt.Sprintf("@tail%d", arr)
-	case Array32:
-		varIdent = fmt.Sprintf("@hybrid%d", arr)
-	default:
-		panic("AccessArrayElement")
-	}
-
+	varInfo := cgs.varInfo(arrayElement)
 	valptrIdent := cgs.ident("val_ptr")
-	if _, err := fmt.Fprintf(w, "    %s = load %%arr_val*, %%arr_val** getelementptr(%%arr_vrbl, %%arr_vrbl* %s, i32 0, i32 1)%s\n", valptrIdent, varIdent, cgs.debugLocation); err != nil {
+	if _, err := fmt.Fprintf(w, "    %s = load %%arr_val*, %%arr_val** getelementptr(%%arr_vrbl, %%arr_vrbl* %s, i32 0, i32 1)%s\n", valptrIdent, varInfo.ident, cgs.debugLocation); err != nil {
 		return nil, "", err
 	}
 

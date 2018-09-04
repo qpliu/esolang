@@ -266,6 +266,17 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		s.StatementIndex = stmt.Index + 1
 		return nil
 
+	case StatementWriteIntoBit:
+		bit, eof := input.InputBit()
+		if eof {
+			s.StatementIndex = stmt.Index + 1
+		} else if bit {
+			s.StatementIndex = stmt.Operands.([2]int)[1]
+		} else {
+			s.StatementIndex = stmt.Operands.([2]int)[0]
+		}
+		return nil
+
 	default:
 		return Err000.At(s, stmt)
 	}

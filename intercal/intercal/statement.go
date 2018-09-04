@@ -72,6 +72,10 @@ const (
 
 	StatementReadOutBit
 	// Operands is bool
+
+	StatementWriteIntoBit
+	// Operands is initially [2]uint16, labels
+	// Resolve() changes it to [2]int, statement indexes
 )
 
 const (
@@ -485,6 +489,12 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		// and DO REINSTATE GIVING UP are invalid
 		return
 	case TokenWrite:
+		if index+7 == len(s.Tokens) && s.Tokens[index+1].Type == TokenInto && s.Tokens[index+2].Type == TokenWax && s.Tokens[index+4].Type == TokenIntersection && s.Tokens[index+6].Type == TokenWane {
+			s.Type = StatementWriteIntoBit
+			s.Operands = [2]uint16{s.Tokens[index+3].NumberValue, s.Tokens[index+5].NumberValue}
+			gerundTable[TokenReading] = append(gerundTable[TokenWriting], s.Index)
+			return
+		}
 		if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenIn {
 			s.Type = StatementWriteIn
 			s.Error = Err000
@@ -1021,6 +1031,23 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, 
 			}
 		}
 		s.Operands = targetIndexes
+	case StatementWriteIntoBit:
+		labels := s.Operands.([2]uint16)
+		if labels[0] == 0 || labels[1] == 0 {
+			s.Error = Err197
+			break
+		}
+		index0, ok := labelTable[labels[0]]
+		if !ok {
+			s.Error = Err139
+			break
+		}
+		index1, ok := labelTable[labels[1]]
+		if !ok {
+			s.Error = Err139
+			break
+		}
+		s.Operands = [2]int{index0, index1}
 	default:
 	}
 }
@@ -1041,7 +1068,7 @@ func ListStatements(statements []*Statement, out io.Writer) error {
 
 func Strict(statements []*Statement) {
 	for _, stmt := range statements {
-		if stmt.Chance == 0 || stmt.Chance >= 100 || stmt.Type == StatementReadOutBit {
+		if stmt.Chance == 0 || stmt.Chance >= 100 || stmt.Type == StatementReadOutBit || stmt.Type == StatementWriteIntoBit {
 			stmt.Error = Err000
 		}
 	}
