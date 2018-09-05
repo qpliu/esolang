@@ -76,6 +76,9 @@ const (
 	StatementWriteIntoBit
 	// Operands is initially [2]uint16, labels
 	// Resolve() changes it to [2]int, statement indexes
+
+	StatementLibrary
+	// Operands is LibraryFunction
 )
 
 const (
@@ -1018,7 +1021,12 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, 
 			}
 		} else {
 			if s.Type == StatementNext {
-				s.Error = Err129
+				if libFunc, ok := Library[targetLabel]; ok {
+					s.Type = StatementLibrary
+					s.Operands = libFunc
+				} else {
+					s.Error = Err129
+				}
 			} else {
 				s.Error = Err139
 			}

@@ -277,6 +277,12 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		}
 		return nil
 
+	case StatementLibrary:
+		if err := stmt.Operands.(LibraryFunction).Interp(s); err != nil {
+			return err.At(s, stmt)
+		}
+		return nil
+
 	default:
 		return Err000.At(s, stmt)
 	}

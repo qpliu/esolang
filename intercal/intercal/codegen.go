@@ -136,13 +136,16 @@ func (cgs *codeGenState) collectVarInfo() {
 			}
 		case StatementReadOutBit, StatementWriteIntoBit:
 
+		case StatementLibrary:
+			stmt.Operands.(LibraryFunction).CollectVarInfo(cgs)
+
 		default:
 			panic("VarInfo")
 		}
 	}
 }
 
-func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementType) {
+func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementType) *codeGenVar {
 	var varInfo *codeGenVar
 	switch e := arg.(type) {
 	case Var16:
@@ -236,10 +239,12 @@ func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementT
 			varInfo.assigned = true
 		case StatementReadOut:
 			varInfo.accessed = true
+		case StatementLibrary:
 		default:
 			panic("StmtVarInfo")
 		}
 	}
+	return varInfo
 }
 
 func (cgs *codeGenState) collectVarDimInfo(dim Dimensioning) {
@@ -331,7 +336,7 @@ func (cgs *codeGenState) genErrorMessages(w io.Writer) error {
 		if msg == "" {
 			errorMessageIndexes = append(errorMessageIndexes, [3]int{e.Code(), 0, 0})
 		} else {
-			m := fmt.Sprintf("ICL%03dI %s", e.Code(), msg)
+			m := fmt.Sprintf("ICL%03dI %s", e.MessageCode(), msg)
 			errorMessageIndexes = append(errorMessageIndexes, [3]int{e.Code(), errorMessagesSize, len([]byte(m))})
 			errorMessagesSize += len([]byte(m))
 		}
@@ -344,7 +349,7 @@ func (cgs *codeGenState) genErrorMessages(w io.Writer) error {
 		for _, e := range ErrorList {
 			msg := e.Message()
 			if msg != "" {
-				m := fmt.Sprintf("ICL%03dI %s", e.Code(), msg)
+				m := fmt.Sprintf("ICL%03dI %s", e.MessageCode(), msg)
 				for _, b := range []byte(m) {
 					if _, err := fmt.Fprintf(w, "%si8 %d", comma, b); err != nil {
 						return err
@@ -1376,6 +1381,15 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%stmt%d,label %%stmt%d%s\n", inputbitIdent, cgs.stmt.Operands.([2]int)[1], cgs.stmt.Operands.([2]int)[0], cgs.debugLocation); err != nil {
+			return err
+		}
+
+	case StatementLibrary:
+		cgs.stmt.Operands.(LibraryFunction).CodeGen(w, cgs)
+		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoLabel, cgs.debugLocation); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d%s\n", redoDoneLabel, cgs.nextIndex(), cgs.debugLocation); err != nil {
 			return err
 		}
 

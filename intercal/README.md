@@ -143,13 +143,16 @@ them.  Apparently, in C-INTERCAL, CLC-INTERCAL and J-INTERCAL, `STASH` and
 `RETRIEVE` do have effects on `IGNOREd` variables, which seems incorrect to
 me.
 
-The INTERCAL System Library described in sections 5 and 6 is not
-included with this implementation.  It's probably a copyright violation
-to include it.  An optimized INTERCAL System Library implementation
-would behave differently from an INTERCAL implementation when `ABSTAIN` or
-`IGNORE` are used or when operating close to the `RESUME` stack limit.
-Perhaps a future version of this implementation will include such an
-optimized INTERCAL System Library.
+The INTERCAL System Library listed in section 6 of the document is not
+included with this implementation.  It's probably a copyright violation to
+include it.
+
+This implementation includes an implementation of the INTERCAL System
+Library as described in section 5 of the document.  `NEXTing` a label that
+is not defined in the program and is the label of library function will
+execute that function.  These labels cannot be `ABSTAINed FROM`, and the
+functions are not affected by any `ABSTAINed FROM` gerunds.  The `IGNORE`
+status of variables are respected by these library functions.
 
 Extensions to INTERCAL
 ----------------------
@@ -187,6 +190,7 @@ This implementation extends INTERCAL to allow binary input.
 ```
 reads a bit.  If the bit is zero, jump to (label1).  If the bit is one,
 jump to (label2).  If no bit can be read, continue to the next statement.
+Neither label may be a library function.
 
 This implementation has a 7 bit buffer.  If the buffer is empty, inputting
 a bit causes 8 bits to be read as a byte.  The least significant bit is
