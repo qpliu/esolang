@@ -2202,8 +2202,6 @@ define void @stash_arr(%arr_vrbl* %arr) {
 }
 
 define i1 @retrieve_var(%vrbl* %var) {
-    %storeval_ptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
-
     %valptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
     %val = load %vrbl_val*,%vrbl_val** %valptr
     %val_isnull = icmp eq %vrbl_val* %val, null
@@ -2216,7 +2214,7 @@ define i1 @retrieve_var(%vrbl* %var) {
     br i1 %valnext_isnull,label %retfail,label %dopop
 
   dopop:
-    store %vrbl_val* %valnext,%vrbl_val** %storeval_ptr
+    store %vrbl_val* %valnext,%vrbl_val** %valptr
     %val_addr = bitcast %vrbl_val* %val to i8*
     call void @free(i8* %val_addr)
     ret i1 true
@@ -2226,8 +2224,6 @@ define i1 @retrieve_var(%vrbl* %var) {
 }
 
 define i1 @retrieve_arr(%arr_vrbl* %arr) {
-    %storeval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
-
     %valptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
     %val = load %arr_val*,%arr_val** %valptr
     %val_isnull = icmp eq %arr_val* %val, null
@@ -2240,13 +2236,111 @@ define i1 @retrieve_arr(%arr_vrbl* %arr) {
     br i1 %valnext_isnull,label %retfail,label %dopop
 
   dopop:
-    store %arr_val* %valnext,%arr_val** %storeval_ptr
+    store %arr_val* %valnext,%arr_val** %valptr
     %val_addr = bitcast %arr_val* %val to i8*
     call void @free(i8* %val_addr)
     ret i1 true
 
   retfail:
     ret i1 false
+}
+
+define void @lazy_stash_arr(%arr_vrbl* %arr) {
+    %arr_val_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arr_val = load %arr_val*,%arr_val** %arr_val_ptr
+    %uninitialized = icmp eq %arr_val* %arr_val,null
+    br i1 %uninitialized,label %stash_uninitialized,label %incr_stash_count
+
+  stash_uninitialized:
+    call void @stash_arr(%arr_vrbl* %arr)
+    ret void
+
+  incr_stash_count:
+    %stash_count_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1
+    %stash_count = load i32,i32* %stash_count_ptr
+    %new_stash_count = add i32 %stash_count,1
+    store i32 %new_stash_count,i32* %stash_count_ptr
+    ret void
+}
+
+define i1 @lazy_retrieve_arr(%arr_vrbl* %arr) {
+    %arr_val_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arr_val = load %arr_val*,%arr_val** %arr_val_ptr
+    %uninitialized = icmp eq %arr_val* %arr_val,null
+    br i1 %uninitialized,label %ret_fail,label %check_stash_count
+
+  check_stash_count:
+    %stash_count_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1
+    %stash_count = load i32,i32* %stash_count_ptr
+    %stash_count_is_zero = icmp eq i32 %stash_count,0
+    br i1 %stash_count_is_zero,label %dopop,label %decr_stash_count
+
+  dopop:
+    %result = call i1 @retrieve_arr(%arr_vrbl* %arr)
+    ret i1 %result
+
+  decr_stash_count:
+    %new_stash_count = add i32 %stash_count,1
+    store i32 %new_stash_count,i32* %stash_count_ptr
+    ret i1 true
+
+  ret_fail:
+    ret i1 false
+}
+
+; if do_copy is true, this is for assigning an element
+;     if the %arr_val* is null, return null
+;     otherwise, if stash count is zero, return the %arr_val*
+;     otherwise, decrement stash count, call @stash_arr,
+;                set stash count to zero in new copy of %arr_val*
+;                return the new copy of %arr_val*
+; if do_copy is false, this is for redimensioning the array
+;     if the %arr_val* is null, return null
+;     otherwise, if stash count is zero, free the %arr_val*,
+;                return the next %arr_val*
+;     otherwise, decrement stash count, return the %arr_val*
+define %arr_val* @lazy_stash_arr_cow(%arr_vrbl* %arr,i1 %do_copy) {
+    %arr_val_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arr_val = load %arr_val*,%arr_val** %arr_val_ptr
+    %uninitialized = icmp eq %arr_val* %arr_val,null
+    br i1 %uninitialized,label %ret_null,label %check_stash_count
+
+  ret_null:
+    ret %arr_val* null
+
+  check_stash_count:
+    %stash_count_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 1
+    %stash_count = load i32,i32* %stash_count_ptr
+    %stash_count_is_zero = icmp eq i32 %stash_count,0
+    br i1 %stash_count_is_zero,label %no_cow,label %yes_cow
+
+  no_cow:
+    br i1 %do_copy,label %no_cow_for_assign,label %no_cow_for_redim
+
+  no_cow_for_assign:
+    ret %arr_val* %arr_val
+
+  no_cow_for_redim:
+    %next_arr_val_ptr = getelementptr %arr_val,%arr_val* %arr_val,i32 0,i32 0
+    %next_arr_val = load %arr_val*,%arr_val** %next_arr_val_ptr
+    %arr_val_addr = bitcast %arr_val* %arr_val to i8*
+    call void @free(i8* %arr_val_addr)
+    ret %arr_val* %next_arr_val
+
+  yes_cow:
+    %new_stash_count = sub i32 %stash_count,1
+    store i32 %new_stash_count,i32* %stash_count_ptr
+    br i1 %do_copy,label %yes_cow_for_assign,label %yes_cow_for_redim
+
+  yes_cow_for_assign:
+    call void @stash_arr(%arr_vrbl* %arr)
+    %new_arr_val = load %arr_val*,%arr_val** %arr_val_ptr
+    %new_stash_count_ptr = getelementptr %arr_val,%arr_val* %new_arr_val,i32 0,i32 1
+    store i32 0,i32* %new_stash_count_ptr
+    ret %arr_val* %new_arr_val
+
+  yes_cow_for_redim:
+    ret %arr_val* %arr_val    
 }
 
 define {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr) {

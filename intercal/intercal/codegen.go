@@ -868,48 +868,65 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			return err
 		}
 
-		oldarrvalIdent := cgs.ident("old_arr_val")
-		oldarrvalisnullIdent := cgs.ident("old_arr_val_is_null")
-		freeoldarrvalLabel := cgs.label("stmt")
-		storenewarrvalLabel := cgs.label("stmt")
-		if _, err := fmt.Fprintf(w, "    %s = load %%arr_val*,%%arr_val** %s%s\n", oldarrvalIdent, arrvalptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    %s = icmp eq %%arr_val* %s,null%s\n", oldarrvalisnullIdent, oldarrvalIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", oldarrvalisnullIdent, storenewarrvalLabel, freeoldarrvalLabel, cgs.debugLocation); err != nil {
-			return err
-		}
+		if varInfo.retrieved {
+			oldstashIdent := cgs.ident("old_stash")
+			if _, err := fmt.Fprintf(w, "    %s = call %%arr_val* @lazy_stash_arr_cow(%%arr_vrbl* %s,i1 0)%s\n", oldstashIdent, varInfo.ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			newstashptrIdent := cgs.ident("new_stash_ptr")
+			if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 0%s\n", newstashptrIdent, newarrvalIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    store %%arr_val* %s,%%arr_val** %s%s\n", oldstashIdent, newstashptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    store %%arr_val* %s,%%arr_val** %s%s\n", newarrvalIdent, arrvalptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+		} else {
+			oldarrvalIdent := cgs.ident("old_arr_val")
+			oldarrvalisnullIdent := cgs.ident("old_arr_val_is_null")
+			freeoldarrvalLabel := cgs.label("stmt")
+			storenewarrvalLabel := cgs.label("stmt")
+			if _, err := fmt.Fprintf(w, "    %s = load %%arr_val*,%%arr_val** %s%s\n", oldarrvalIdent, arrvalptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    %s = icmp eq %%arr_val* %s,null%s\n", oldarrvalisnullIdent, oldarrvalIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", oldarrvalisnullIdent, storenewarrvalLabel, freeoldarrvalLabel, cgs.debugLocation); err != nil {
+				return err
+			}
 
-		oldstashptrIdent := cgs.ident("old_stash_ptr")
-		oldstashIdent := cgs.ident("old_stash")
-		newstashptrIdent := cgs.ident("new_stash_ptr")
-		oldarrvali8ptrIdent := cgs.ident("old_arr_val_i8_ptr")
-		if _, err := fmt.Fprintf(w, "  %s:\n    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 0%s\n", freeoldarrvalLabel, oldstashptrIdent, oldarrvalIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    %s = load %%arr_val*,%%arr_val** %s%s\n", oldstashIdent, oldstashptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 0%s\n", newstashptrIdent, newarrvalIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    store %%arr_val* %s,%%arr_val** %s%s\n", oldstashIdent, newstashptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    %s = bitcast %%arr_val* %s to i8*%s\n", oldarrvali8ptrIdent, oldarrvalIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    call void @free(i8* %s)%s\n", oldarrvali8ptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", storenewarrvalLabel, cgs.debugLocation); err != nil {
-			return err
-		}
+			oldstashptrIdent := cgs.ident("old_stash_ptr")
+			oldstashIdent := cgs.ident("old_stash")
+			newstashptrIdent := cgs.ident("new_stash_ptr")
+			oldarrvali8ptrIdent := cgs.ident("old_arr_val_i8_ptr")
+			if _, err := fmt.Fprintf(w, "  %s:\n    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 0%s\n", freeoldarrvalLabel, oldstashptrIdent, oldarrvalIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    %s = load %%arr_val*,%%arr_val** %s%s\n", oldstashIdent, oldstashptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    %s = getelementptr %%arr_val,%%arr_val* %s,i32 0,i32 0%s\n", newstashptrIdent, newarrvalIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    store %%arr_val* %s,%%arr_val** %s%s\n", oldstashIdent, newstashptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    %s = bitcast %%arr_val* %s to i8*%s\n", oldarrvali8ptrIdent, oldarrvalIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    call void @free(i8* %s)%s\n", oldarrvali8ptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", storenewarrvalLabel, cgs.debugLocation); err != nil {
+				return err
+			}
 
-		if _, err := fmt.Fprintf(w, "  %s:\n    store %%arr_val* %s,%%arr_val** %s%s\n", storenewarrvalLabel, newarrvalIdent, arrvalptrIdent, cgs.debugLocation); err != nil {
-			return err
+			if _, err := fmt.Fprintf(w, "  %s:\n    store %%arr_val* %s,%%arr_val** %s%s\n", storenewarrvalLabel, newarrvalIdent, arrvalptrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
 		}
 
 		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoLabel, cgs.debugLocation); err != nil {
@@ -1116,7 +1133,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 					return err
 				}
 			case Array16, Array32:
-				if _, err := fmt.Fprintf(w, "    call void @stash_arr(%s* %s)%s\n", varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
+				if _, err := fmt.Fprintf(w, "    call void @lazy_stash_arr(%s* %s)%s\n", varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 					return err
 				}
 			default:
@@ -1157,7 +1174,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 					return err
 				}
 			case Array16, Array32:
-				if _, err := fmt.Fprintf(w, "    %s = call i1 @retrieve_arr(%s* %s)%s\n", retrievesucceededIdent, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
+				if _, err := fmt.Fprintf(w, "    %s = call i1 @lazy_retrieve_arr(%s* %s)%s\n", retrievesucceededIdent, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
 					return err
 				}
 			default:
@@ -1602,6 +1619,12 @@ func (cgs *codeGenState) genGets(w io.Writer, lhs LValue, rhsIdent string, doneL
 		return nil
 
 	case ArrayElement:
+		if varInfo.retrieved {
+			if _, err := fmt.Fprintf(w, "    call %%arr_val* @lazy_stash_arr_cow(%%arr_vrbl* %s,i1 1)%s\n", varInfo.ident, cgs.debugLocation); err != nil {
+				return err
+			}
+		}
+
 		indexErrorLabel := cgs.label("stmt")
 		boundsErrorLabel := cgs.label("stmt")
 
