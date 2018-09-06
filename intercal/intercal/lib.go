@@ -697,8 +697,17 @@ var Library = map[uint16]LibraryFunction{
 	1500: LibraryFunction{
 		// :3 <- :1 plus :2, error exit on overflow
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v03 := state.Var32(Var32(3))
+			if v03.Ignored {
+				return nil
+			}
+			v01 := state.Var32(Var32(1))
+			v02 := state.Var32(Var32(2))
+			v03.Value = v01.Value + v02.Value
+			if v03.Value < v01.Value {
+				return Err1999
+			}
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).accessed = true
@@ -706,8 +715,61 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(3), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			doneLabel := cgs.label("lib1500_resume")
+			if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(3)); err != nil {
+				return err
+			} else {
+				notIgnoredLabel := cgs.label("lib1500_twospot3_not_ignored")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+					return err
+				}
+			}
+			v01ValIdent := cgs.ident("twospot1_val")
+			if err := cgs.genAccessVar(w, v01ValIdent, cgs.varInfo(Var32(1))); err != nil {
+				return err
+			}
+			v01Ident := cgs.ident("twospot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v01Ident, v01ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			v02ValIdent := cgs.ident("twospot2_val")
+			if err := cgs.genAccessVar(w, v02ValIdent, cgs.varInfo(Var32(2))); err != nil {
+				return err
+			}
+			v02Ident := cgs.ident("twospot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v02Ident, v02ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			sumIdent := cgs.ident("sum")
+			if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%s%s\n", sumIdent, v01Ident, v02Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			overflowCheckIdent := cgs.ident("overflow_check")
+			if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s,%s%s\n", overflowCheckIdent, sumIdent, v01Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			overflowLabel := cgs.label("lib1500_overflow")
+			storev03Label := cgs.label("lib1500_twospot3_gets")
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", overflowCheckIdent, overflowLabel, storev03Label, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 1999,1),i32 %d)%s\n    br label %%%s%s\n", overflowLabel, cgs.nextIndex(), cgs.debugLocation, doneLabel, cgs.debugLocation); err != nil {
+				return err
+			}
+			if !cgs.varInfo(Var32(3)).accessed {
+				if _, err := fmt.Fprintf(w, "  %s:\n    br label %%%s%s\n", storev03Label, doneLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+			} else {
+				sumValIdent := cgs.ident("sum_val")
+				if _, err := fmt.Fprintf(w, "  %s:\n    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", storev03Label, sumValIdent, sumIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				if err := cgs.genGets(w, Var32(3), sumValIdent, doneLabel); err != nil {
+					return err
+				}
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
 				return err
 			}
 			return nil
@@ -717,8 +779,21 @@ var Library = map[uint16]LibraryFunction{
 		// :3 <- :1 plus :2
 		// :4 <- #1 if no overflow, else :4 <- #2
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v01 := state.Var32(Var32(1))
+			v02 := state.Var32(Var32(2))
+			v03 := state.Var32(Var32(3))
+			if !v03.Ignored {
+				v03.Value = v01.Value + v02.Value
+			}
+			v04 := state.Var32(Var32(4))
+			if !v04.Ignored {
+				if v03.Value < v01.Value {
+					v04.Value = 2
+				} else {
+					v04.Value = 1
+				}
+			}
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).accessed = true
@@ -727,9 +802,76 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(4), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			v03Info := cgs.varInfo(Var32(3))
+			v04Info := cgs.varInfo(Var32(4))
+			if !v03Info.accessed && !v04Info.accessed {
+				return nil
+			}
+			v01ValIdent := cgs.ident("twospot1_val")
+			if err := cgs.genAccessVar(w, v01ValIdent, cgs.varInfo(Var32(1))); err != nil {
 				return err
+			}
+			v01Ident := cgs.ident("twospot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v01Ident, v01ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			v02ValIdent := cgs.ident("twospot2_val")
+			if err := cgs.genAccessVar(w, v02ValIdent, cgs.varInfo(Var32(2))); err != nil {
+				return err
+			}
+			v02Ident := cgs.ident("twospot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v02Ident, v02ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			sumIdent := cgs.ident("sum")
+			if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%s%s\n", sumIdent, v01Ident, v02Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			if v03Info.accessed {
+				doneLabel := cgs.label("lib1509_twospot3_gets_done")
+				if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(3)); err != nil {
+					return err
+				} else {
+					notIgnoredLabel := cgs.label("lib1509_twospot3_not_ignored")
+					if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+						return err
+					}
+				}
+				sumValIdent := cgs.ident("sum_val")
+				if _, err := fmt.Fprintf(w, "    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", sumValIdent, sumIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				if err := cgs.genGets(w, Var32(3), sumValIdent, doneLabel); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
+					return err
+				}
+			}
+			if v04Info.accessed {
+				doneLabel := cgs.label("lib1509_twospot4_gets_done")
+				if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(4)); err != nil {
+					return err
+				} else {
+					notIgnoredLabel := cgs.label("lib1509_twospot4_not_ignored")
+					if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+						return err
+					}
+				}
+				overflowCheckIdent := cgs.ident("overflow_check")
+				if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s,%s%s\n", overflowCheckIdent, sumIdent, v01Ident, cgs.debugLocation); err != nil {
+					return err
+				}
+				overflowValIdent := cgs.ident("overflow_val")
+				if _, err := fmt.Fprintf(w, "    %s = select i1 %s,%%val insertvalue(%%val zeroinitializer,i32 2,1),%%val insertvalue(%%val zeroinitializer,i32 1,1)%s\n", overflowValIdent, overflowCheckIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				if err := cgs.genGets(w, Var32(4), overflowValIdent, doneLabel); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -737,8 +879,14 @@ var Library = map[uint16]LibraryFunction{
 	1510: LibraryFunction{
 		// :3 <- :1 minus :2, no action on overflow
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v03 := state.Var32(Var32(3))
+			if v03.Ignored {
+				return nil
+			}
+			v01 := state.Var32(Var32(1))
+			v02 := state.Var32(Var32(2))
+			v03.Value = v01.Value - v02.Value
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).accessed = true
@@ -746,8 +894,46 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(3), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			if !cgs.varInfo(Var32(3)).accessed {
+				return nil
+			}
+			doneLabel := cgs.label("lib1510_resume")
+			if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(3)); err != nil {
+				return err
+			} else {
+				notIgnoredLabel := cgs.label("lib1510_twospot3_not_ignored")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+					return err
+				}
+			}
+			v01ValIdent := cgs.ident("twospot1_val")
+			if err := cgs.genAccessVar(w, v01ValIdent, cgs.varInfo(Var32(1))); err != nil {
+				return err
+			}
+			v01Ident := cgs.ident("twospot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v01Ident, v01ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			v02ValIdent := cgs.ident("twospot2_val")
+			if err := cgs.genAccessVar(w, v02ValIdent, cgs.varInfo(Var32(2))); err != nil {
+				return err
+			}
+			v02Ident := cgs.ident("twospot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v02Ident, v02ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			diffIdent := cgs.ident("diff")
+			if _, err := fmt.Fprintf(w, "    %s = sub i32 %s,%s%s\n", diffIdent, v01Ident, v02Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			diffValIdent := cgs.ident("diff_val")
+			if _, err := fmt.Fprintf(w, "    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", diffValIdent, diffIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if err := cgs.genGets(w, Var32(3), diffValIdent, doneLabel); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
 				return err
 			}
 			return nil
@@ -756,8 +942,14 @@ var Library = map[uint16]LibraryFunction{
 	1520: LibraryFunction{
 		// :1 <- .1 concatenated with .2
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v01 := state.Var32(Var32(1))
+			if v01.Ignored {
+				return nil
+			}
+			v1 := state.Var16(Var16(1))
+			v2 := state.Var16(Var16(2))
+			v01.Value = v1.Value<<16 | v2.Value
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var16(1), StatementLibrary).accessed = true
@@ -765,8 +957,50 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			if !cgs.varInfo(Var32(1)).accessed {
+				return nil
+			}
+			doneLabel := cgs.label("lib1520_resume")
+			if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(1)); err != nil {
+				return err
+			} else {
+				notIgnoredLabel := cgs.label("lib1520_twospot1_not_ignored")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+					return err
+				}
+			}
+			v1ValIdent := cgs.ident("spot1_val")
+			if err := cgs.genAccessVar(w, v1ValIdent, cgs.varInfo(Var16(1))); err != nil {
+				return err
+			}
+			v1Ident := cgs.ident("spot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v1Ident, v1ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			v1shiftIdent := cgs.ident("spot1_shift")
+			if _, err := fmt.Fprintf(w, "    %s = shl i32 %s,16%s\n", v1shiftIdent, v1Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			v2ValIdent := cgs.ident("spot2_val")
+			if err := cgs.genAccessVar(w, v2ValIdent, cgs.varInfo(Var16(2))); err != nil {
+				return err
+			}
+			v2Ident := cgs.ident("spot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v2Ident, v2ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			concatIdent := cgs.ident("concat")
+			if _, err := fmt.Fprintf(w, "    %s = or i32 %s,%s%s\n", concatIdent, v1shiftIdent, v2Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			concatValIdent := cgs.ident("concat_val")
+			if _, err := fmt.Fprintf(w, "    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", concatValIdent, concatIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if err := cgs.genGets(w, Var32(1), concatValIdent, doneLabel); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
 				return err
 			}
 			return nil
@@ -775,8 +1009,14 @@ var Library = map[uint16]LibraryFunction{
 	1530: LibraryFunction{
 		// :1 <- .1 times .2
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v01 := state.Var32(Var32(1))
+			if v01.Ignored {
+				return nil
+			}
+			v1 := state.Var16(Var16(1))
+			v2 := state.Var16(Var16(2))
+			v01.Value = v1.Value * v2.Value
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var16(1), StatementLibrary).accessed = true
@@ -784,8 +1024,46 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			if !cgs.varInfo(Var32(1)).accessed {
+				return nil
+			}
+			doneLabel := cgs.label("lib1530_resume")
+			if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(1)); err != nil {
+				return err
+			} else {
+				notIgnoredLabel := cgs.label("lib1530_twospot1_not_ignored")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+					return err
+				}
+			}
+			v1ValIdent := cgs.ident("spot1_val")
+			if err := cgs.genAccessVar(w, v1ValIdent, cgs.varInfo(Var16(1))); err != nil {
+				return err
+			}
+			v1Ident := cgs.ident("spot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v1Ident, v1ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			v2ValIdent := cgs.ident("spot2_val")
+			if err := cgs.genAccessVar(w, v2ValIdent, cgs.varInfo(Var16(2))); err != nil {
+				return err
+			}
+			v2Ident := cgs.ident("spot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v2Ident, v2ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			prodIdent := cgs.ident("prod")
+			if _, err := fmt.Fprintf(w, "    %s = mul i32 %s,%s%s\n", prodIdent, v1Ident, v2Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			prodValIdent := cgs.ident("prod_val")
+			if _, err := fmt.Fprintf(w, "    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", prodValIdent, prodIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if err := cgs.genGets(w, Var32(1), prodValIdent, doneLabel); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
 				return err
 			}
 			return nil
