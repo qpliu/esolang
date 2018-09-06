@@ -281,6 +281,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		if err := stmt.Operands.(LibraryFunction).Interp(s); err != nil {
 			return err.At(s, stmt)
 		}
+		s.StatementIndex = stmt.Index + 1
 		return nil
 
 	default:
