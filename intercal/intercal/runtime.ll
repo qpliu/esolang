@@ -2519,3 +2519,191 @@ define {i1,i1} @input_binary() {
   ret_error:
     ret {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1)
 }
+
+define i32 @lib1900() {
+    %r = call i32 @random()
+    %r0 = and i32 %r,65535
+    %r0_check = icmp eq i32 %r0,0
+    br i1 %r0_check,label %retry1,label %ret0
+  ret0:
+    ret i32 %r0
+
+  retry1:
+    %r1_shift = lshr i32 %r,1
+    %r1 = and i32 %r1_shift,65535
+    %r1_check = icmp eq i32 %r1,0
+    br i1 %r1_check,label %retry2,label %ret1
+  ret1:
+    ret i32 %r1
+
+  retry2:
+    %r2_shift = lshr i32 %r,2
+    %r2 = and i32 %r2_shift,65535
+    %r2_check = icmp eq i32 %r2,0
+    br i1 %r2_check,label %retry3,label %ret2
+  ret2:
+    ret i32 %r2
+
+  retry3:
+    %r3_shift = lshr i32 %r,3
+    %r3 = and i32 %r3_shift,65535
+    %r3_check = icmp eq i32 %r3,0
+    br i1 %r3_check,label %retry4,label %ret3
+  ret3:
+    ret i32 %r3
+
+  retry4:
+    %r4_shift = lshr i32 %r,4
+    %r4 = and i32 %r4_shift,65535
+    %r4_check = icmp eq i32 %r4,0
+    br i1 %r4_check,label %retry5,label %ret4
+  ret4:
+    ret i32 %r4
+
+  retry5:
+    %r5_shift = lshr i32 %r,5
+    %r5 = and i32 %r5_shift,65535
+    %r5_check = icmp eq i32 %r5,0
+    br i1 %r5_check,label %retry6,label %ret5
+  ret5:
+    ret i32 %r5
+
+  retry6:
+    %r6_shift = lshr i32 %r,6
+    %r6 = and i32 %r6_shift,65535
+    %r6_check = icmp eq i32 %r6,0
+    br i1 %r6_check,label %retry7,label %ret6
+  ret6:
+    ret i32 %r6
+
+  retry7:
+    %r7_shift = lshr i32 %r,7
+    %r7 = and i32 %r7_shift,65535
+    %r7_check = icmp eq i32 %r7,0
+    br i1 %r7_check,label %retry8,label %ret7
+  ret7:
+    ret i32 %r7
+
+  retry8:
+    %r8_shift = lshr i32 %r,1
+    %r8 = and i32 %r1_shift,65535
+    %r8_check = icmp eq i32 %r8,0
+    br i1 %r8_check,label %retry9,label %ret8
+  ret8:
+    ret i32 %r8
+
+  retry9:
+    %r9_shift = lshr i32 %r,9
+    %r9 = and i32 %r9_shift,65535
+    %r9_check = icmp eq i32 %r9,0
+    br i1 %r9_check,label %retry10,label %ret9
+  ret9:
+    ret i32 %r9
+
+  retry10:
+    %r10_shift = lshr i32 %r,10
+    %r10 = and i32 %r10_shift,65535
+    %r10_check = icmp eq i32 %r10,0
+    br i1 %r10_check,label %retry11,label %ret10
+  ret10:
+    ret i32 %r10
+
+  retry11:
+    %r11_shift = lshr i32 %r,11
+    %r11 = and i32 %r11_shift,65535
+    %r11_check = icmp eq i32 %r11,0
+    br i1 %r11_check,label %retry12,label %ret11
+  ret11:
+    ret i32 %r11
+
+  retry12:
+    %r12_shift = lshr i32 %r,12
+    %r12 = and i32 %r12_shift,65535
+    %r12_check = icmp eq i32 %r12,0
+    br i1 %r12_check,label %retry13,label %ret12
+  ret12:
+    ret i32 %r12
+
+  retry13:
+    %r13_shift = lshr i32 %r,13
+    %r13 = and i32 %r13_shift,65535
+    %r13_check = icmp eq i32 %r13,0
+    br i1 %r13_check,label %retry14,label %ret13
+  ret13:
+    ret i32 %r13
+
+  retry14:
+    %r14_shift = lshr i32 %r,14
+    %r14 = and i32 %r14_shift,65535
+    %r14_check = icmp eq i32 %r14,0
+    br i1 %r14_check,label %retry15,label %ret14
+  ret14:
+    ret i32 %r14
+
+  retry15:
+    %r15_shift = lshr i32 %r,15
+    %r15 = and i32 %r15_shift,65535
+    %r15_check = icmp eq i32 %r15,0
+    br i1 %r15_check,label %retry16,label %ret15
+  ret15:
+    ret i32 %r15
+
+  retry16:
+    %r16_shift = lshr i32 %r,16
+    %r16 = and i32 %r16_shift,65535
+    %r16_check = icmp eq i32 %r16,0
+    br i1 %r16_check,label %giveup,label %ret16
+  ret16:
+    ret i32 %r16
+
+  giveup:
+    ret i32 1
+}
+
+define i32 @lib1910(i32 %arg) {
+    %arg_too_small = icmp ule i32 %arg,1
+    br i1 %arg_too_small,label %ret0,label %dorand
+
+  ret0:
+    ret i32 0
+
+  dorand:
+    %divisor = udiv i32 2147483648,%arg
+    %r0 = call i32 @random()
+    %s0 = udiv i32 %r0,%divisor
+    %r1 = call i32 @random()
+    %a1 = udiv i32 %r1,%divisor
+    %s1 = add i32 %a1,%s0
+    %r2 = call i32 @random()
+    %a2 = udiv i32 %r2,%divisor
+    %s2 = add i32 %a2,%s1
+    %r3 = call i32 @random()
+    %a3 = udiv i32 %r3,%divisor
+    %s3 = add i32 %a3,%s2
+    %r4 = call i32 @random()
+    %a4 = udiv i32 %r4,%divisor
+    %s4 = add i32 %a4,%s3
+    %r5 = call i32 @random()
+    %a5 = udiv i32 %r5,%divisor
+    %s5 = add i32 %a5,%s4
+    %r6 = call i32 @random()
+    %a6 = udiv i32 %r6,%divisor
+    %s6 = add i32 %a6,%s5
+    %r7 = call i32 @random()
+    %a7 = udiv i32 %r7,%divisor
+    %s7 = add i32 %a7,%s6
+    %r8 = call i32 @random()
+    %a8 = udiv i32 %r8,%divisor
+    %s8 = add i32 %a8,%s7
+    %r9 = call i32 @random()
+    %a9 = udiv i32 %r9,%divisor
+    %s9 = add i32 %a9,%s8
+    %r10 = call i32 @random()
+    %a10 = udiv i32 %r10,%divisor
+    %s10 = add i32 %a10,%s9
+    %r11 = call i32 @random()
+    %a11 = udiv i32 %r11,%divisor
+    %s11 = add i32 %a11,%s10
+    %r = udiv i32 %s11,12
+    ret i32 %r
+}

@@ -1,11 +1,11 @@
-This is an implementation of the INTERCAL programming language
+PUKE is an implementation of the INTERCAL programming language
 described by  http://www.muppetlabs.com/~breadbox/intercal/intercal.txt
 with the exception of using Unicode instead of EBCDIC.
 
-COMPILAC is an interpreter.
+COMPILAC is the PUKE INTERCAL interpreter.
 
-INTERLAC is a compiler targeting LLVM version 5.  It probably needs
-only minimal changes for later LLVM versions.  For example,
+INTERLAC is the PUKE INTERCAL compiler targeting LLVM version 5.  It
+probably needs only minimal changes for later LLVM versions.  For example,
 `@llvm.memset.p0i8.i32` and `@llvm.memcpy.p0i8.p0i8.i32` drop their align
 arguments at some later version (somewhere from LLVM version 6 to LLVM
 version 8).
@@ -198,32 +198,30 @@ returned, and the remaining bits are put in the buffer.  Subsequent inputs
 removes the least significant remaining bit from the buffer and returns it
 until the buffer is empty.
 
-Note for optimization
----------------------
+An optimization
+---------------
 If an array is `STASHed`, then immediately redimensioned, allocating and
 copying into a new array when `STASHing` would be a waste, since it would
 be freed when redimensioning.
 
-Alternatively, an array can have a COPY-ON-WRITE counter, which can be
-incremented on `STASH`.
+The compiler in this implementation implements a lazy stashing optimization
+for arrays that are `RETRIEVEd`.  These arrays have a stash count.  On
+`STASH`, the stash count is incremented.  On `RETRIEVE`, the stash count
+is checked.  If the stash count is greater than zero, it is decremented,
+otherwise, the stash stack is popped.  On assigning an array element, the
+stash count is checked.  If the stash count is greater than zero, it is
+decremented and then the array value is pushed onto the stash stack and the
+array value is set to a copy of it with the stash count set to zero.  Then,
+in both cases, the stash count is zero and the array element is assigned.
+On redimensioning the array, the stash count is checked.  If the stash
+count is zero, the current array value is freed and a new array value is
+allocated.  Otherwise, the stash count is decremented and then the array
+value is pushed onto the stash stack and a new array value is allocated.
 
-When `RETRIEVEing`, if the COPY-ON-WRITE counter is greater than zero, it is
-decremented, otherwise, the value is popped.
+Name
+----
+PUKE is named for PUCC.PRINCETON.EDU, which, in the past, was an IBM 3081
+and an IBM 3090.
 
-When assigning to an element of the array, if the COPY-ON-WRITE counter is
-greater than zero, decrement it, then push a copy of the array with the
-COPY-ON-WRITE counter set to zero in the copy.  In either case, the element
-can then be assigned.
-
-When redimensioning an array, if the COPY-ON-WRITE counter is greater than
-zero, decrement it, then push a new array with the new dimensions.  Otherwise,
-if the COPY-ON-WRITE counter is zero, pop the current array, then push the
-new array with the new dimensions.
-
-However, if an array is never `STASHed`, then checking the COPY-ON-WRITE
-counter with every array element assignment would be a waste, so a slightly
-more sophisticated implementation would only add the COPY-ON-WRITE checks
-to arrays that can be `STASHed`.
-
-Another optimization is to turn `STASH` into a NO-OP for variables that are
-never `RETRIEVEd`.
+Another idea is phoenick, for phoenix.princeton.edu, which, in the past,
+was an Ultrix mainframe, a SunOS mainframe, and a Solaris mainframe.
