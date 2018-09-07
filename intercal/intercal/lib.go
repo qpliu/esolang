@@ -1129,7 +1129,7 @@ var Library = map[uint16]LibraryFunction{
 			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v02Ident, v02ValIdent, cgs.debugLocation); err != nil {
 				return err
 			}
-			overflowLabel := cgs.label("overflow")
+			overflowLabel := cgs.label("lib1540_overflow")
 			v01bigIdent := cgs.ident("twospot1_big")
 			if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,65536%s\n", v01bigIdent, v01Ident, cgs.debugLocation); err != nil {
 				return err
@@ -1142,21 +1142,21 @@ var Library = map[uint16]LibraryFunction{
 			if _, err := fmt.Fprintf(w, "    %s = and i1 %s,%s%s\n", bothBigIdent, v01bigIdent, v02bigIdent, cgs.debugLocation); err != nil {
 				return err
 			}
-			check01bigLabel := cgs.label("check_twospot1_big")
+			check01bigLabel := cgs.label("lib1540_check_twospot1_big")
 			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", bothBigIdent, overflowLabel, check01bigLabel, cgs.debugLocation); err != nil {
 				return err
 			}
-			check02bigLabel := cgs.label("check_twospot2_big")
-			mulBigLabel := cgs.label("mul_big")
+			check02bigLabel := cgs.label("lib1540_check_twospot2_big")
+			mulBigLabel := cgs.label("lib1540_mul_big")
 			if _, err := fmt.Fprintf(w, "  %s:\n    br i1 %s,label %%%s,label %%%s%s\n", check01bigLabel, v01bigIdent, mulBigLabel, check02bigLabel, cgs.debugLocation); err != nil {
 				return err
 			}
-			mulSmallLabel := cgs.label("mul_small")
+			mulSmallLabel := cgs.label("lib1540_mul_small")
 			if _, err := fmt.Fprintf(w, "  %s:\n    br i1 %s,label %%%s,label %%%s%s\n", check02bigLabel, v02bigIdent, mulBigLabel, mulSmallLabel, cgs.debugLocation); err != nil {
 				return err
 			}
 
-			v03getsLabel := cgs.label("twospot3_gets")
+			v03getsLabel := cgs.label("lib1540_twospot3_gets")
 			prodSmallIdent := cgs.ident("prod_small")
 			if _, err := fmt.Fprintf(w, "  %s:\n    %s = mul i32 %s,%s%s\n    br label %%%s%s\n", mulSmallLabel, prodSmallIdent, v01Ident, v02Ident, cgs.debugLocation, v03getsLabel, cgs.debugLocation); err != nil {
 				return err
@@ -1185,7 +1185,7 @@ var Library = map[uint16]LibraryFunction{
 			if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,65536%s\n", prodHiOverflowCheckIdent, prodHiIdent, cgs.debugLocation); err != nil {
 				return err
 			}
-			prodHiNotOverflowLabel := cgs.label("prod_hi_not_overflow")
+			prodHiNotOverflowLabel := cgs.label("lib1540_prod_hi_not_overflow")
 			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", prodHiOverflowCheckIdent, overflowLabel, prodHiNotOverflowLabel, cgs.debugLocation); err != nil {
 				return err
 			}
@@ -1247,8 +1247,38 @@ var Library = map[uint16]LibraryFunction{
 		// :3 <- :1 times :2
 		// :4 <- #1 if no overflow, else :4 <- #2
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v01 := state.Var32(Var32(1))
+			v02 := state.Var32(Var32(2))
+			v03 := state.Var32(Var32(3))
+			v04 := state.Var32(Var32(4))
+			l := v01.Value
+			r := v02.Value
+			if !v03.Ignored {
+				v03.Value = l * r
+			}
+			if !v04.Ignored {
+				if l > r {
+					l, r = r, l
+				}
+				if l >= 65536 {
+					v04.Value = 2
+				} else if r < 65536 {
+					v04.Value = 1
+				} else {
+					hi := (r >> 16) * l
+					if hi >= 65536 {
+						v04.Value = 2
+					} else {
+						lo := ((r & 65535) * l) >> 16
+						if hi+lo >= 65536 {
+							v04.Value = 2
+						} else {
+							v04.Value = 1
+						}
+					}
+				}
+			}
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).accessed = true
@@ -1257,9 +1287,155 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(4), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			v03Info := cgs.varInfo(Var32(3))
+			v04Info := cgs.varInfo(Var32(4))
+			if !v03Info.accessed && !v04Info.accessed {
+				return nil
+			}
+			v01ValIdent := cgs.ident("twospot1_val")
+			if err := cgs.genAccessVar(w, v01ValIdent, cgs.varInfo(Var32(1))); err != nil {
 				return err
+			}
+			v01Ident := cgs.ident("twospot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v01Ident, v01ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			v02ValIdent := cgs.ident("twospot2_val")
+			if err := cgs.genAccessVar(w, v02ValIdent, cgs.varInfo(Var32(2))); err != nil {
+				return err
+			}
+			v02Ident := cgs.ident("twospot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v02Ident, v02ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if v03Info.accessed {
+				doneLabel := cgs.label("lib1549_twospot3_gets_done")
+				if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(3)); err != nil {
+					return err
+				} else {
+					notIgnoredLabel := cgs.label("lib1549_twospot3_not_ignored")
+					if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+						return err
+					}
+				}
+				prodIdent := cgs.ident("sum")
+				if _, err := fmt.Fprintf(w, "    %s = mul i32 %s,%s%s\n", prodIdent, v01Ident, v02Ident, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodValIdent := cgs.ident("prod_val")
+				if _, err := fmt.Fprintf(w, "    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", prodValIdent, prodIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				if err := cgs.genGets(w, Var32(3), prodValIdent, doneLabel); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
+					return err
+				}
+			}
+			if v04Info.accessed {
+				doneLabel := cgs.label("lib1549_twospot4_gets_done")
+				if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(4)); err != nil {
+					return err
+				} else {
+					notIgnoredLabel := cgs.label("lib1549_twospot4_not_ignored")
+					if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+						return err
+					}
+				}
+				checkOverflowLabel := cgs.label("lib1549_check_overflow")
+				if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n", checkOverflowLabel, cgs.debugLocation, checkOverflowLabel); err != nil {
+					return nil
+				}
+				v01bigIdent := cgs.ident("twospot1_big")
+				if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,65536%s\n", v01bigIdent, v01Ident, cgs.debugLocation); err != nil {
+					return err
+				}
+				v02bigIdent := cgs.ident("twospot2_big")
+				if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,65536%s\n", v02bigIdent, v02Ident, cgs.debugLocation); err != nil {
+					return err
+				}
+				bothBigIdent := cgs.ident("both_big")
+				if _, err := fmt.Fprintf(w, "    %s = and i1 %s,%s%s\n", bothBigIdent, v01bigIdent, v02bigIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				check01bigLabel := cgs.label("lib1549_check_twospot1_big")
+				v04getsLabel := cgs.label("lib1549_twospot4_gets")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", bothBigIdent, v04getsLabel, check01bigLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				check02bigLabel := cgs.label("lib1549_check_twospot2_big")
+				checkProdOverflowLabel := cgs.label("lib1549_check_prod_overflow")
+				if _, err := fmt.Fprintf(w, "  %s:\n    br i1 %s,label %%%s,label %%%s%s\n", check01bigLabel, v01bigIdent, checkProdOverflowLabel, check02bigLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n    br i1 %s,label %%%s,label %%%s%s\n", check02bigLabel, v02bigIdent, checkProdOverflowLabel, v04getsLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n", checkProdOverflowLabel); err != nil {
+					return err
+				}
+				factorBigIdent := cgs.ident("factor_big")
+				factorSmallIdent := cgs.ident("factor_small")
+				if _, err := fmt.Fprintf(w, "    %s = phi i32 [%s,%%%s],[%s,%%%s]%s\n", factorBigIdent, v01Ident, check01bigLabel, v02Ident, check02bigLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "    %s = phi i32 [%s,%%%s],[%s,%%%s]%s\n", factorSmallIdent, v02Ident, check01bigLabel, v01Ident, check02bigLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				factorBigHiIdent := cgs.ident("factor_big_hi")
+				if _, err := fmt.Fprintf(w, "    %s = lshr i32 %s,16%s\n", factorBigHiIdent, factorBigIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodHiIdent := cgs.ident("prod_hi")
+				if _, err := fmt.Fprintf(w, "    %s = mul i32 %s,%s%s\n", prodHiIdent, factorBigHiIdent, factorSmallIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodHiOverflowCheckIdent := cgs.ident("prod_hi_overflow_check")
+				if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,65536%s\n", prodHiOverflowCheckIdent, prodHiIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodHiNotOverflowLabel := cgs.label("lib1549_prod_hi_not_overflow")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", prodHiOverflowCheckIdent, v04getsLabel, prodHiNotOverflowLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				factorBigLoIdent := cgs.ident("factor_big_lo")
+				if _, err := fmt.Fprintf(w, "  %s:\n    %s = and i32 %s,65535%s\n", prodHiNotOverflowLabel, factorBigLoIdent, factorBigIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodLoIdent := cgs.ident("prod_lo")
+				if _, err := fmt.Fprintf(w, "    %s = mul i32 %s,%s%s\n", prodLoIdent, factorBigLoIdent, factorSmallIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodLoShiftIdent := cgs.ident("prod_lo_shift")
+				if _, err := fmt.Fprintf(w, "    %s = shl i32 %s,16%s\n", prodLoShiftIdent, prodLoIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				fullProdHiIdent := cgs.ident("full_prod_hi")
+				if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%s%s\n", fullProdHiIdent, prodHiIdent, prodLoShiftIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				fullProdOverflowCheckIdent := cgs.ident("full_prod_overflow_check")
+				if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,65536%s\n", fullProdOverflowCheckIdent, fullProdHiIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				prodNotOverflowLabel := cgs.label("lib1549_prod_not_overflow")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", fullProdOverflowCheckIdent, v04getsLabel, prodNotOverflowLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n    br label %%%s%s\n", prodNotOverflowLabel, v04getsLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				overflowFlagValIdent := cgs.ident("overflow_flag_val")
+				if _, err := fmt.Fprintf(w, "  %s:\n    %s = phi %%val [insertvalue(%%val zeroinitializer,i32 2,1),%%%s],[insertvalue(%%val zeroinitializer,i32 1,1),%%%s],[insertvalue(%%val zeroinitializer,i32 2,1),%%%s],[insertvalue(%%val zeroinitializer,i32 2,1),%%%s],[insertvalue(%%val zeroinitializer,i32 1,1),%%%s]%s\n", v04getsLabel, overflowFlagValIdent, checkOverflowLabel, check02bigLabel, checkProdOverflowLabel, prodHiNotOverflowLabel, prodNotOverflowLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				if err := cgs.genGets(w, Var32(4), overflowFlagValIdent, doneLabel); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -1268,8 +1444,18 @@ var Library = map[uint16]LibraryFunction{
 		// :3 <- :1 divided by :2
 		// :3 <- #0 if :2 is #0
 		Interp: func(state *State) *Error {
-			//...
-			return Err778
+			v03 := state.Var32(Var32(3))
+			if v03.Ignored {
+				return nil
+			}
+			v02 := state.Var32(Var32(2))
+			if v02.Value == 0 {
+				v03.Value = 0
+				return nil
+			}
+			v01 := state.Var32(Var32(1))
+			v03.Value = v01.Value / v02.Value
+			return nil
 		},
 		CollectVarInfo: func(cgs *codeGenState) {
 			cgs.collectStmtVarInfo(Var32(1), StatementLibrary).accessed = true
@@ -1277,8 +1463,70 @@ var Library = map[uint16]LibraryFunction{
 			cgs.collectStmtVarInfo(Var32(3), StatementLibrary).assigned = true
 		},
 		CodeGen: func(w io.Writer, cgs *codeGenState) error {
-			//...
-			if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n", cgs.nextIndex(), cgs.debugLocation); err != nil {
+			if !cgs.varInfo(Var32(3)).accessed {
+				return nil
+			}
+			doneLabel := cgs.label("lib1550_resume")
+			if ignoredIdent, err := cgs.genCheckIgnored(w, Var32(3)); err != nil {
+				return err
+			} else {
+				notIgnoredLabel := cgs.label("lib1550_twospot3_not_ignored")
+				if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", ignoredIdent, doneLabel, notIgnoredLabel, cgs.debugLocation, notIgnoredLabel); err != nil {
+					return err
+				}
+			}
+			v02ValIdent := cgs.ident("twospot2_val")
+			if err := cgs.genAccessVar(w, v02ValIdent, cgs.varInfo(Var32(2))); err != nil {
+				return err
+			}
+			v02Ident := cgs.ident("twospot2_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v02Ident, v02ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			checkv02ZeroLabel := cgs.label("lib1550_check_twospot2_zero")
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n", checkv02ZeroLabel, cgs.debugLocation, checkv02ZeroLabel); err != nil {
+				return err
+			}
+			v02zeroIdent := cgs.ident("twospot2_is_zero")
+			if _, err := fmt.Fprintf(w, "    %s = icmp eq i32 %s,0%s\n", v02zeroIdent, v02Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			v03getsLabel := cgs.label("lib1550_twospot3_gets")
+			accessv01Label := cgs.label("lib1550_twospot1")
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", v02zeroIdent, v03getsLabel, accessv01Label, cgs.debugLocation, accessv01Label); err != nil {
+				return err
+			}
+			v01ValIdent := cgs.ident("twospot1_val")
+			if err := cgs.genAccessVar(w, v01ValIdent, cgs.varInfo(Var32(1))); err != nil {
+				return err
+			}
+			v01Ident := cgs.ident("twospot1_")
+			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s,1%s\n", v01Ident, v01ValIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			divLabel := cgs.label("lib1550_div")
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n", divLabel, cgs.debugLocation, divLabel); err != nil {
+				return err
+			}
+			quotIdent := cgs.ident("quot")
+			if _, err := fmt.Fprintf(w, "    %s = udiv i32 %s,%s%s\n", quotIdent, v01Ident, v02Ident, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", v03getsLabel, cgs.debugLocation); err != nil {
+				return err
+			}
+			quotPhiIdent := cgs.ident("quot_phi")
+			if _, err := fmt.Fprintf(w, "  %s:\n    %s = phi i32 [0,%%%s],[%s,%%%s]%s\n", v03getsLabel, quotPhiIdent, checkv02ZeroLabel, quotIdent, divLabel, cgs.debugLocation); err != nil {
+				return err
+			}
+			quotValIdent := cgs.ident("quot_val")
+			if _, err := fmt.Fprintf(w, "    %s = insertvalue %%val insertvalue(%%val zeroinitializer,i2 1,0),i32 %s,1%s\n", quotValIdent, quotPhiIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			if err := cgs.genGets(w, Var32(3), quotValIdent, doneLabel); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n", doneLabel); err != nil {
 				return err
 			}
 			return nil
