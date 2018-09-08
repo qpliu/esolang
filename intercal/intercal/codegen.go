@@ -496,6 +496,7 @@ func (cgs *codeGenState) genDebugInfo(w io.Writer) error {
 	metainfoCounter := 2
 	files := make(map[string]int)
 	compileUnits := []int{}
+	subprogramMetainfo := 0
 	for _, stmt := range cgs.statements {
 		var stmtToken *Token
 		if stmt.Label == 0 && len(stmt.Tokens) > 0 {
@@ -509,30 +510,37 @@ func (cgs *codeGenState) genDebugInfo(w io.Writer) error {
 		if _, ok := files[stmtToken.Location.Filename]; ok {
 			continue
 		}
-		if _, err := fmt.Fprintf(w, "!%d = !DIFile(filename: \"%s\", directory: \"%s\")\n", metainfoCounter, stmtToken.Location.Filename, stmtToken.Location.Dir); err != nil {
+		fileMetainfo := metainfoCounter
+		metainfoCounter++
+		if _, err := fmt.Fprintf(w, "!%d = !DIFile(filename: \"%s\", directory: \"%s\")\n", fileMetainfo, stmtToken.Location.Filename, stmtToken.Location.Dir); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "!%d = distinct !DICompileUnit(language: DW_LANG_C89, file: !%d, emissionKind: FullDebug)\n", metainfoCounter+1, metainfoCounter); err != nil {
-			return err
-		}
-		if len(files) == 0 {
-			if _, err := fmt.Fprintf(w, "!%d = distinct !DISubprogram(name: \"PROGRAM\", linkageName: \"main\", file: !%d, unit: !%d, type: !%d)\n", metainfoCounter+2, metainfoCounter, metainfoCounter+1, metainfoCounter+3); err != nil {
+		if subprogramMetainfo == 0 {
+			compileUnitMetainfo := metainfoCounter
+			compileUnits = append(compileUnits, compileUnitMetainfo)
+			if _, err := fmt.Fprintf(w, "!%d = distinct !DICompileUnit(language: DW_LANG_C89, file: !%d, emissionKind: FullDebug)\n", compileUnitMetainfo, fileMetainfo); err != nil {
 				return err
 			}
+			metainfoCounter++
+			subprogramMetainfo = metainfoCounter
+			typeMetainfo := metainfoCounter + 1
+			if _, err := fmt.Fprintf(w, "!%d = distinct !DISubprogram(name: \"PROGRAM\", linkageName: \"main\", file: !%d, unit: !%d, type: !%d)\n", subprogramMetainfo, fileMetainfo, compileUnitMetainfo, typeMetainfo); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "!%d = !DISubroutineType(types: !{})\n", typeMetainfo); err != nil {
+				return err
+			}
+			metainfoCounter += 2
+			files[stmtToken.Location.Filename] = subprogramMetainfo
+			cgs.mainDebugInfo = fmt.Sprintf(" !dbg !%d", subprogramMetainfo)
 		} else {
-			if _, err := fmt.Fprintf(w, "!%d = distinct !DISubprogram(file: !%d, unit: !%d, type: !%d)\n", metainfoCounter+2, metainfoCounter, metainfoCounter+1, metainfoCounter+3); err != nil {
+			lexicalBlockFileMetainfo := metainfoCounter
+			if _, err := fmt.Fprintf(w, "!%d = !DILexicalBlockFile(scope: !%d, file: !%d, discriminator: 0)\n", lexicalBlockFileMetainfo, subprogramMetainfo, fileMetainfo); err != nil {
 				return err
 			}
+			metainfoCounter++
+			files[stmtToken.Location.Filename] = lexicalBlockFileMetainfo
 		}
-		if _, err := fmt.Fprintf(w, "!%d = !DISubroutineType(types: !{})\n", metainfoCounter+3); err != nil {
-			return err
-		}
-		files[stmtToken.Location.Filename] = metainfoCounter + 2
-		compileUnits = append(compileUnits, metainfoCounter+1)
-		if cgs.mainDebugInfo == "" {
-			cgs.mainDebugInfo = fmt.Sprintf(" !dbg !%d", metainfoCounter+2)
-		}
-		metainfoCounter += 4
 	}
 
 	if _, err := fmt.Fprintf(w, "!llvm.dbg.cu = !{"); err != nil {
