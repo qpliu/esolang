@@ -1,16 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"./intercal"
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [-strict] [-ll|-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s [-strict] [-llc LLC-CMD] [-cc CC-CMD] [-ll|-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
 	os.Exit(1)
 }
 
@@ -19,6 +21,14 @@ func main() {
 	exeFile := ""
 	llFlag := false
 	strictFlag := false
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	llc := os.Getenv("LLC")
+	if llc == "" {
+		llc = "llc"
+	}
 	for {
 		if srcFileIndex >= len(os.Args) {
 			usage()
@@ -27,6 +37,18 @@ func main() {
 				usage()
 			}
 			exeFile = os.Args[srcFileIndex+1]
+			srcFileIndex += 2
+		} else if os.Args[srcFileIndex] == "-cc" {
+			if srcFileIndex+1 >= len(os.Args) {
+				usage()
+			}
+			cc = os.Args[srcFileIndex+1]
+			srcFileIndex += 2
+		} else if os.Args[srcFileIndex] == "-llc" {
+			if srcFileIndex+1 >= len(os.Args) {
+				usage()
+			}
+			llc = os.Args[srcFileIndex+1]
 			srcFileIndex += 2
 		} else if os.Args[srcFileIndex] == "-ll" {
 			llFlag = true
@@ -37,6 +59,10 @@ func main() {
 		} else {
 			break
 		}
+	}
+
+	if srcFileIndex >= len(os.Args) {
+		usage()
 	}
 
 	tokenizer, err := intercal.NewFileTokenizer(os.Args[srcFileIndex:])
@@ -55,8 +81,10 @@ func main() {
 		intercal.Strict(statements)
 	}
 
+	llvmVersion := getLLVMVersion(llc)
+
 	if llFlag {
-		intercal.CodeGen(statements, os.Stdout)
+		intercal.CodeGen(statements, llvmVersion, os.Stdout)
 		return
 	}
 
@@ -75,31 +103,53 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := intercal.CodeGen(statements, f); err != nil {
+		if err := intercal.CodeGen(statements, llvmVersion, f); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 			os.Exit(1)
 		}
 	}()
 
-	cmd := exec.Command("llc", tmpFile+".ll")
+	cmd := exec.Command(llc, tmpFile+".ll")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s: llc %s.ll\n", os.Args[0], err.Error(), tmpFile)
+		fmt.Fprintf(os.Stderr, "%s: %s: %s %s.ll\n", os.Args[0], err.Error(), llc, tmpFile)
 		os.Exit(1)
 	}
 	os.Remove(tmpFile + ".ll")
 
 	if exeFile == "" {
-		cmd = exec.Command("cc", "-g", tmpFile+".s")
+		cmd = exec.Command(cc, "-g", tmpFile+".s")
 	} else {
-		cmd = exec.Command("cc", "-o", exeFile, "-g", tmpFile+".s")
+		cmd = exec.Command(cc, "-o", exeFile, "-g", tmpFile+".s")
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s: cc %s.s\n", os.Args[0], err.Error(), tmpFile)
+		fmt.Fprintf(os.Stderr, "%s: %s: %s %s.s\n", os.Args[0], err.Error(), cc, tmpFile)
 		os.Exit(1)
 	}
 	os.Remove(tmpFile + ".s")
+}
+
+func getLLVMVersion(llc string) string {
+	buf := &bytes.Buffer{}
+	cmd := exec.Command(llc, "-version")
+	cmd.Stdout = buf
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
+		os.Exit(1)
+	}
+	for {
+		l, err := buf.ReadBytes('\n')
+		if err != nil {
+			return ""
+		}
+		line := string(l)
+		line = strings.Trim(line, " \t\n\r")
+		if strings.HasPrefix(line, "LLVM version") {
+			return strings.Trim(line[12:], " \t")
+		}
+	}
 }

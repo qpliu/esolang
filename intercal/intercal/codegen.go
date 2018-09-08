@@ -3,10 +3,11 @@ package intercal
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
-func CodeGen(statements []*Statement, w io.Writer) error {
-	state := codeGenState{statements: statements}
+func CodeGen(statements []*Statement, llvmVersion string, w io.Writer) error {
+	state := codeGenState{statements: statements, llvmVersion: llvmVersion}
 	state.collectStmtInfo()
 	state.collectVarInfo()
 	if err := state.genListing(w); err != nil {
@@ -28,7 +29,8 @@ func CodeGen(statements []*Statement, w io.Writer) error {
 }
 
 type codeGenState struct {
-	statements []*Statement
+	statements  []*Statement
+	llvmVersion string
 
 	stmtInfo      []*codeGenStmt
 	spots         map[Var16]*codeGenVar
@@ -466,6 +468,10 @@ func (cgs *codeGenState) genGlobals(w io.Writer) error {
 }
 
 func (cgs *codeGenState) genDebugInfo(w io.Writer) error {
+	if strings.HasPrefix(cgs.llvmVersion, "3.") {
+		return nil
+	}
+
 	hasLocations := false
 	for _, stmt := range cgs.statements {
 		var stmtToken *Token

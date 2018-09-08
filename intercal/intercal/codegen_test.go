@@ -1,14 +1,16 @@
 package intercal
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func testCodeGen(t *testing.T, srcFile string) {
+func testCodeGen(t *testing.T, srcFile string, llvmVersion string) {
 	outFile := filepath.Join("testdata", srcFile) + ".codegen.out"
 	if _, err := os.Stat(outFile); err != nil {
 		return
@@ -33,7 +35,7 @@ func testCodeGen(t *testing.T, srcFile string) {
 			return err
 		}
 		defer f.Close()
-		return CodeGen(statements, f)
+		return CodeGen(statements, llvmVersion, f)
 	}(); err != nil {
 		t.Errorf("codegen %s: %s", srcFile, err.Error())
 		return
@@ -74,6 +76,8 @@ func testCodeGen(t *testing.T, srcFile string) {
 }
 
 func TestCodeGen(t *testing.T) {
+	llvmVersion := "5.0.1"
+
 	f, err := os.Open("testdata")
 	if err != nil {
 		t.Error(err.Error())
@@ -87,7 +91,30 @@ func TestCodeGen(t *testing.T) {
 	}
 	for _, name := range names {
 		if filepath.Ext(name) == ".i" {
-			testCodeGen(t, name)
+			testCodeGen(t, name, llvmVersion)
+		}
+	}
+}
+
+func getLLVMVersion(t *testing.T) string {
+	buf := &bytes.Buffer{}
+	cmd := exec.Command("llc", "-version")
+	cmd.Stdout = buf
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Error(err.Error())
+		return ""
+	}
+	for {
+		l, err := buf.ReadBytes('\n')
+		if err != nil {
+			t.Error(err.Error())
+			return ""
+		}
+		line := string(l)
+		line = strings.Trim(line, " \t\n\r")
+		if strings.HasPrefix(line, "LLVM version") {
+			return strings.Trim(line[12:], " \t")
 		}
 	}
 }
