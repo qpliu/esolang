@@ -3,10 +3,9 @@ package intercal
 import (
 	"fmt"
 	"io"
-	"strings"
 )
 
-func CodeGen(statements []*Statement, llvmVersion string, w io.Writer) error {
+func CodeGen(statements []*Statement, llvmVersion int, w io.Writer) error {
 	state := codeGenState{statements: statements, llvmVersion: llvmVersion}
 	state.collectStmtInfo()
 	state.collectVarInfo()
@@ -30,7 +29,7 @@ func CodeGen(statements []*Statement, llvmVersion string, w io.Writer) error {
 
 type codeGenState struct {
 	statements  []*Statement
-	llvmVersion string
+	llvmVersion int
 
 	stmtInfo      []*codeGenStmt
 	spots         map[Var16]*codeGenVar
@@ -468,7 +467,7 @@ func (cgs *codeGenState) genGlobals(w io.Writer) error {
 }
 
 func (cgs *codeGenState) genDebugInfo(w io.Writer) error {
-	if strings.HasPrefix(cgs.llvmVersion, "3.") {
+	if cgs.llvmVersion < 5 {
 		return nil
 	}
 
@@ -862,7 +861,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		if _, err := fmt.Fprintf(w, "    %s = call i8* @malloc(i32 %s)%s\n", mallocresultIdent, mallocsizeIdent, cgs.debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    call void @llvm.memset.p0i8.i32(i8* %s,i8 0,i32 %s,i32 0,i1 0)%s\n", mallocresultIdent, mallocsizeIdent, cgs.debugLocation); err != nil {
+		if err := cgs.genMemset(w, mallocresultIdent, "0", mallocsizeIdent); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "    %s = bitcast i8* %s to %%arr_val*%s\n", newarrvalIdent, mallocresultIdent, cgs.debugLocation); err != nil {
@@ -1619,7 +1618,7 @@ func (cgs *codeGenState) genGets(w io.Writer, lhs LValue, rhsIdent string, doneL
 		if _, err := fmt.Fprintf(w, "  %s:\n    %s = call i8* @malloc(i32 ptrtoint(%%vrbl_val* getelementptr(%%vrbl_val,%%vrbl_val* null,i32 1) to i32))%s\n", valueptrisnullLabel, mallocresultIdent, cgs.debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    call void @llvm.memset.p0i8.i32(i8* %s,i8 0,i32 ptrtoint(%%vrbl_val* getelementptr(%%vrbl_val,%%vrbl_val* null,i32 1) to i32),i32 0,i1 0)%s\n", mallocresultIdent, cgs.debugLocation); err != nil {
+		if err := cgs.genMemset(w, mallocresultIdent, "0", "ptrtoint(%vrbl_val* getelementptr(%vrbl_val,%vrbl_val* null,i32 1) to i32)"); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "    %s = bitcast i8* %s to %%vrbl_val*%s\n", newvalueptrIdent, mallocresultIdent, cgs.debugLocation); err != nil {
@@ -1944,4 +1943,17 @@ func (cgs *codeGenState) genFindArrayElement(w io.Writer, boundsErrorLabel, inde
 		return nil, "", err
 	}
 	return indexIdentSrcLabels, arrayelementptrIdent, nil
+}
+
+func (cgs *codeGenState) genMemset(w io.Writer, memPtrIdent, byteValIdent, sizeIdent string) error {
+	if cgs.llvmVersion < 7 {
+		if _, err := fmt.Fprintf(w, "    call void @llvm.memset.p0i8.i32(i8* %s,i8 %s,i32 %s,i32 0,i1 0)%s\n", memPtrIdent, byteValIdent, sizeIdent, cgs.debugLocation); err != nil {
+			return err
+		}
+	} else {
+		if _, err := fmt.Fprintf(w, "    call void @llvm.memset.p0i8.i32(i8* %s,i8 %s,i32 %s,i1 0)%s\n", memPtrIdent, byteValIdent, sizeIdent, cgs.debugLocation); err != nil {
+			return err
+		}
+	}
+	return nil
 }

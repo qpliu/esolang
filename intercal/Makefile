@@ -6,8 +6,8 @@ COMPILAC:
 INTERLAC: runtime
 	go build INTERLAC.go runtime.go
 
-runtime.go: intercal/runtime.ll
-	(echo 'package main;const RUNTIME=`'; cat $^; echo '`') > $@
+runtime.go: intercal/runtime-common.ll intercal/runtime-6.ll intercal/runtime-7.ll
+	(echo 'package main;const RUNTIME=`'; cat intercal/runtime-common.ll; echo '`;const RUNTIME6=`'; cat intercal/runtime-6.ll; echo '`;const RUNTIME7=`'; cat intercal/runtime-7.ll; echo '`') > $@
 
 runtime: runtime.go
 

@@ -6,11 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-func testCodeGen(t *testing.T, srcFile string, llvmVersion string) {
+func testCodeGen(t *testing.T, srcFile string, llvmVersion int) {
 	outFile := filepath.Join("testdata", srcFile) + ".codegen.out"
 	if _, err := os.Stat(outFile); err != nil {
 		return
@@ -46,7 +47,7 @@ func testCodeGen(t *testing.T, srcFile string, llvmVersion string) {
 		return
 	}
 
-	cmd := fmt.Sprintf("cat runtime.ll %s.ll | llc > %s.s", tmpFile, tmpFile)
+	cmd := fmt.Sprintf("cat runtime-common.ll runtime-6.ll %s.ll | llc > %s.s", tmpFile, tmpFile)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
 		t.Errorf("%s", cmd)
 		return
@@ -76,7 +77,7 @@ func testCodeGen(t *testing.T, srcFile string, llvmVersion string) {
 }
 
 func TestCodeGen(t *testing.T) {
-	llvmVersion := "5.0.1"
+	llvmVersion := 5
 
 	f, err := os.Open("testdata")
 	if err != nil {
@@ -96,25 +97,36 @@ func TestCodeGen(t *testing.T) {
 	}
 }
 
-func getLLVMVersion(t *testing.T) string {
+func getLLVMVersion(t *testing.T) int {
 	buf := &bytes.Buffer{}
 	cmd := exec.Command("llc", "-version")
 	cmd.Stdout = buf
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		t.Error(err.Error())
-		return ""
+		return 0
 	}
 	for {
 		l, err := buf.ReadBytes('\n')
 		if err != nil {
 			t.Error(err.Error())
-			return ""
+			return 0
 		}
 		line := string(l)
 		line = strings.Trim(line, " \t\n\r")
 		if strings.HasPrefix(line, "LLVM version") {
-			return strings.Trim(line[12:], " \t")
+			line = strings.Trim(line[12:], " \t")
+			dot := strings.IndexByte(line, '.')
+			if dot < 1 {
+				t.Errorf("version=%s, dot=%d", line, dot)
+				return 0
+			}
+			version, err := strconv.Atoi(line[:dot])
+			if err != nil {
+				t.Error(err.Error())
+				return 0
+			}
+			return version
 		}
 	}
 }

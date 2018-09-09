@@ -10,7 +10,7 @@ import (
 
 func testRuntime(t *testing.T, srcFile string) {
 	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("runtime_test.%s.%d", filepath.Base(srcFile), os.Getpid()))
-	cmd := fmt.Sprintf("cat runtime.ll %s | llc > %s.s", srcFile, tmpFile)
+	cmd := fmt.Sprintf("cat runtime-common.ll runtime-6.ll %s | llc > %s.s", srcFile, tmpFile)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
 		t.Errorf("%s", cmd)
 		return

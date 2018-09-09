@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"./intercal"
@@ -103,6 +104,18 @@ func main() {
 			os.Exit(1)
 		}
 
+		if llvmVersion < 7 {
+			if _, err := f.Write([]byte(RUNTIME6)); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
+				os.Exit(1)
+			}
+		} else {
+			if _, err := f.Write([]byte(RUNTIME7)); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
+				os.Exit(1)
+			}
+		}
+
 		if err := intercal.CodeGen(statements, llvmVersion, f); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
 			os.Exit(1)
@@ -132,7 +145,7 @@ func main() {
 	os.Remove(tmpFile + ".s")
 }
 
-func getLLVMVersion(llc string) string {
+func getLLVMVersion(llc string) int {
 	buf := &bytes.Buffer{}
 	cmd := exec.Command(llc, "-version")
 	cmd.Stdout = buf
@@ -144,12 +157,22 @@ func getLLVMVersion(llc string) string {
 	for {
 		l, err := buf.ReadBytes('\n')
 		if err != nil {
-			return ""
+			return 0
 		}
 		line := string(l)
 		line = strings.Trim(line, " \t\n\r")
 		if strings.HasPrefix(line, "LLVM version") {
-			return strings.Trim(line[12:], " \t")
+			line = strings.Trim(line[12:], " \t")
+			dot := strings.IndexByte(line, '.')
+			if dot < 1 {
+				return 0
+			}
+			version, err := strconv.Atoi(line[:dot])
+			if err != nil {
+				return 0
+			}
+			return version
+
 		}
 	}
 }

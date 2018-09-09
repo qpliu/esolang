@@ -4,11 +4,11 @@ with the exception of using Unicode instead of EBCDIC.
 
 COMPILAC is the PUKE INTERCAL interpreter.
 
-INTERLAC is the PUKE INTERCAL compiler targeting LLVM version 5.  It
-probably needs only minimal changes for later LLVM versions.  For example,
-`@llvm.memset.p0i8.i32` and `@llvm.memcpy.p0i8.p0i8.i32` drop their align
-arguments at some later version (somewhere from LLVM version 6 to LLVM
-version 8).
+INTERLAC is the PUKE INTERCAL compiler targeting LLVM.  It works with
+version 3, version 5, and version 6.  It probably needs only minimal
+changes for later LLVM versions.  For example, `@llvm.memset.p0i8.i32`
+and `@llvm.memcpy.p0i8.p0i8.i32` drop their align arguments at some
+later version (in LLVM version 7 or LLVM version 8).
 
 This implementation attempts to follow the 1973 document in
 preference to any later changes or additions.  As the 1973 document
@@ -51,7 +51,7 @@ It is unclear whether `READING OUT` or simply `READING` is the gerund for
 output, so this implementation will accept both.  Similarly for
 `WRITING IN` versus `WRITING` for input.
 
-Section 3.4.2 of the 1973 document says
+Section 3.4.3 of the 1973 document says
 ```
 #165¢'#203~#358'
 ```
