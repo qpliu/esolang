@@ -23,9 +23,6 @@ BUGGY COMPILER` at various places in your program.
 
 Notes
 -----
-Since the famous politeness checker was undocumented, it will not be
-part of this implemention.
-
 In section 4.4.1 of the 1973 document says
   to invert the least significant bit of the first element of 16-bit
   2-dimensional array number 1, one could write:

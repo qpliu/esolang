@@ -112,6 +112,7 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 				for _, s := range statements {
 					s.Resolve(statements, labelTable, gerundTable)
 				}
+				checkE079E099(statements)
 				return statements, nil
 			}
 		}
@@ -1072,6 +1073,31 @@ func ListStatements(statements []*Statement, out io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func checkE079E099(statements []*Statement) {
+	if len(statements) < 3 {
+		return
+	}
+	please := 0
+	for _, stmt := range statements {
+		if stmt.Please {
+			please++
+		}
+	}
+	if please*5 < len(statements) {
+		for _, stmt := range statements {
+			if !stmt.Please && stmt.Error == nil {
+				stmt.Error = Err079
+			}
+		}
+	} else if please*3 > len(statements) {
+		for _, stmt := range statements {
+			if stmt.Please && stmt.Error == nil {
+				stmt.Error = Err099
+			}
+		}
+	}
 }
 
 func Strict(statements []*Statement) {
