@@ -358,6 +358,8 @@ const (
 	TokenThank
 	TokenNaught
 	TokenInto
+	TokenCome
+	TokenComing
 )
 
 type tokenTableEntry struct {
@@ -451,6 +453,8 @@ var tokenTable = []tokenTableEntry{
 	{"THANK", TokenThank, false},
 	{"NAUGHT", TokenNaught, false},
 	{"INTO", TokenInto, false},
+	{"COME", TokenCome, false},
+	{"COMING", TokenComing, false},
 }
 var maxTokenLen int
 

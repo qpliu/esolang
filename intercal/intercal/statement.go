@@ -19,6 +19,8 @@ type Statement struct {
 	Operands interface{}
 	Index    int
 	Error    *Error
+
+	Goto []int
 }
 
 type StatementType int
@@ -51,7 +53,7 @@ const (
 	// Resolve() changes it to single element []int, the statement index
 
 	StatementAbstainGerundList
-	// Operands is initially []TokenType, a list of gerund tokens
+	// Operands is initially map[StatementType]bool
 	// Resolve() changes it to []int, a list of statement indexes
 
 	StatementReinstateLabel
@@ -59,7 +61,7 @@ const (
 	// Resolve() changes it to single element []int, the statement index
 
 	StatementReinstateGerundList
-	// Operands is initially []TokenType, a list of gerund tokens
+	// Operands is initially map[StatementType]bool
 	// Resolve() changes it to []int, a list of statement indexes
 
 	StatementGiveUp
@@ -79,6 +81,13 @@ const (
 
 	StatementLibrary
 	// Operands is LibraryFunction
+
+	StatementComeFromLabel
+	StatementComeFromGerundList
+	StatementNextFromLabel
+	StatementNextFromGerundList
+	// Operands is uint16/map[StatementType]bool
+	// Resolve() populates Statement.Goto
 )
 
 const (
@@ -105,12 +114,11 @@ func Parse(t *Tokenizer) ([]*Statement, error) {
 					thank = false
 				}
 				labelTable := make(map[uint16]int)
-				gerundTable := make(map[TokenType][]int)
 				for i, s := range statements {
-					s.Parse(statements, i, labelTable, gerundTable)
+					s.Parse(statements, i, labelTable)
 				}
 				for _, s := range statements {
-					s.Resolve(statements, labelTable, gerundTable)
+					s.Resolve(statements, labelTable)
 				}
 				checkE079E099(statements)
 				return statements, nil
@@ -214,6 +222,14 @@ func statementTakesTrailingLabel(tokens []*Token) bool {
 		return true
 	}
 
+	if i+2 == len(tokens) && tokens[i].Type == TokenCome && tokens[i+1].Type == TokenFrom {
+		return true
+	}
+
+	if i+2 == len(tokens) && tokens[i].Type == TokenNext && tokens[i+1].Type == TokenFrom {
+		return true
+	}
+
 	if i+1 == len(tokens) && tokens[i].Type == TokenReinstate {
 		return true
 	}
@@ -239,7 +255,7 @@ func (s *Statement) String() string {
 	return b.String()
 }
 
-func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTable map[uint16]int, gerundTable map[TokenType][]int) {
+func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTable map[uint16]int) {
 	s.Index = statementIndex
 	index := 0
 	if len(s.Tokens) >= 3 && s.Tokens[0].Type == TokenWax && s.Tokens[2].Type == TokenWane {
@@ -310,7 +326,7 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		//     PROGRAM HAS DISAPPEARED INTO THE BLACK LAGOON.
 	}
 
-	switch s.Tokens[index].Type {
+	switch stmtTokenType := s.Tokens[index].Type; stmtTokenType {
 	case TokenSpot, TokenTwoSpot, TokenTail, TokenHybrid:
 		// Calculate or CalculateArrayDimension
 		statementType, operands, err := s.parseCalculate(index)
@@ -321,7 +337,6 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		}
 		s.Type = statementType
 		s.Operands = operands
-		gerundTable[TokenCalculating] = append(gerundTable[TokenCalculating], s.Index)
 		return
 	case TokenWax:
 		// Next
@@ -330,7 +345,6 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		}
 		s.Type = StatementNext
 		s.Operands = s.Tokens[index+1].NumberValue
-		gerundTable[TokenNexting] = append(gerundTable[TokenNexting], s.Index)
 		return
 	case TokenForget:
 		expr, newIndex, err := s.parseExpr(index+1, false, false, false, TokenString)
@@ -345,7 +359,6 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		}
 		s.Type = StatementForget
 		s.Operands = expr
-		gerundTable[TokenForgetting] = append(gerundTable[TokenForgetting], s.Index)
 		return
 	case TokenResume:
 		expr, newIndex, err := s.parseExpr(index+1, false, false, false, TokenString)
@@ -358,32 +371,27 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		}
 		s.Type = StatementResume
 		s.Operands = expr
-		gerundTable[TokenResuming] = append(gerundTable[TokenResuming], s.Index)
 	case TokenStash, TokenRetrieve, TokenIgnore, TokenRemember:
 		list := []Stashable{}
-		statementType := StatementStash
-		gerund := TokenStashing
-		switch s.Tokens[index].Type {
+		switch stmtTokenType {
 		case TokenStash:
-			statementType = StatementStash
-			gerund = TokenStashing
+			s.Type = StatementStash
 		case TokenRetrieve:
-			statementType = StatementRetrieve
-			gerund = TokenRetrieving
+			s.Type = StatementRetrieve
 		case TokenIgnore:
-			statementType = StatementIgnore
-			gerund = TokenIgnoring
+			s.Type = StatementIgnore
 		case TokenRemember:
-			statementType = StatementRemember
-			gerund = TokenRemembering
+			s.Type = StatementRemember
 		}
 		index++
 		for {
 			if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber {
+				s.Error = Err000
 				return
 			}
 			if s.Tokens[index+1].NumberValue == 0 {
 				s.Error = Err200
+				return
 			}
 			switch s.Tokens[index].Type {
 			case TokenSpot:
@@ -395,7 +403,6 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			case TokenHybrid:
 				list = append(list, Array32(s.Tokens[index+1].NumberValue))
 			default:
-				s.Type = statementType
 				s.Error = Err200
 				return
 			}
@@ -404,84 +411,62 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 				break
 			}
 			if s.Tokens[index].Type != TokenIntersection {
-				s.Type = statementType
 				s.Error = Err000
 				return
 			}
 			index++
 		}
-		s.Type = statementType
 		s.Operands = list
-		gerundTable[gerund] = append(gerundTable[gerund], s.Index)
 		return
-	case TokenAbstain:
+	case TokenAbstain, TokenCome, TokenNext:
 		index++
 		if index >= len(s.Tokens) || s.Tokens[index].Type != TokenFrom {
-			s.Type = StatementAbstainLabel
+			switch stmtTokenType {
+			case TokenAbstain:
+				s.Type = StatementAbstainLabel
+			case TokenCome:
+				s.Type = StatementComeFromLabel
+			case TokenNext:
+				s.Type = StatementNextFromLabel
+			default:
+				panic("ABSTAIN/COME/NEXT")
+			}
 			s.Error = Err000
 			return
 		}
 		fallthrough
 	case TokenReinstate:
-		initialIndex := index
 		index++
 		if index+3 == len(s.Tokens) && s.Tokens[index].Type == TokenWax && s.Tokens[index+1].Type == TokenNumber && s.Tokens[index+2].Type == TokenWane {
-			if s.Tokens[initialIndex].Type == TokenReinstate {
-				s.Type = StatementReinstateLabel
-				s.Operands = s.Tokens[index+1].NumberValue
-				gerundTable[TokenReinstating] = append(gerundTable[TokenReinstating], s.Index)
-			} else {
+			switch stmtTokenType {
+			case TokenAbstain:
 				s.Type = StatementAbstainLabel
-				s.Operands = s.Tokens[index+1].NumberValue
-				gerundTable[TokenAbstaining] = append(gerundTable[TokenAbstaining], s.Index)
+			case TokenCome:
+				s.Type = StatementComeFromLabel
+			case TokenNext:
+				s.Type = StatementNextFromLabel
+			case TokenReinstate:
+				s.Type = StatementReinstateLabel
+			default:
+				panic("ABSTAIN/COME/NEXT/REINSTATE")
 			}
+			s.Operands = s.Tokens[index+1].NumberValue
 			return
 		}
-		gerunds := []TokenType{}
-		for {
-			if index >= len(s.Tokens) {
-				s.Type = StatementReinstateGerundList
-				s.Error = Err000
-				return
-			}
-			switch s.Tokens[index].Type {
-			case TokenCalculating, TokenNexting, TokenForgetting, TokenResuming, TokenStashing, TokenRetrieving, TokenIgnoring, TokenRemembering, TokenAbstaining, TokenReinstating:
-				gerunds = append(gerunds, s.Tokens[index].Type)
-			case TokenReading:
-				gerunds = append(gerunds, s.Tokens[index].Type)
-				if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenOut {
-					index++
-				}
-			case TokenWriting:
-				gerunds = append(gerunds, s.Tokens[index].Type)
-				if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenIn {
-					index++
-				}
-			default:
-				s.Type = StatementReinstateGerundList
-				s.Error = Err000
-				return
-			}
-			index++
-			if index >= len(s.Tokens) {
-				if s.Tokens[initialIndex].Type == TokenReinstate {
-					s.Type = StatementReinstateGerundList
-					s.Operands = gerunds
-					gerundTable[TokenReinstating] = append(gerundTable[TokenReinstating], s.Index)
-				} else {
-					s.Type = StatementAbstainGerundList
-					s.Operands = gerunds
-					gerundTable[TokenAbstaining] = append(gerundTable[TokenAbstaining], s.Index)
-				}
-				return
-			}
-			if s.Tokens[index].Type != TokenIntersection {
-				s.Type = StatementReinstateGerundList
-				s.Error = Err000
-				return
-			}
-			index++
+		switch stmtTokenType {
+		case TokenAbstain:
+			s.Type = StatementAbstainGerundList
+		case TokenCome:
+			s.Type = StatementComeFromGerundList
+		case TokenNext:
+			s.Type = StatementNextFromGerundList
+		case TokenReinstate:
+			s.Type = StatementReinstateGerundList
+		default:
+			panic("ABSTAIN/COME/NEXT/REINSTATE")
 		}
+		s.Operands, s.Error = s.parseGerundList(index)
+		return
 	case TokenGive:
 		if index+2 != len(s.Tokens) || s.Tokens[index+1].Type != TokenUp {
 			s.Type = StatementGiveUp
@@ -489,14 +474,11 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			return
 		}
 		s.Type = StatementGiveUp
-		// Don't add to gerundTable since DO ABSTAIN FROM GIVING UP
-		// and DO REINSTATE GIVING UP are invalid
 		return
 	case TokenWrite:
 		if index+7 == len(s.Tokens) && s.Tokens[index+1].Type == TokenInto && s.Tokens[index+2].Type == TokenWax && s.Tokens[index+4].Type == TokenIntersection && s.Tokens[index+6].Type == TokenWane {
 			s.Type = StatementWriteIntoBit
 			s.Operands = [2]uint16{s.Tokens[index+3].NumberValue, s.Tokens[index+5].NumberValue}
-			gerundTable[TokenReading] = append(gerundTable[TokenWriting], s.Index)
 			return
 		}
 		if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenIn {
@@ -587,7 +569,6 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			if index >= len(s.Tokens) {
 				s.Type = StatementWriteIn
 				s.Operands = operands
-				gerundTable[TokenWriting] = append(gerundTable[TokenWriting], s.Index)
 				return
 			}
 			if s.Tokens[index].Type != TokenIntersection {
@@ -599,13 +580,11 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 		if index+2 == len(s.Tokens) && s.Tokens[index+1].Type == TokenOut {
 			s.Type = StatementReadOutBit
 			s.Operands = true
-			gerundTable[TokenReading] = append(gerundTable[TokenReading], s.Index)
 			return
 		}
 		if index+2 == len(s.Tokens) && (s.Tokens[index+1].Type == TokenNaught || s.Tokens[index+1].Type == TokenNot) {
 			s.Type = StatementReadOutBit
 			s.Operands = false
-			gerundTable[TokenReading] = append(gerundTable[TokenReading], s.Index)
 			return
 		}
 
@@ -693,7 +672,6 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			if index >= len(s.Tokens) {
 				s.Type = StatementReadOut
 				s.Operands = operands
-				gerundTable[TokenReading] = append(gerundTable[TokenReading], s.Index)
 				return
 			}
 			if s.Tokens[index].Type != TokenIntersection {
@@ -1002,7 +980,83 @@ func (s *Statement) parseDimensions(index int) ([]Expr, *Error) {
 	}
 }
 
-func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, gerundTable map[TokenType][]int) {
+func (s *Statement) parseGerundList(index int) (map[StatementType]bool, *Error) {
+	list := make(map[StatementType]bool)
+	for {
+		if index >= len(s.Tokens) {
+			return nil, Err000
+		}
+		switch s.Tokens[index].Type {
+		case TokenCalculating:
+			list[StatementCalculate] = true
+			list[StatementCalculateArrayDimension] = true
+		case TokenNexting:
+			if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenFrom {
+				list[StatementNextFromLabel] = true
+				list[StatementNextFromGerundList] = true
+				index++
+			} else {
+				list[StatementNext] = true
+			}
+		case TokenForgetting:
+			list[StatementForget] = true
+		case TokenResuming:
+			list[StatementResume] = true
+		case TokenStashing:
+			list[StatementStash] = true
+		case TokenRetrieving:
+			list[StatementRetrieve] = true
+		case TokenIgnoring:
+			list[StatementIgnore] = true
+		case TokenRemembering:
+			list[StatementRemember] = true
+		case TokenAbstaining:
+			if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenFrom {
+				index++
+			}
+			list[StatementAbstainLabel] = true
+			list[StatementAbstainGerundList] = true
+		case TokenReinstating:
+			list[StatementReinstateLabel] = true
+			list[StatementReinstateGerundList] = true
+		case TokenWriting:
+			if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenInto {
+				list[StatementWriteIntoBit] = true
+				index++
+			} else if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenIn {
+				list[StatementWriteIn] = true
+				index++
+			} else {
+				list[StatementWriteIn] = true
+				list[StatementWriteIntoBit] = true
+			}
+		case TokenReading:
+			if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenOut {
+				index++
+			}
+			list[StatementReadOut] = true
+			list[StatementReadOutBit] = true
+		case TokenComing:
+			if index+1 < len(s.Tokens) && s.Tokens[index+1].Type == TokenFrom {
+				index++
+			}
+			list[StatementComeFromLabel] = true
+			list[StatementComeFromGerundList] = true
+		default:
+			return nil, Err000
+		}
+		index++
+		if index >= len(s.Tokens) {
+			return list, nil
+		}
+		if s.Tokens[index].Type != TokenIntersection {
+			return nil, Err000
+		}
+		index++
+	}
+}
+
+func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int) {
 	if s.Error != nil {
 		return
 	}
@@ -1034,9 +1088,10 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, 
 		}
 	case StatementAbstainGerundList, StatementReinstateGerundList:
 		targetIndexes := []int{}
-		for _, gerund := range s.Operands.([]TokenType) {
-			for _, targetIndex := range gerundTable[gerund] {
-				targetIndexes = append(targetIndexes, targetIndex)
+		list := s.Operands.(map[StatementType]bool)
+		for _, stmt := range statements {
+			if list[stmt.Type] {
+				targetIndexes = append(targetIndexes, stmt.Index)
 			}
 		}
 		s.Operands = targetIndexes
@@ -1057,6 +1112,17 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int, 
 			break
 		}
 		s.Operands = [2]int{index0, index1}
+	case StatementComeFromLabel, StatementNextFromLabel:
+		if sourceIndex, ok := labelTable[s.Operands.(uint16)]; ok {
+			statements[sourceIndex].Goto = append(statements[sourceIndex].Goto, s.Index)
+		}
+	case StatementComeFromGerundList, StatementNextFromGerundList:
+		list := s.Operands.(map[StatementType]bool)
+		for _, stmt := range statements {
+			if list[stmt.Type] {
+				stmt.Goto = append(stmt.Goto, s.Index)
+			}
+		}
 	default:
 	}
 }
@@ -1105,6 +1171,10 @@ func Strict(statements []*Statement) {
 		if stmt.Chance == 0 || stmt.Chance >= 100 || stmt.Type == StatementReadOutBit || stmt.Type == StatementWriteIntoBit {
 			stmt.Error = Err000
 		}
+		if stmt.Type == StatementComeFromLabel || stmt.Type == StatementComeFromGerundList || stmt.Type == StatementNextFromLabel || stmt.Type == StatementNextFromGerundList {
+			stmt.Type = StatementUnrecognizable
+		}
+		stmt.Goto = []int{}
 	}
 }
 

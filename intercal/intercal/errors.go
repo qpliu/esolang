@@ -20,6 +20,7 @@ var (
 	Err275 = &Error{275, 275, "A 32-bit value has been assigned to a 16-bit variable.", "DON'T BYTE OFF MORE THAN YOU CAN CHEW", nil, 0}
 	Err436 = &Error{436, 436, "A retrieval has been attempted for an unSTASHed value.", "THROW STICK BEFORE RETRIEVING", nil, 0}
 	Err533 = &Error{533, 533, "A WRITE IN statement or interleave (¢) operation has produced a value requiring over 32 bits to represent.", "YOU WANT MAYBE WE SHOULD IMPLEMENT 64-BIT VARIABLES?", nil, 0}
+	Err555 = &Error{555, 555, "The command that has just finished running is simultaneously the target of two or more COME FROMs.", "FLOW DIAGRAM IS EXCESSIVELY CONNECTED", nil, 0}
 	Err562 = &Error{562, 562, "Insufficient data.", "I DO NOT COMPUTE", nil, 0}
 	Err579 = &Error{579, 579, "Input data is invalid.", "", nil, 0}
 	Err621 = &Error{621, 621, "The expression of a RESUME statement evaluated to #0.", "ERROR TYPE 621 ENCOUNTERED", nil, 0}
@@ -48,6 +49,7 @@ var (
 		Err275,
 		Err436,
 		Err533,
+		Err555,
 		Err562,
 		Err579,
 		Err621,

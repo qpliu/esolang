@@ -132,7 +132,7 @@ func TestParseStatements(t *testing.T) {
 	testParseStatements(t, "PLEASE ABSTAIN FROM CALCULATING", []StatementType{StatementAbstainGerundList})
 	testParseStatements(t, "DO ABSTAIN FROM ABSTAINING", []StatementType{StatementAbstainGerundList})
 	testParseStatements(t, "DO ABSTAIN FROM REINSTATING", []StatementType{StatementAbstainGerundList})
-	testParseStatements(t, "DO ABSTAIN FROM GIVING UP", []StatementType{StatementReinstateGerundList}) // not accepted
+	testParseStatements(t, "DO ABSTAIN FROM GIVING UP", []StatementType{StatementAbstainGerundList}) // not accepted
 	testParseStatements(t, "DON'T GIVE UP", []StatementType{StatementGiveUp})
 	testParseStatements(t, "(1) DO ABSTAIN FROM (1)", []StatementType{StatementAbstainLabel})
 	testParseStatements(t, "(1) DO REINSTATE (1)", []StatementType{StatementReinstateLabel})

@@ -180,6 +180,14 @@ a bit causes the 8 bits to be written and the buffer to be cleared.  The
 significant bit and the last bit as the most significant bit.  Any bits in
 the buffer when the program terminates are discarded.
 
+### Alternative binary output
+A 16-bit array argument of `READ OUT` statement will output the number of
+bits equal to the name of the array.  For example, `,1` outputs one bit,
+`,2` outputs two bits, `,10` outputs ten bits, etc.  The contents of the
+array list the bit indexes of the one bits.  Zeros are ignored.  Duplicate
+indexes and indexes greater than the number of bits ought to result in some
+error, but are ignored.  (Not yet implemented.)
+
 ### Binary input
 This implementation extends INTERCAL to allow binary input.
 ```
@@ -194,6 +202,18 @@ a bit causes 8 bits to be read as a byte.  The least significant bit is
 returned, and the remaining bits are put in the buffer.  Subsequent inputs
 removes the least significant remaining bit from the buffer and returns it
 until the buffer is empty.
+
+### Alternative binary input
+An array argument to `WRITE INTO` inputs bits.  If the array does not have
+at least 2 elements, error 240 results.  The first element contains the
+number of consecutive zero bits initially input.  The second element contains
+the number of consecutive one bits subsequently input.  The third element
+contains the number of consecutive zero bits subsequently input, etc.
+Consecutive elements with zero indicates that no more bits have been input,
+otherwise subsequent bits can be input by subsequent `WRITE` statements.  An
+implementation may split up runs of consecutive identical bits.  For example,
+the last element of the array could be set to one, and a subsequent `WRITE`
+would read the continuation of the run of bits.  (Not yet implemented.)
 
 An optimization
 ---------------
