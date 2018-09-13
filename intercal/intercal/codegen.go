@@ -140,6 +140,8 @@ func (cgs *codeGenState) collectVarInfo() {
 		case StatementLibrary:
 			stmt.Operands.(LibraryFunction).CollectVarInfo(cgs)
 
+		case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
+
 		default:
 			panic("VarInfo")
 		}
@@ -241,6 +243,7 @@ func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementT
 		case StatementReadOut:
 			varInfo.accessed = true
 		case StatementLibrary:
+		case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
 		default:
 			panic("StmtVarInfo")
 		}
@@ -722,6 +725,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 	// probability check
 	redoLabel := cgs.label("stmt")
 	redoDoneLabel := cgs.label("stmt")
+	countIdent := ""
 	if cgs.stmt.Chance == 100 {
 		startStmtLabel := cgs.label("stmt")
 		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n    br label %%%s%s\n  %s:\n", startStmtLabel, cgs.debugLocation, redoLabel, redoDoneLabel, cgs.debugLocation, startStmtLabel); err != nil {
@@ -731,7 +735,7 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		doLabel := cgs.label("stmt")
 		startStmtLabel := cgs.label("stmt")
 		countCheckLabel := cgs.label("stmt")
-		countIdent := cgs.ident("do_count")
+		countIdent = cgs.ident("do_count")
 		nextCountIdent := cgs.ident("next_do_count")
 		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n    br label %%%s%s\n  %s:\n    br label %%%s%s\n  %s:\n", doLabel, cgs.debugLocation, doLabel, countCheckLabel, cgs.debugLocation, redoLabel, countCheckLabel, cgs.debugLocation, countCheckLabel); err != nil {
 			return err
@@ -974,23 +978,29 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		}
 
 	case StatementNext:
-		stackptrIdent := cgs.ident("stackptr")
-		stackptrCheckIdent := cgs.ident("stackptr_check")
-		stackptrOverflowLabel := cgs.label("stmt")
-		stackptrOkLabel := cgs.label("stmt")
-		if _, err := fmt.Fprintf(w, "    ;NEXT\n    %s = load i32, i32* @stackptr%s\n    %s = icmp uge i32 %s, 79%s\n    br i1 %s, label %%%s, label %%%s%s\n", stackptrIdent, cgs.debugLocation, stackptrCheckIdent, stackptrIdent, cgs.debugLocation, stackptrCheckIdent, stackptrOverflowLabel, stackptrOkLabel, cgs.debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    ;NEXT\n"); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 123,1),i32 %d)%s\n    br label %%%s%s\n", stackptrOverflowLabel, cgs.nextIndex(), cgs.debugLocation, redoLabel, cgs.debugLocation); err != nil {
+		if cgs.stmt.Chance > 100 {
+			doCountIsZeroIdent := cgs.ident("do_count_is_zero")
+			if _, err := fmt.Fprintf(w, "    %s = icmp eq i32 %s,0%s\n", doCountIsZeroIdent, countIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			doCountNotZeroLabel := cgs.label("do_count_not_zero")
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", doCountIsZeroIdent, redoLabel, doCountNotZeroLabel, cgs.debugLocation); err != nil {
+				return err
+			}
+			if err := cgs.genPushNextStack(w, cgs.stmt.Index+1, cgs.nextIndex()); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoLabel, cgs.debugLocation); err != nil {
 			return err
 		}
-		//... handle come from/next from
-		nextStackptrIdent := cgs.ident("next_stackptr")
-		stackentryptrIdent := cgs.ident("next_stack_entry_ptr")
-		if _, err := fmt.Fprintf(w, "  %s:\n    %s = add i32 %s, 1%s\n    store i32 %s, i32* @stackptr%s\n    %s = getelementptr [79 x i8*], [79 x i8*]* @stack, i32 0, i32 %s%s\n    store i8* blockaddress(@main,%%stmt%d), i8** %s%s\n    br label %%%s%s\n", stackptrOkLabel, nextStackptrIdent, stackptrIdent, cgs.debugLocation, nextStackptrIdent, cgs.debugLocation, stackentryptrIdent, stackptrIdent, cgs.debugLocation, cgs.stmt.Index+1, stackentryptrIdent, cgs.debugLocation, redoLabel, cgs.debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "  %s:\n", redoDoneLabel); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%stmt%d%s\n", redoDoneLabel, cgs.nextIndex(), cgs.debugLocation); err != nil {
+		if err := cgs.genGotoNext(w, cgs.nextIndex()); err != nil {
 			return err
 		}
 
@@ -1455,6 +1465,17 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 
 	case StatementLibrary:
 		cgs.stmt.Operands.(LibraryFunction).CodeGen(w, cgs)
+		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoLabel, cgs.debugLocation); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s:\n", redoDoneLabel); err != nil {
+			return err
+		}
+		if err := cgs.genGotoNext(w, cgs.nextIndex()); err != nil {
+			return err
+		}
+
+	case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
 		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", redoLabel, cgs.debugLocation); err != nil {
 			return err
 		}
@@ -2017,6 +2038,43 @@ func (cgs *codeGenState) genMemset(w io.Writer, memPtrIdent, byteValIdent, sizeI
 	return nil
 }
 
+func (cgs *codeGenState) genPushNextStack(w io.Writer, indexToPush, indexForError int) error {
+	stackptrIdent := cgs.ident("stackptr")
+	if _, err := fmt.Fprintf(w, "    %s = load i32,i32* @stackptr%s\n", stackptrIdent, cgs.debugLocation); err != nil {
+		return err
+	}
+	stackptrCheckIdent := cgs.ident("stackptr_check")
+	if _, err := fmt.Fprintf(w, "    %s = icmp uge i32 %s,79%s\n", stackptrCheckIdent, stackptrIdent, cgs.debugLocation); err != nil {
+		return err
+	}
+	stackOverflowLabel := cgs.label("stack_overflow")
+	stackOkLabel := cgs.label("stack_ok")
+	if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", stackptrCheckIdent, stackOverflowLabel, stackOkLabel, cgs.debugLocation); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "  %s:\n    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 123,1),i32 %d) noreturn%s\n    ret void%s\n", stackOverflowLabel, indexForError, cgs.debugLocation, cgs.debugLocation); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "  %s:\n", stackOkLabel); err != nil {
+		return err
+	}
+	nextStackptrIdent := cgs.ident("next_stackptr")
+	if _, err := fmt.Fprintf(w, "    %s = add i32 %s,1%s\n", nextStackptrIdent, stackptrIdent, cgs.debugLocation); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "    store i32 %s, i32* @stackptr%s\n", nextStackptrIdent, cgs.debugLocation); err != nil {
+		return err
+	}
+	stackentryptrIdent := cgs.ident("next_stack_entry_ptr")
+	if _, err := fmt.Fprintf(w, "    %s = getelementptr [79 x i8*], [79 x i8*]* @stack, i32 0, i32 %s%s\n", stackentryptrIdent, stackptrIdent, cgs.debugLocation); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "    store i8* blockaddress(@main,%%stmt%d), i8** %s%s\n", indexToPush, stackentryptrIdent, cgs.debugLocation); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (cgs *codeGenState) genGetRand1000(w io.Writer) (string, error) {
 	getRandDoneLabel := cgs.label("get_rand_done")
 	randIdent := cgs.ident("rand")
@@ -2071,9 +2129,9 @@ func (cgs *codeGenState) genGetRand1000(w io.Writer) (string, error) {
 			if _, err := fmt.Fprintf(w, ","); err != nil {
 				return "", err
 			}
-			if _, err := fmt.Fprintf(w, "[%s,%%%s]", phi[0], phi[1]); err != nil {
-				return "", err
-			}
+		}
+		if _, err := fmt.Fprintf(w, "[%s,%%%s]", phi[0], phi[1]); err != nil {
+			return "", err
 		}
 	}
 	if _, err := fmt.Fprintf(w, "%s\n", cgs.debugLocation); err != nil {
@@ -2085,6 +2143,9 @@ func (cgs *codeGenState) genGetRand1000(w io.Writer) (string, error) {
 func (cgs *codeGenState) genGotoNext(w io.Writer, nextIndex int) error {
 	gotoChance := uint16(0)
 	for _, index := range cgs.stmt.Goto {
+		if cgs.statements[index].Chance == 0 || (cgs.statements[index].Not && !cgs.stmtInfo[index].reinstated) {
+			continue
+		}
 		gotoChance += cgs.statements[index].Chance
 		if gotoChance > 100 {
 			break
@@ -2099,26 +2160,37 @@ func (cgs *codeGenState) genGotoNext(w io.Writer, nextIndex int) error {
 
 		gotoChance = 0
 		for _, index := range cgs.stmt.Goto {
+			if cgs.statements[index].Chance == 0 || (cgs.statements[index].Not && !cgs.stmtInfo[index].reinstated) {
+				continue
+			}
 			if gotoChance <= 100 {
 				gotoChance += cgs.statements[index].Chance
 			}
-			abstainPtrIdent := cgs.ident("abstain_ptr")
-			if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1],[%d x i1]* @abstain_flags,i32 0,i32 %d%s\n", abstainPtrIdent, len(cgs.statements)+1, len(cgs.statements)+1, index, cgs.debugLocation); err != nil {
-				return err
+			if !cgs.statements[index].Not && !cgs.stmtInfo[index].abstained {
+				nextComeFromChancesIdent := cgs.ident("come_from_chances")
+				if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%d%s\n", nextComeFromChancesIdent, comeFromChancesIdent, cgs.statements[index].Chance*10, cgs.debugLocation); err != nil {
+					return err
+				}
+				comeFromChancesIdent = nextComeFromChancesIdent
+			} else {
+				abstainPtrIdent := cgs.ident("abstain_ptr")
+				if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1],[%d x i1]* @abstain_flags,i32 0,i32 %d%s\n", abstainPtrIdent, len(cgs.statements)+1, len(cgs.statements)+1, index, cgs.debugLocation); err != nil {
+					return err
+				}
+				abstainIdent := cgs.ident("abstain")
+				if _, err := fmt.Fprintf(w, "    %s = load i1,i1* %s%s\n", abstainIdent, abstainPtrIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				comeFromChanceIdent := cgs.ident("come_from_chance")
+				if _, err := fmt.Fprintf(w, "    %s = select i1 %s,i32 0,i32 %d%s\n", comeFromChanceIdent, abstainIdent, cgs.statements[index].Chance*10, cgs.debugLocation); err != nil {
+					return err
+				}
+				nextComeFromChancesIdent := cgs.ident("come_from_chances")
+				if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%s%s\n", nextComeFromChancesIdent, comeFromChancesIdent, comeFromChanceIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+				comeFromChancesIdent = nextComeFromChancesIdent
 			}
-			abstainIdent := cgs.ident("abstain")
-			if _, err := fmt.Fprintf(w, "    %s = load i1,i1* %s%s\n", abstainIdent, abstainPtrIdent, cgs.debugLocation); err != nil {
-				return err
-			}
-			comeFromChanceIdent := cgs.ident("come_from_chance")
-			if _, err := fmt.Fprintf(w, "    %s = select i1 %s,i32 0,i32 %d%s\n", comeFromChanceIdent, abstainIdent, cgs.statements[index].Chance*10, cgs.debugLocation); err != nil {
-				return err
-			}
-			nextComeFromChancesIdent := cgs.ident("come_from_chances")
-			if _, err := fmt.Fprintf(w, "    %s = add i32 %s,%s%s\n", nextComeFromChancesIdent, comeFromChancesIdent, comeFromChanceIdent, cgs.debugLocation); err != nil {
-				return err
-			}
-			comeFromChancesIdent = nextComeFromChancesIdent
 			if gotoChance > 100 {
 				checkChancesIdent := cgs.ident("check_chances")
 				if _, err := fmt.Fprintf(w, "    %s = icmp ule i32 %s,1000%s\n", checkChancesIdent, comeFromChancesIdent, cgs.debugLocation); err != nil {
@@ -2142,10 +2214,117 @@ func (cgs *codeGenState) genGotoNext(w io.Writer, nextIndex int) error {
 		}
 	}
 
-	//... handle come from/next from
+	randomComeFromCount := 0
+	for _, index := range cgs.stmt.Goto {
+		if cgs.statements[index].Chance == 0 || (cgs.statements[index].Not && !cgs.stmtInfo[index].reinstated) {
+			continue
+		}
+		if cgs.statements[index].Chance < 100 {
+			randomComeFromCount++
+		}
+	}
+	randIdent := ""
+	if randomComeFromCount > 0 {
+		rand1000Ident, err := cgs.genGetRand1000(w)
+		if err != nil {
+			return err
+		}
+		randIdent = rand1000Ident
+	}
+	for _, index := range cgs.stmt.Goto {
+		if cgs.statements[index].Chance == 0 || (cgs.statements[index].Not && !cgs.stmtInfo[index].reinstated) {
+			continue
+		}
+		dontComeFromLabel := cgs.label("dont_come_from")
+		abstainCheckLabel := ""
+		if cgs.statements[index].Not || cgs.stmtInfo[index].abstained {
+			abstainCheckLabel = cgs.label("abstain_check")
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n", abstainCheckLabel, cgs.debugLocation, abstainCheckLabel); err != nil {
+				return err
+			}
+			abstainPtrIdent := cgs.ident("abstain_ptr")
+			if _, err := fmt.Fprintf(w, "    %s = getelementptr [%d x i1],[%d x i1]* @abstain_flags,i32 0,i32 %d%s\n", abstainPtrIdent, len(cgs.statements)+1, len(cgs.statements)+1, index, cgs.debugLocation); err != nil {
+				return err
+			}
+			abstainIdent := cgs.ident("abstain")
+			if _, err := fmt.Fprintf(w, "    %s = load i1,i1* %s%s\n", abstainIdent, abstainPtrIdent, cgs.debugLocation); err != nil {
+				return err
+			}
+			notAbstainedLabel := cgs.label("come_from_not_abstained")
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n  %s:\n", abstainIdent, dontComeFromLabel, notAbstainedLabel, cgs.debugLocation, notAbstainedLabel); err != nil {
+				return err
+			}
+		}
+		newRandIdent := ""
+		randDontComeFromLabel := ""
+		if cgs.statements[index].Chance < 100 {
+			randCheckIdent := cgs.ident("come_from_rand_check")
+			if _, err := fmt.Fprintf(w, "    %s = icmp ult i32 %s,%d%s\n", randCheckIdent, randIdent, cgs.statements[index].Chance*10, cgs.debugLocation); err != nil {
+				return err
+			}
+			randDoComeFromLabel := cgs.label("rand_do_come_from")
+			randDontComeFromLabel = cgs.label("rand_dont_come_from")
+			if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", randCheckIdent, randDoComeFromLabel, randDontComeFromLabel, cgs.debugLocation); err != nil {
+				return err
+			}
+			newRandIdent = cgs.ident("come_from_rand")
+			if _, err := fmt.Fprintf(w, "  %s:\n    %s = sub i32 %s,%d%s\n", randDontComeFromLabel, newRandIdent, randIdent, cgs.statements[index].Chance*10, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", dontComeFromLabel, cgs.debugLocation); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "  %s:\n", randDoComeFromLabel); err != nil {
+				return err
+			}
+		}
 
-	if _, err := fmt.Fprintf(w, "    br label %%stmt%d%s\n", nextIndex, cgs.debugLocation); err != nil {
-		return err
+		if cgs.statements[index].Type == StatementNextFromLabel || cgs.statements[index].Type == StatementNextFromGerundList {
+			if err := cgs.genPushNextStack(w, nextIndex, nextIndex); err != nil {
+				return err
+			}
+		}
+
+		if cgs.stmt.Type != StatementNext {
+			if _, err := fmt.Fprintf(w, "    br label %%stmt%d%s\n", index, cgs.debugLocation); err != nil {
+				return err
+			}
+		} else {
+			if err := cgs.genPushNextStack(w, index, nextIndex); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(w, "    br label %%stmt%d%s\n", nextIndex, cgs.debugLocation); err != nil {
+				return err
+			}
+		}
+
+		if _, err := fmt.Fprintf(w, "  %s:\n", dontComeFromLabel); err != nil {
+			return err
+		}
+		if newRandIdent != "" {
+			if abstainCheckLabel == "" {
+				randIdent = newRandIdent
+			} else {
+				newNewRandIdent := cgs.ident("new_new_rand")
+				if _, err := fmt.Fprintf(w, "    %s = phi i32 [%s,%%%s],[%s,%%%s]%s\n", newNewRandIdent, randIdent, abstainCheckLabel, newRandIdent, randDontComeFromLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+				randIdent = newNewRandIdent
+			}
+		}
+	}
+
+	if cgs.stmt.Type != StatementNext {
+		if _, err := fmt.Fprintf(w, "    br label %%stmt%d%s\n", nextIndex, cgs.debugLocation); err != nil {
+			return err
+		}
+	} else {
+		if err := cgs.genPushNextStack(w, cgs.stmt.Index+1, nextIndex); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    br label %%stmt%d%s\n", nextIndex, cgs.debugLocation); err != nil {
+			return err
+		}
 	}
 	return nil
 }

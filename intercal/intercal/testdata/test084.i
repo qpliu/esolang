@@ -1,0 +1,43 @@
+     DO .1 <- #1
+     PLEASE COME FROM ABSTAINING
+(1)  PLEASE FORGET #2
+     DO (1) NEXT PLEASE, THANK YOU
+
+(2)  DO %25 COME FROM (1)
+     DO (20) NEXT
+     DO (1) NEXT PLEASE, THANK YOU
+(20) DO (21) NEXT
+     DO READ OUT .1
+     DO .1 <- #2
+     DO ABSTAIN FROM (2)
+(21) DO RESUME "?'"!1~#6'~!1~#6'"~#1'$#1"~#3 PLEASE, THANK YOU
+
+(3)  DO %25 COME FROM (1)
+     DO (30) NEXT
+     DO (1) NEXT PLEASE, THANK YOU
+(30) DO (31) NEXT
+     DO READ OUT .1
+     DO .1 <- #3
+     DO ABSTAIN FROM (3)
+(31) DO RESUME "?'"!1~#5'~!1~#5'"~#1'$#1"~#3 PLEASE, THANK YOU
+
+(4)  DO %25 COME FROM (1)
+     DO (40) NEXT
+     DO READ OUT .1
+     DO .1 <- #4
+     DO ABSTAIN FROM (4)
+(40) DO (41) NEXT
+     DO (1) NEXT PLEASE, THANK YOU
+(41) DO RESUME '?.1~.1'~#3 PLEASE, THANK YOU
+
+(5)  DO %25 COME FROM (1)
+     DO (50) NEXT
+     DO (1) NEXT PLEASE, THANK YOU
+(50) DO (51) NEXT
+     DO READ OUT .1
+     DO REINSTATE (6)
+     DO ABSTAIN FROM (5)
+(51) DO RESUME "?'"!1~#3'~!1~#3'"~#1'$#1"~#3 PLEASE, THANK YOU
+
+(6)  DON'T COME FROM (1)
+     DO GIVE UP

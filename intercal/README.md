@@ -1,5 +1,5 @@
 PUKE is an implementation of the INTERCAL programming language
-described by  http://www.muppetlabs.com/~breadbox/intercal/intercal.txt
+described by http://www.muppetlabs.com/~breadbox/intercal/intercal.txt
 with the exception of using Unicode instead of EBCDIC.
 
 COMPILAC is the PUKE INTERCAL interpreter.
@@ -215,6 +215,19 @@ implementation may split up runs of consecutive identical bits.  For example,
 the last element of the array could be set to one, and a subsequent `WRITE`
 would read the continuation of the run of bits.  (Not yet implemented.)
 
+### COME FROM and NEXT FROM
+This implementation implements non-computed and gerund `COME FROM` and
+`NEXT FROM`, which are described in the
+[C-INTERCAL Manual](http://www.catb.org/~esr/intercal/ick.htm#COME-FROM-and-NEXT-FROM).
+
+This implementation allows multiple `COME FROM` and `NEXT FROM` statements
+to target a line.  It is only a run time error if the sum of the chance of
+execution qualifiers of the non-abstained statements `COMING FROM` or
+`NEXTING FROM` this line add up to more than 100%.  Otherwise, it randomly
+goes one of them (or none of them) based on their chance of execution
+qualifiers.  Apparently, single-threaded C-INTERCAL version 0.30 disallows
+this at compile time.
+
 An optimization
 ---------------
 If an array is `STASHed`, then immediately redimensioned, allocating and
@@ -242,3 +255,14 @@ and an IBM 3090.
 
 Another idea is phoenick, for phoenix.princeton.edu, which, in the past,
 was an Ultrix mainframe, a SunOS mainframe, and a Solaris mainframe.
+
+Performance
+-----------
+Consider
+[primes.i](https://gitlab.com/esr/intercal/blob/master/pit/primes.i).
+Apparently in [1992](http://www.catb.org/~esr/intercal/stross.html),
+it took 17 hours to run.  In 2018, compiled with ick-0.30, it runs in
+14 seconds on a laptop.  Modified to add `(1001) DO RESUME .5` plus
+a number of workarounds for the buggy PUKE implementations, it takes
+27 seconds for COMPILAC to interpret, and when compiled by INTERLAC,
+it runs in 7 seconds.
