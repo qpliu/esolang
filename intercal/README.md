@@ -266,3 +266,16 @@ it took 17 hours to run.  In 2018, compiled with ick-0.30, it runs in
 a number of workarounds for the buggy PUKE implementations, it takes
 27 seconds for COMPILAC to interpret, and when compiled by INTERLAC,
 it runs in 7 seconds.
+
+TODO
+----
+* [ ] Reinterpret `NEXT` with execution chance greater than 100% by pushing
+      the `NEXT` destination after pushing the instruction following the `NEXT`
+      instead of pushing the instruction following the `NEXT` multiple times,
+      which didn't really make sense.  The logic will be a bit more complicated
+      with `COME FROM`/`NEXT FROM`.
+* [ ] In the compiler, initialize the variables and arrays to point to a
+      statically allocated value, which allows eliminating a bunch of null
+      checks.
+* [ ] Implement alternative binary input and output, including splatting it
+      when the strict flag is active.

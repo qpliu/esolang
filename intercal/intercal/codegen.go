@@ -2280,7 +2280,7 @@ func (cgs *codeGenState) genGotoNext(w io.Writer, nextIndex int) error {
 		}
 
 		if cgs.statements[index].Type == StatementNextFromLabel || cgs.statements[index].Type == StatementNextFromGerundList {
-			if err := cgs.genPushNextStack(w, nextIndex, nextIndex); err != nil {
+			if err := cgs.genPushNextStack(w, cgs.stmt.Index+1, nextIndex); err != nil {
 				return err
 			}
 		}
