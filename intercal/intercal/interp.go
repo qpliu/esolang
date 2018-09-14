@@ -92,49 +92,40 @@ func (s *State) Run(input *IntercalReader, output *IntercalWriter) *Error {
 				}
 			}
 		}
-		chance := stmt.Chance
-		for {
-			if chance == 0 || (chance < 100 && uint16(s.Random.Intn(100)) >= chance) {
-				if chance == stmt.Chance {
-					if err := s.gotoNext(stmt); err != nil {
-						return err.At(s, stmt)
-					}
-				}
-				break
-			}
+		runStmtCount := int(stmt.Chance) / 100
+		if stmt.Chance%100 > 0 && uint16(s.Random.Intn(100)) >= stmt.Chance%100 {
+			runStmtCount++
+		}
+		if runStmtCount > 0 {
 			if stmt.Error != nil && stmt.Type != StatementResume {
 				return stmt.Error.At(s, stmt)
 			}
-			if err := s.runStmt(stmt, input, output); err != nil {
+			if err := s.runStmt(stmt, input, output, runStmtCount); err != nil {
 				if err == ErrGiveUp {
 					err = nil
 				}
 				return err
 			}
-			if chance <= 100 {
-				break
-			}
-			chance -= 100
+		} else if err := s.gotoNext(stmt); err != nil {
+			return err
 		}
 	}
 }
 
-func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *IntercalWriter) *Error {
+func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *IntercalWriter, runStmtCount int) *Error {
 	switch stmt.Type {
 	case StatementCalculate:
 		calc := stmt.Operands.(Calculation)
-		if calc.LHS.Ignored(s) {
-			if err := s.gotoNext(stmt); err != nil {
-				return err.At(s, stmt)
+		if !calc.LHS.Ignored(s) {
+			for i := 0; i < runStmtCount; i++ {
+				val, is16, err := calc.RHS.Eval(s)
+				if err != nil {
+					return err.At(s, stmt)
+				}
+				if err := calc.LHS.Gets(s, val, is16); err != nil {
+					return err.At(s, stmt)
+				}
 			}
-			return nil
-		}
-		val, is16, err := calc.RHS.Eval(s)
-		if err != nil {
-			return err.At(s, stmt)
-		}
-		if err := calc.LHS.Gets(s, val, is16); err != nil {
-			return err.At(s, stmt)
 		}
 		if err := s.gotoNext(stmt); err != nil {
 			return err.At(s, stmt)
@@ -180,6 +171,12 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 			return Err123.At(s, stmt)
 		}
 		s.NEXTingStack = append(s.NEXTingStack, nextIndex)
+		for i := 1; i < runStmtCount; i++ {
+			if len(s.NEXTingStack) >= 79 {
+				return Err123.At(s, stmt)
+			}
+			s.NEXTingStack = append(s.NEXTingStack, stmt.Operands.(int))
+		}
 		s.StatementIndex = stmt.Operands.(int)
 		return nil
 
@@ -188,7 +185,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		if err != nil {
 			return err.At(s, stmt)
 		}
-		newlen := len(s.NEXTingStack) - int(val)
+		newlen := len(s.NEXTingStack) - int(val)*runStmtCount
 		if newlen < 0 {
 			newlen = 0
 		}
@@ -206,7 +203,7 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		if val == 0 {
 			return Err621.At(s, stmt)
 		}
-		newlen := len(s.NEXTingStack) - int(val)
+		newlen := len(s.NEXTingStack) - int(val)*runStmtCount
 		if newlen < 0 {
 			return Err632
 		}
@@ -218,8 +215,10 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementStash:
-		for _, v := range stmt.Operands.([]Stashable) {
-			v.Stash(s)
+		for i := 0; i < runStmtCount; i++ {
+			for _, v := range stmt.Operands.([]Stashable) {
+				v.Stash(s)
+			}
 		}
 		if err := s.gotoNext(stmt); err != nil {
 			return err.At(s, stmt)
@@ -227,9 +226,11 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementRetrieve:
-		for _, v := range stmt.Operands.([]Stashable) {
-			if err := v.Retrieve(s); err != nil {
-				return err.At(s, stmt)
+		for i := 0; i < runStmtCount; i++ {
+			for _, v := range stmt.Operands.([]Stashable) {
+				if err := v.Retrieve(s); err != nil {
+					return err.At(s, stmt)
+				}
 			}
 		}
 		if err := s.gotoNext(stmt); err != nil {
@@ -277,12 +278,14 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return ErrGiveUp
 
 	case StatementWriteIn:
-		for _, v := range stmt.Operands.([]WriteInable) {
-			if v.Ignored(s) {
-				continue
-			}
-			if err := v.WriteIn(s, input); err != nil {
-				return err.At(s, stmt)
+		for i := 0; i < runStmtCount; i++ {
+			for _, v := range stmt.Operands.([]WriteInable) {
+				if v.Ignored(s) {
+					continue
+				}
+				if err := v.WriteIn(s, input); err != nil {
+					return err.At(s, stmt)
+				}
 			}
 		}
 		if err := s.gotoNext(stmt); err != nil {
@@ -291,9 +294,11 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementReadOut:
-		for _, v := range stmt.Operands.([]ReadOutable) {
-			if err := v.ReadOut(s, output); err != nil {
-				return err.At(s, stmt)
+		for i := 0; i < runStmtCount; i++ {
+			for _, v := range stmt.Operands.([]ReadOutable) {
+				if err := v.ReadOut(s, output); err != nil {
+					return err.At(s, stmt)
+				}
 			}
 		}
 		if err := s.gotoNext(stmt); err != nil {
@@ -302,14 +307,23 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementReadOutBit:
-		output.WriteBit(stmt.Operands.(bool))
+		for i := 0; i < runStmtCount; i++ {
+			output.WriteBit(stmt.Operands.(bool))
+		}
 		if err := s.gotoNext(stmt); err != nil {
 			return err.At(s, stmt)
 		}
 		return nil
 
 	case StatementWriteIntoBit:
-		bit, eof := input.InputBit()
+		bit := false
+		eof := false
+		for i := 0; i < runStmtCount; i++ {
+			bit, eof = input.InputBit()
+			if eof {
+				break
+			}
+		}
 		if eof {
 			if err := s.gotoNext(stmt); err != nil {
 				return err.At(s, stmt)
@@ -322,8 +336,10 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementLibrary:
-		if err := stmt.Operands.(LibraryFunction).Interp(s); err != nil {
-			return err.At(s, stmt)
+		for i := 0; i < runStmtCount; i++ {
+			if err := stmt.Operands.(LibraryFunction).Interp(s); err != nil {
+				return err.At(s, stmt)
+			}
 		}
 		if err := s.gotoNext(stmt); err != nil {
 			return err.At(s, stmt)
@@ -342,24 +358,26 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 }
 
 func (s *State) getNextStatementIndex(stmt *Statement) (int, bool, *Error) {
-	gotoChance := uint16(0)
-	for _, i := range stmt.Goto {
-		target := s.Statements[i]
-		if !target.Not {
-			gotoChance += target.Chance
-		}
-		if gotoChance > 100 {
-			return 0, false, Err555
-		}
-	}
-	random := uint16(s.Random.Intn(100))
-	for _, i := range stmt.Goto {
-		target := s.Statements[i]
-		if !target.Not {
-			if random < target.Chance {
-				return target.Index, target.Type == StatementNextFromLabel || target.Type == StatementNextFromGerundList, nil
+	if len(stmt.Goto) > 0 {
+		gotoChance := uint16(0)
+		for _, i := range stmt.Goto {
+			target := s.Statements[i]
+			if !target.Not {
+				gotoChance += target.Chance
 			}
-			random -= target.Chance
+			if gotoChance > 100 {
+				return 0, false, Err555
+			}
+		}
+		random := uint16(s.Random.Intn(100))
+		for _, i := range stmt.Goto {
+			target := s.Statements[i]
+			if !target.Not {
+				if random < target.Chance {
+					return target.Index, target.Type == StatementNextFromLabel || target.Type == StatementNextFromGerundList, nil
+				}
+				random -= target.Chance
+			}
 		}
 	}
 	return stmt.Index + 1, false, nil

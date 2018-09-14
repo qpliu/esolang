@@ -90,7 +90,11 @@ largest subscript.  For multi-dimensional arrays, the leftmost subscript
 will will run through its entire range from 1 to its largest subscript,
 then reset and run through its entire range again with the next leftmost
 subscript incremented to its next value, and similarly for all its
-subscripts until all the subscripts have their largest values.
+subscripts until all the subscripts have their largest values.  Upon
+further consideration, where the document says that the arguments are
+"variables and/or elements or arrays" might be a typo of "variables and/or
+elements *of* arrays."  This is unchanged in the 1996 document, but, by
+1998, in the C-INTERCAL 0.18 documentation, the "or" was changed to "of".
 
 Section 4.4.13 in the 1973 document says that `#3999` reads out as MMMIM,
 which is what this implementation does.  The 1996 document says that
@@ -269,11 +273,6 @@ it runs in 7 seconds.
 
 TODO
 ----
-* [ ] Reinterpret `NEXT` with execution chance greater than 100% by pushing
-      the `NEXT` destination after pushing the instruction following the `NEXT`
-      instead of pushing the instruction following the `NEXT` multiple times,
-      which didn't really make sense.  The logic will be a bit more complicated
-      with `COME FROM`/`NEXT FROM`.
 * [ ] In the compiler, initialize the variables and arrays to point to a
       statically allocated value, which allows eliminating a bunch of null
       checks.
