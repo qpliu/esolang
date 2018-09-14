@@ -79,6 +79,9 @@ const (
 	// Operands is initially [2]uint16, labels
 	// Resolve() changes it to [2]int, statement indexes
 
+	StatementWriteIntoArray
+	// Operands is Array16
+
 	StatementLibrary
 	// Operands is LibraryFunction
 
@@ -481,6 +484,11 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			s.Operands = [2]uint16{s.Tokens[index+3].NumberValue, s.Tokens[index+5].NumberValue}
 			return
 		}
+		if index+4 == len(s.Tokens) && s.Tokens[index+1].Type == TokenInto && s.Tokens[index+2].Type == TokenTail && s.Tokens[index+3].NumberValue != 0 {
+			s.Type = StatementWriteIntoArray
+			s.Operands = Array16(s.Tokens[index+3].NumberValue)
+			return
+		}
 		if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenIn {
 			s.Type = StatementWriteIn
 			s.Error = Err000
@@ -619,10 +627,15 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 				operands = append(operands, Var32(s.Tokens[index+1].NumberValue))
 				index += 2
 			case TokenTail:
-				if index+2 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 || s.Tokens[index+2].Type != TokenSub {
+				if index+1 >= len(s.Tokens) || s.Tokens[index+1].Type != TokenNumber || s.Tokens[index+1].NumberValue == 0 {
 					s.Type = StatementReadOut
 					s.Error = Err000
 					return
+				}
+				if index+2 >= len(s.Tokens) || s.Tokens[index+2].Type != TokenSub {
+					operands = append(operands, Array16(s.Tokens[index+1].NumberValue))
+					index += 2
+					break
 				}
 				subscripts, newIndex, err := s.parseSubscripts(index+3, TokenString)
 				if err != nil {
@@ -1168,11 +1181,21 @@ func checkE079E099(statements []*Statement) {
 
 func Strict(statements []*Statement) {
 	for _, stmt := range statements {
-		if stmt.Chance == 0 || stmt.Chance >= 100 || stmt.Type == StatementReadOutBit || stmt.Type == StatementWriteIntoBit {
+		if stmt.Chance == 0 || stmt.Chance >= 100 {
 			stmt.Error = Err000
 		}
-		if stmt.Type == StatementComeFromLabel || stmt.Type == StatementComeFromGerundList || stmt.Type == StatementNextFromLabel || stmt.Type == StatementNextFromGerundList {
+		switch stmt.Type {
+		case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
 			stmt.Type = StatementUnrecognizable
+		case StatementReadOutBit, StatementWriteIntoBit, StatementWriteIntoArray:
+			stmt.Error = Err000
+		case StatementReadOut:
+			for _, arg := range stmt.Operands.([]ReadOutable) {
+				switch arg.(type) {
+				case Array16:
+					stmt.Error = Err000
+				}
+			}
 		}
 		stmt.Goto = []int{}
 	}

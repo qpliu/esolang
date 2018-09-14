@@ -2402,6 +2402,56 @@ define void @output_binary(i1 %bit) {
     ret void
 }
 
+define void @output_binary_array(%arr_vrbl* %arr, i32 %bitcount) {
+  entry:
+    %range = call {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr)
+    %rangeok = extractvalue {i32,i32,i1} %range,2
+    br i1 %rangeok,label %do_write_out,label %do_write_null_loop
+
+  do_write_null_loop:
+    %bit_index_null = phi i32 [0,%entry],[%next_bit_index_null,%do_write_null]
+    %bit_index_null_check = icmp ult i32 %bit_index_null,%bitcount
+    br i1 %bit_index_null_check,label %do_write_null,label %done
+
+  do_write_null:
+    call void @output_binary(i1 0)
+    %next_bit_index_null = add i32 %bit_index_null,1
+    br label %do_write_null_loop
+
+  do_write_out:
+    %arrval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arrval = load %arr_val*,%arr_val** %arrval_ptr
+    %start_index = extractvalue {i32,i32,i1} %range,0
+    %end_index = extractvalue {i32,i32,i1} %range,1
+    br label %do_write_out_loop
+
+  do_write_out_loop:
+    %bit_index = phi i32 [1,%do_write_out],[%next_bit_index,%do_write_out_loop_end]
+    %bit_index_check = icmp ule i32 %bit_index,%bitcount
+    br i1 %bit_index_check,label %do_write_out_loop_body,label %done
+
+  do_write_out_loop_body:
+    %index = phi i32 [%start_index,%do_write_out_loop],[%next_index,%do_write_out_loop_body_end]
+    %next_index = add i32 %index,1
+    %index_ok = icmp ult i32 %index,%end_index
+    br i1 %index_ok,label %do_write_out_loop_body_end,label %do_write_out_loop_end
+
+  do_write_out_loop_body_end:
+    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 3,i32 %index
+    %elem = load i32,i32* %elem_ptr
+    %elem_test = icmp eq i32 %elem,%bit_index
+    br i1 %elem_test,label %do_write_out_loop_end,label %do_write_out_loop_body
+
+  do_write_out_loop_end:
+    %bit = phi i1 [0,%do_write_out_loop_body],[1,%do_write_out_loop_body_end]
+    call void @output_binary(i1 %bit)
+    %next_bit_index = add i32 %bit_index,1
+    br label %do_write_out_loop
+
+  done:
+    ret void
+}
+
 @binary_input_index = global i8 0
 @binary_input_buffer = global i8 0
 
@@ -2432,6 +2482,23 @@ define {i1,i1} @input_binary() {
 
   ret_error:
     ret {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1)
+}
+
+; {bit,bit valid flag}, bit is valid if it is in the buffer
+define {i1,i1} @peek_input_binary() {
+    %current_index = load i8,i8* @binary_input_index
+    %buffer_empty_check = icmp eq i8 %current_index,0
+    br i1 %buffer_empty_check,label %ret_invalid,label %ret_peek
+
+  ret_invalid:
+    ret {i1,i1} zeroinitializer
+
+  ret_peek:
+    %buffer_byte = load i8,i8* @binary_input_buffer
+    %buffer_bit = and i8 %buffer_byte,%current_index
+    %result_bit = icmp ne i8 %buffer_bit,0
+    %result = insertvalue {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1),i1 %result_bit,0
+    ret {i1,i1} %result
 }
 
 define i32 @lib1900() {

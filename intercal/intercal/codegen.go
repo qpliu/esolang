@@ -142,6 +142,9 @@ func (cgs *codeGenState) collectVarInfo() {
 
 		case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
 
+		case StatementWriteIntoArray:
+			cgs.collectStmtVarInfo(stmt.Operands, stmt.Type)
+
 		default:
 			panic("VarInfo")
 		}
@@ -243,7 +246,8 @@ func (cgs *codeGenState) collectStmtVarInfo(arg interface{}, stmtType StatementT
 		case StatementReadOut:
 			varInfo.accessed = true
 		case StatementLibrary:
-		case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
+		case StatementWriteIntoArray:
+			varInfo.assigned = true
 		default:
 			panic("StmtVarInfo")
 		}
@@ -1406,16 +1410,24 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			}
 		}
 		for _, arg := range cgs.stmt.Operands.([]ReadOutable) {
-			exprIdent, err := cgs.genExpr(w, arg)
-			if err != nil {
-				return err
-			}
-			if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)%s\n", exprIdent, cgs.nextIndex(), cgs.debugLocation); err != nil {
-				return err
-			}
-			valIdent := cgs.ident("val")
-			if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s, 1%s\n    call void @output(i32 %s)%s\n", valIdent, exprIdent, cgs.debugLocation, valIdent, cgs.debugLocation); err != nil {
-				return err
+			switch arg.(type) {
+			case Expr:
+				exprIdent, err := cgs.genExpr(w, arg.(Expr))
+				if err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)%s\n", exprIdent, cgs.nextIndex(), cgs.debugLocation); err != nil {
+					return err
+				}
+				valIdent := cgs.ident("val")
+				if _, err := fmt.Fprintf(w, "    %s = extractvalue %%val %s, 1%s\n    call void @output(i32 %s)%s\n", valIdent, exprIdent, cgs.debugLocation, valIdent, cgs.debugLocation); err != nil {
+					return err
+				}
+			case Array16:
+				varInfo := cgs.varInfo(arg.(Array16))
+				if _, err := fmt.Fprintf(w, "    call void @output_binary_array(%s* %s,i32 %d)%s\n", varInfo.varType, varInfo.ident, arg, cgs.debugLocation); err != nil {
+					return err
+				}
 			}
 		}
 		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n  %s:\n", loopEndLabel, cgs.debugLocation, loopEndLabel); err != nil {
@@ -1659,6 +1671,15 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 			return err
 		}
 		if err := cgs.genGotoNext(w, cgs.nextIndex(), ""); err != nil {
+			return err
+		}
+
+	case StatementWriteIntoArray:
+		if _, err := fmt.Fprintf(w, "    ;WRITE IN\n"); err != nil {
+			return err
+		}
+		//... TODO
+		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n    ret void%s\n", cgs.nextIndex(), cgs.debugLocation, cgs.debugLocation); err != nil {
 			return err
 		}
 

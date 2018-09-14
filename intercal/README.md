@@ -190,7 +190,7 @@ bits equal to the name of the array.  For example, `,1` outputs one bit,
 `,2` outputs two bits, `,10` outputs ten bits, etc.  The contents of the
 array list the bit indexes of the one bits.  Zeros are ignored.  Duplicate
 indexes and indexes greater than the number of bits ought to result in some
-error, but are ignored.  (Not yet implemented.)
+error, but are ignored.
 
 ### Binary input
 This implementation extends INTERCAL to allow binary input.
@@ -275,3 +275,5 @@ TODO
 ----
 * [ ] Implement alternative binary input and output, including splatting it
       when the strict flag is active.
+  - [x] Output
+  - [ ] Input

@@ -335,6 +335,10 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		}
 		return nil
 
+	case StatementWriteIntoArray:
+		//... TODO
+		return Err778.At(s, stmt)
+
 	case StatementLibrary:
 		for i := 0; i < runStmtCount; i++ {
 			if err := stmt.Operands.(LibraryFunction).Interp(s); err != nil {

@@ -1,7 +1,6 @@
 package intercal
 
 import (
-	"io"
 	"math/bits"
 )
 
@@ -51,8 +50,7 @@ type Dimensionable interface {
 }
 
 type ReadOutable interface {
-	Expr
-	ReadOut(state *State, w io.Writer) *Error
+	ReadOut(state *State, w *IntercalWriter) *Error
 }
 
 type WriteInable interface {
@@ -119,6 +117,21 @@ func (v Array16) Dimension(state *State, dimensions []int) *Error {
 	}
 	val.Value.Dimensions = dimensions
 	val.Value.Values = make([]uint32, size)
+	return nil
+}
+
+func (v Array16) ReadOut(state *State, w *IntercalWriter) *Error {
+	val := state.Array16(v)
+	for i := 1; i <= int(v); i++ {
+		bit := false
+		for _, elt := range val.Value.Values {
+			if i == int(elt) {
+				bit = true
+				break
+			}
+		}
+		w.WriteBit(bit)
+	}
 	return nil
 }
 
@@ -284,7 +297,7 @@ func (v Var16) Is16() bool {
 	return true
 }
 
-func (v Var16) ReadOut(state *State, w io.Writer) *Error {
+func (v Var16) ReadOut(state *State, w *IntercalWriter) *Error {
 	Output(w, state.Var16(v).Value)
 	return nil
 }
@@ -362,7 +375,7 @@ func (v Var32) Is16() bool {
 	return false
 }
 
-func (v Var32) ReadOut(state *State, w io.Writer) *Error {
+func (v Var32) ReadOut(state *State, w *IntercalWriter) *Error {
 	Output(w, state.Var32(v).Value)
 	return nil
 }
@@ -473,7 +486,7 @@ func (v ArrayElement) Is16() bool {
 	return v.Array.Is16()
 }
 
-func (v ArrayElement) ReadOut(state *State, w io.Writer) *Error {
+func (v ArrayElement) ReadOut(state *State, w *IntercalWriter) *Error {
 	value, _, err := v.Eval(state)
 	if err != nil {
 		return err
@@ -523,7 +536,7 @@ func (e ExprConst) ConstValue() (uint32, bool, bool) {
 	return uint32(e), true, true
 }
 
-func (e ExprConst) ReadOut(state *State, w io.Writer) *Error {
+func (e ExprConst) ReadOut(state *State, w *IntercalWriter) *Error {
 	Output(w, uint32(e))
 	return nil
 }

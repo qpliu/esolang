@@ -135,3 +135,10 @@ func (r *IntercalReader) InputBit() (bool, bool) {
 	r.binaryBufferIndex <<= 1
 	return bit, false
 }
+
+func (r *IntercalReader) PeekBit() (bool, bool) {
+	if r.binaryBufferIndex == 0 {
+		return false, false
+	}
+	return r.binaryBuffer&r.binaryBufferIndex != 0, true
+}
