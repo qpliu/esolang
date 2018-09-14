@@ -273,8 +273,5 @@ it runs in 7 seconds.
 
 TODO
 ----
-* [ ] In the compiler, initialize the variables and arrays to point to a
-      statically allocated value, which allows eliminating a bunch of null
-      checks.
 * [ ] Implement alternative binary input and output, including splatting it
       when the strict flag is active.

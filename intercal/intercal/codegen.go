@@ -446,12 +446,18 @@ func (cgs *codeGenState) genGlobals(w io.Writer) error {
 
 	// future optimization: omit never assigned, never dimensioned
 	for _, info := range cgs.spots {
-		if _, err := fmt.Fprintf(w, "%s = global %s zeroinitializer\n", info.ident, info.varType); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = global %s {i1 0,%s* %s_val}\n", info.ident, info.varType, info.valType, info.ident); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "%s_val = global %s zeroinitializer\n", info.ident, info.valType); err != nil {
 			return err
 		}
 	}
 	for _, info := range cgs.twospots {
-		if _, err := fmt.Fprintf(w, "%s = global %s zeroinitializer\n", info.ident, info.varType); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = global %s {i1 0,%s* %s_val}\n", info.ident, info.varType, info.valType, info.ident); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "%s_val = global %s zeroinitializer\n", info.ident, info.valType); err != nil {
 			return err
 		}
 	}
@@ -1721,7 +1727,7 @@ func (cgs *codeGenState) genCheckIgnored(w io.Writer, ignoredable Ignoredable) (
 	varInfo := cgs.varInfo(ignoredable)
 	if !varInfo.ignored {
 		neverIgnoredIdent := cgs.ident("never_ignored")
-		if _, err := fmt.Fprintf(w, "    %s = select i1 1,i1 0,i1 0%s", neverIgnoredIdent, cgs.debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    %s = select i1 1,i1 0,i1 0%s\n", neverIgnoredIdent, cgs.debugLocation); err != nil {
 			return "", err
 		}
 		return neverIgnoredIdent, nil
@@ -1891,56 +1897,19 @@ func (cgs *codeGenState) genGets(w io.Writer, lhs LValue, rhsIdent string, doneL
 	case Var16, Var32:
 		valueptrptrIdent := cgs.ident("valueptr_ptr")
 		valueptrIdent := cgs.ident("valueptr")
-		valueptrisnullIdent := cgs.ident("valueptr_is_null")
 		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl, %%vrbl* %s,i32 0,i32 1%s\n", valueptrptrIdent, varInfo.ident, cgs.debugLocation); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "    %s = load %%vrbl_val*, %%vrbl_val** %s%s\n", valueptrIdent, valueptrptrIdent, cgs.debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    %s = icmp eq %%vrbl_val* %s,null%s\n", valueptrisnullIdent, valueptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		valueptrisnullLabel := cgs.label("stmt")
-		valueptrnotnullLabel := cgs.label("stmt")
-		if _, err := fmt.Fprintf(w, "    br i1 %s,label %%%s,label %%%s%s\n", valueptrisnullIdent, valueptrisnullLabel, valueptrnotnullLabel, cgs.debugLocation); err != nil {
-			return err
-		}
-
-		storevalueLabel := cgs.label("stmt")
-		if _, err := fmt.Fprintf(w, "  %s:\n    br label %%%s%s\n", valueptrnotnullLabel, storevalueLabel, cgs.debugLocation); err != nil {
-			return err
-		}
-
-		// malloc new value
-		mallocresultIdent := cgs.ident("malloc_result")
-		newvalueptrIdent := cgs.ident("new_valueptr")
-		if _, err := fmt.Fprintf(w, "  %s:\n    %s = call i8* @malloc(i32 ptrtoint(%%vrbl_val* getelementptr(%%vrbl_val,%%vrbl_val* null,i32 1) to i32))%s\n", valueptrisnullLabel, mallocresultIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if err := cgs.genMemset(w, mallocresultIdent, "0", "ptrtoint(%vrbl_val* getelementptr(%vrbl_val,%vrbl_val* null,i32 1) to i32)"); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    %s = bitcast i8* %s to %%vrbl_val*%s\n", newvalueptrIdent, mallocresultIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    store %%vrbl_val* %s, %%vrbl_val** %s%s\n", newvalueptrIdent, valueptrptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", storevalueLabel, cgs.debugLocation); err != nil {
-			return err
-		}
 
 		// store value
-		finalvalueptrIdent := cgs.ident("final_valueptr")
-		finali32valueptrIdent := cgs.ident("final_i32_valueptr")
-		if _, err := fmt.Fprintf(w, "  %s:\n    %s = phi %%vrbl_val* [%s,%%%s],[%s,%%%s]%s\n", storevalueLabel, finalvalueptrIdent, valueptrIdent, valueptrnotnullLabel, newvalueptrIdent, valueptrisnullLabel, cgs.debugLocation); err != nil {
+		i32valueptrIdent := cgs.ident("i32_valueptr")
+		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl_val, %%vrbl_val* %s, i32 0, i32 2%s\n", i32valueptrIdent, valueptrIdent, cgs.debugLocation); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "    %s = getelementptr %%vrbl_val, %%vrbl_val* %s, i32 0, i32 2%s\n", finali32valueptrIdent, finalvalueptrIdent, cgs.debugLocation); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "    store i32 %s,i32* %s%s\n    br label %%%s%s\n", rhsi32valueIdent, finali32valueptrIdent, cgs.debugLocation, doneLabel, cgs.debugLocation); err != nil {
+		if _, err := fmt.Fprintf(w, "    store i32 %s,i32* %s%s\n    br label %%%s%s\n", rhsi32valueIdent, i32valueptrIdent, cgs.debugLocation, doneLabel, cgs.debugLocation); err != nil {
 			return err
 		}
 		return nil

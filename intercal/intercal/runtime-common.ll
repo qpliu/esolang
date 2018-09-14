@@ -2122,10 +2122,6 @@ define void @finish_fatal_error(i8* %message, i32 %message_len, i8* %stmt_number
 define i1 @retrieve_var(%vrbl* %var) {
     %valptr = getelementptr %vrbl,%vrbl* %var,i32 0,i32 1
     %val = load %vrbl_val*,%vrbl_val** %valptr
-    %val_isnull = icmp eq %vrbl_val* %val, null
-    br i1 %val_isnull,label %retfail,label %checkval
-
-  checkval:
     %valnextptr = getelementptr %vrbl_val,%vrbl_val* %val,i32 0,i32 0
     %valnext = load %vrbl_val*,%vrbl_val** %valnextptr
     %valnext_isnull = icmp eq %vrbl_val* %valnext, null
