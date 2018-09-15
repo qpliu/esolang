@@ -320,6 +320,7 @@ const (
 	TokenHookworm
 	TokenShark
 	TokenBlotch
+	TokenHolyCross
 
 	TokenPlease
 	TokenDo
@@ -411,9 +412,11 @@ var tokenTable = []tokenTableEntry{
 	{"\\", TokenBackSlat, true},
 	{"@", TokenWhirlpool, true},
 	{"'\u0008-", TokenHookworm, true},
+	{"\u00ac", TokenHookworm, true},
 	{"^", TokenShark, true},
 	{"#\u0008*\u0008[\u0008]", TokenBlotch, true},
 	{"#\u0008I\u0008[\u0008]", TokenBlotch, true},
+	{"\u00b1", TokenHolyCross, true},
 
 	{"PLEASE", TokenPlease, true},
 	{"DO", TokenDo, true},
