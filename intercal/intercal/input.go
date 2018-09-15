@@ -14,6 +14,7 @@ var (
 type IntercalReader struct {
 	*bufio.Reader
 	binaryBuffer, binaryBufferIndex byte
+	binaryBufferEOF                 bool
 }
 
 func NewIntercalReader(r io.Reader) *IntercalReader {
@@ -122,10 +123,14 @@ func (r *IntercalReader) Input32() (uint32, error) {
 }
 
 func (r *IntercalReader) InputBit() (bool, bool) {
+	if r.binaryBufferEOF {
+		return false, true
+	}
 	if r.binaryBufferIndex == 0 {
 		r.binaryBufferIndex = 2
 		b, err := r.Reader.ReadByte()
 		if err != nil {
+			r.binaryBufferEOF = true
 			return false, true
 		}
 		r.binaryBuffer = b
@@ -137,7 +142,7 @@ func (r *IntercalReader) InputBit() (bool, bool) {
 }
 
 func (r *IntercalReader) PeekBit() (bool, bool) {
-	if r.binaryBufferIndex == 0 {
+	if r.binaryBufferEOF || r.binaryBufferIndex == 0 {
 		return false, false
 	}
 	return r.binaryBuffer&r.binaryBufferIndex != 0, true

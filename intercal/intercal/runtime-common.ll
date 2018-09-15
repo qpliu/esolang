@@ -2403,6 +2403,10 @@ define void @output_binary(i1 %bit) {
 }
 
 define void @output_binary_array(%arr_vrbl* %arr, i32 %bitcount) {
+    ; future optimization: alloca a 16 bit buffer, run through %arr
+    ; looking for 16 bits at a time, then write out the up to 16 bits,
+    ; iterate until all the %bitcount bits are written
+
   entry:
     %range = call {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr)
     %rangeok = extractvalue {i32,i32,i1} %range,2
@@ -2454,9 +2458,14 @@ define void @output_binary_array(%arr_vrbl* %arr, i32 %bitcount) {
 
 @binary_input_index = global i8 0
 @binary_input_buffer = global i8 0
+@binary_input_eof = global i1 0
 
 ; {bit,eof/error flag}
 define {i1,i1} @input_binary() {
+    %eof = load i1,i1* @binary_input_eof
+    br i1 %eof,label %ret_eof,label %read
+
+  read:
     %current_index = load i8,i8* @binary_input_index
     %next_byte_check = icmp eq i8 %current_index,0
     br i1 %next_byte_check,label %read_next_byte,label %advance_index
@@ -2481,11 +2490,19 @@ define {i1,i1} @input_binary() {
     ret {i1,i1} %result
 
   ret_error:
+    store i1 1,i1* @binary_input_eof
+    ret {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1)
+
+  ret_eof:
     ret {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1)
 }
 
 ; {bit,bit valid flag}, bit is valid if it is in the buffer
 define {i1,i1} @peek_input_binary() {
+    %eof = load i1,i1* @binary_input_eof
+    br i1 %eof,label %ret_invalid,label %peek
+
+  peek:
     %current_index = load i8,i8* @binary_input_index
     %buffer_empty_check = icmp eq i8 %current_index,0
     br i1 %buffer_empty_check,label %ret_invalid,label %ret_peek
@@ -2499,6 +2516,88 @@ define {i1,i1} @peek_input_binary() {
     %result_bit = icmp ne i8 %buffer_bit,0
     %result = insertvalue {i1,i1} insertvalue({i1,i1} zeroinitializer,i1 1,1),i1 %result_bit,0
     ret {i1,i1} %result
+}
+
+define %val @input_binary_array(%arr_vrbl* %arr) {
+    %range = call {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr)
+    %rangeok = extractvalue {i32,i32,i1} %range,2
+    br i1 %rangeok,label %check_range,label %ret_err241
+
+  ret_err241:
+    ret %val insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 241,1)
+
+  check_range:
+    %arrval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
+    %arrval = load %arr_val*,%arr_val** %arrval_ptr
+    %start_index = extractvalue {i32,i32,i1} %range,0
+    %end_index = extractvalue {i32,i32,i1} %range,1
+    %last_index = sub i32 %end_index,1
+    %size_is_at_least_2_check = icmp ugt i32 %last_index,%start_index
+    br i1 %size_is_at_least_2_check,label %index_loop,label %ret_err241
+
+  index_loop:
+    %index = phi i32 [%start_index,%check_range],[%next_index,%store_count]
+    %eof = phi i1 [0,%check_range],[%next_eof,%store_count]
+    %bit = phi i1 [0,%check_range],[%next_bit,%store_count]
+    %count = phi i32 [0,%check_range],[%next_start_count,%store_count]
+    %next_index = add i32 %index,1
+    %next_bit = xor i1 %bit,1
+    %index_check = icmp ult i32 %index,%last_index
+    br i1 %index_check,label %check_eof_index,label %do_last_index
+
+  check_eof_index:
+    br i1 %eof,label %store_count,label %bit_loop
+
+  bit_loop:
+    %bit_count = phi i32 [%count,%check_eof_index],[%inc_bit_count,%check_bit]
+    %count_overflow = icmp uge i32 %bit_count,65535
+    br i1 %count_overflow,label %store_count,label %read_bit
+
+  read_bit:
+    %input = call {i1,i1} @input_binary()
+    %in_bit = extractvalue {i1,i1} %input,0
+    %in_eof = extractvalue {i1,i1} %input,1
+    br i1 %in_eof,label %store_count,label %check_bit
+
+  check_bit:
+    %inc_bit_count = add i32 %bit_count,1
+    %bit_check = icmp eq i1 %in_bit,%bit
+    br i1 %bit_check,label %bit_loop,label %store_count
+
+  store_count:
+    %count_to_store = phi i32 [0,%check_eof_index],[%bit_count,%bit_loop],[%bit_count,%read_bit],[%bit_count,%check_bit]
+    %next_start_count = phi i32 [0,%check_eof_index],[0,%bit_loop],[0,%read_bit],[1,%check_bit]
+    %next_eof = phi i1 [1,%check_eof_index],[0,%bit_loop],[1,%read_bit],[0,%check_bit]
+    %elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 3,i32 %index
+    store i32 %count_to_store,i32* %elem_ptr
+    br label %index_loop
+
+    ret %val insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 778,1)
+
+  do_last_index:
+    br i1 %eof,label %store_last_index,label %last_index_loop
+
+  last_index_loop:
+    %last_bit_count = phi i32 [%count,%do_last_index],[%inc_last_bit_count,%last_bit_continues]
+    %peek = call {i1,i1} @peek_input_binary()
+    %peek_bit = extractvalue {i1,i1} %peek,0
+    %peek_valid = extractvalue {i1,i1} %peek,1
+    br i1 %peek_valid,label %last_check_bit,label %store_last_index
+
+  last_check_bit:
+    %last_bit_check = icmp eq i1 %peek_bit,%bit
+    br i1 %last_bit_check,label %last_bit_continues,label %store_last_index
+
+  last_bit_continues:
+    %inc_last_bit_count = add i32 %last_bit_count,1
+    call {i1,i1} @input_binary()
+    br label %last_index_loop
+
+  store_last_index:
+    %last_bit_count_to_store = phi i32 [0,%do_last_index],[%last_bit_count,%last_index_loop],[%last_bit_count,%last_check_bit]
+    %last_elem_ptr = getelementptr %arr_val,%arr_val* %arrval,i32 0,i32 3,i32 %index
+    store i32 %last_bit_count_to_store,i32* %last_elem_ptr
+    ret %val zeroinitializer
 }
 
 define i32 @lib1900() {

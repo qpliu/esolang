@@ -336,8 +336,48 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementWriteIntoArray:
-		//... TODO
-		return Err778.At(s, stmt)
+		v := s.Array16(stmt.Operands.(Array16))
+		if len(v.Value.Values) < 2 {
+			return Err241.At(s, stmt)
+		}
+		eof := false
+		bit := false
+		initialCount := uint32(0)
+		for i := range v.Value.Values {
+			v.Value.Values[i] = initialCount
+			initialCount = 0
+			if eof {
+				continue
+			}
+			if i < len(v.Value.Values)-1 {
+				for v.Value.Values[i] < 65535 {
+					inBit, inEof := input.InputBit()
+					if inEof {
+						eof = true
+						break
+					} else if inBit == bit {
+						v.Value.Values[i]++
+					} else {
+						initialCount = 1
+						break
+					}
+				}
+				bit = !bit
+			} else {
+				for {
+					peekBit, peekOk := input.PeekBit()
+					if !peekOk || peekBit != bit {
+						break
+					}
+					v.Value.Values[i]++
+					input.InputBit()
+				}
+			}
+		}
+		if err := s.gotoNext(stmt); err != nil {
+			return err.At(s, stmt)
+		}
+		return nil
 
 	case StatementLibrary:
 		for i := 0; i < runStmtCount; i++ {

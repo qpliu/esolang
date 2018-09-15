@@ -1678,8 +1678,15 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 		if _, err := fmt.Fprintf(w, "    ;WRITE IN\n"); err != nil {
 			return err
 		}
-		//... TODO
-		if _, err := fmt.Fprintf(w, "    call void @fatal_error(%%val insertvalue(%%val insertvalue(%%val zeroinitializer,i2 2,0),i32 778,1),i32 %d)%s\n    ret void%s\n", cgs.nextIndex(), cgs.debugLocation, cgs.debugLocation); err != nil {
+		statusIdent := cgs.ident("status")
+		varInfo := cgs.varInfo(cgs.stmt.Operands.(Array16))
+		if _, err := fmt.Fprintf(w, "    %s = call %%val @input_binary_array(%s* %s)%s\n", statusIdent, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)%s\n", statusIdent, cgs.nextIndex(), cgs.debugLocation); err != nil {
+			return err
+		}
+		if err := cgs.genGotoNext(w, cgs.nextIndex(), ""); err != nil {
 			return err
 		}
 

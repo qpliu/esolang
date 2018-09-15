@@ -270,10 +270,3 @@ it took 17 hours to run.  In 2018, compiled with ick-0.30, it runs in
 a number of workarounds for the buggy PUKE implementations, it takes
 27 seconds for COMPILAC to interpret, and when compiled by INTERLAC,
 it runs in 7 seconds.
-
-TODO
-----
-* [ ] Implement alternative binary input and output, including splatting it
-      when the strict flag is active.
-  - [x] Output
-  - [ ] Input
