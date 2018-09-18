@@ -1503,14 +1503,22 @@ func (cgs *codeGenState) codeGenStmt(w io.Writer) error {
 					return err
 				}
 
-			case Array16, Array32:
+			case Array16:
+				statusIdent := cgs.ident("status")
 				varInfo := cgs.varInfo(v)
-				writeinCall := ""
-				if v.Is16() {
-					writeinCall = fmt.Sprintf("@writein16(%s* %s)", varInfo.varType, varInfo.ident)
-				} else {
-					writeinCall = fmt.Sprintf("@writein32(%s* %s)", varInfo.varType, varInfo.ident)
+				if _, err := fmt.Fprintf(w, "    %s = call %%val @input_binary_array(%s* %s)%s\n", statusIdent, varInfo.varType, varInfo.ident, cgs.debugLocation); err != nil {
+					return err
 				}
+				if _, err := fmt.Fprintf(w, "    call void @check_error(%%val %s, i32 %d)%s\n", statusIdent, cgs.nextIndex(), cgs.debugLocation); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "    br label %%%s%s\n", nextLabel, cgs.debugLocation); err != nil {
+					return err
+				}
+
+			case Array32:
+				varInfo := cgs.varInfo(v)
+				writeinCall := fmt.Sprintf("@writein32(%s* %s)", varInfo.varType, varInfo.ident)
 
 				errIdent := cgs.ident("write_in_err")
 				if _, err := fmt.Fprintf(w, "    %s = call %%val %s%s\n", errIdent, writeinCall, cgs.debugLocation); err != nil {

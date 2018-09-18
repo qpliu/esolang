@@ -140,16 +140,42 @@ func (v Array16) WriteIn(state *State, r *IntercalReader) *Error {
 	if val.Ignored {
 		return nil
 	}
+	if len(val.Value.Values) < 2 {
+		return Err241
+	}
+	eof := false
+	bit := false
+	initialCount := uint32(0)
 	for i := range val.Value.Values {
-		n, err := r.Input16()
-		if err != nil {
-			if e, ok := err.(*Error); ok {
-				return e
-			} else {
-				return Err562
+		val.Value.Values[i] = initialCount
+		initialCount = 0
+		if eof {
+			continue
+		}
+		if i < len(val.Value.Values)-1 {
+			for val.Value.Values[i] < 65535 {
+				inBit, inEof := r.InputBit()
+				if inEof {
+					eof = true
+					break
+				} else if inBit == bit {
+					val.Value.Values[i]++
+				} else {
+					initialCount = 1
+					break
+				}
+			}
+			bit = !bit
+		} else {
+			for {
+				peekBit, peekOk := r.PeekBit()
+				if !peekOk || peekBit != bit {
+					break
+				}
+				val.Value.Values[i]++
+				r.InputBit()
 			}
 		}
-		val.Value.Values[i] = uint32(n)
 	}
 	return nil
 }

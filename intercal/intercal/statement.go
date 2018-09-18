@@ -1196,6 +1196,13 @@ func Strict(statements []*Statement) {
 					stmt.Error = Err000
 				}
 			}
+		case StatementWriteIn:
+			for _, arg := range stmt.Operands.([]WriteInable) {
+				switch arg.(type) {
+				case Array16, Array32:
+					stmt.Error = Err000
+				}
+			}
 		}
 		stmt.Goto = []int{}
 	}

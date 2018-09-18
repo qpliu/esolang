@@ -63,10 +63,19 @@ due to the possibility of multidimensional arrays, so this implementation
 will require the list elements for `READ OUT` to be separated by
 intersections.
 
-Section 4.4.13 also omits arrays from the `READ OUT` list, so this
-implementation will not support arrays in the `READ OUT` list despite many
-examples on the internet of `READING OUT` arrays.  Apparently, that is
-for binary or text I/O in newer implementations.
+Section 4.4.12 says that its arguments are "variables and/or elements or
+arrays," which is probably a typo for "variables and/or elements *of*
+arrays."  The typo remains in the 1996 document, but, by 1998, in the
+C-INTERCAL 0.18 documentation, the "or" was changed to "of".  This
+implementation extends `WRITE IN` to input binary when 16-bit arrays are in
+the `WRITE IN` list as described later.  This method of binary input is
+incompatible with the C-INTERCAL and the CLC-INTERCAL extensions for binary
+input.
+
+Section 4.4.13 omits arrays from the `READ OUT` list.  This implementation
+extends `READ OUT` to output binary when 16-bit arrays are in the `READ OUT`
+list as described later.  This method of binary output is incompatible with
+the C-INTERCAL and the CLC-INTERCAL extensions for binary output.
 
 Section 4.4.1 says 16-bit variables can only be assigned 32-bit values if
 the value is less than 65535.  Presumably they can be assigned a 16-bit
@@ -81,20 +90,6 @@ as the left part of a pair, even if there is already a matching open
 grouper to its left.  This is not explicitly stated in section 3.4.3 of
 the document.  Otherwise, if there is a matching open grouper, it will be
 treated as the right part of the pair.
-
-Section 4.4.12 does not specify how arrays are written in.  For
-arrays without initial dimensioning, this implementation will result in
-a fatal error.  For one-dimensional arrays, the only obvious
-interpretation is to read starting with subscript 1 and ending with the
-largest subscript.  For multi-dimensional arrays, the leftmost subscript
-will will run through its entire range from 1 to its largest subscript,
-then reset and run through its entire range again with the next leftmost
-subscript incremented to its next value, and similarly for all its
-subscripts until all the subscripts have their largest values.  Upon
-further consideration, where the document says that the arguments are
-"variables and/or elements or arrays" might be a typo of "variables and/or
-elements *of* arrays."  This is unchanged in the 1996 document, but, by
-1998, in the C-INTERCAL 0.18 documentation, the "or" was changed to "of".
 
 Section 4.4.13 in the 1973 document says that `#3999` reads out as MMMIM,
 which is what this implementation does.  The 1996 document says that
@@ -157,8 +152,54 @@ status of variables are respected by these library functions.
 
 Extensions to INTERCAL
 ----------------------
+When the `-strict` flag is passed the interpreter or compiler, statements
+using these extensions will result in a fatal runtime error.
+
+### Binary input
+A 16-bit array argument to `WRITE IN` inputs bits.  If the array does not have
+at least 2 elements, error 240 results.  The first element contains the
+number of consecutive zero bits initially input.  The second element contains
+the number of consecutive one bits subsequently input.  The third element
+contains the number of consecutive zero bits subsequently input, etc.
+Consecutive elements with zero indicates that no more bits have been input,
+otherwise subsequent bits can be input by subsequent `WRITE` statements.  An
+implementation may split up runs of consecutive identical bits.  For example,
+the last element of the array could be set to one, and a subsequent `WRITE`
+would read the continuation of the run of bits.
+
+This method of input can input a megabyte of data into a 129 element array,
+for particular values of the data.  I don't think any major language has this
+capability.
+
 ### Binary output
-This implementation extends INTERCAL to allow binary output.
+A 16-bit array argument of `READ OUT` statement will output the number of
+bits equal to the name of the array.  For example, `,1` outputs one bit,
+`,2` outputs two bits, `,10` outputs ten bits, etc.  The contents of the
+array list the bit indexes of the one bits, with the other bits being zero.
+Zeros are ignored.  Duplicate indexes and indexes greater than the number of
+bits ought to result in some error, but are ignored.
+
+For example, if `,65535` and `,8` are undimensioned,
+```
+    PLEASE READ OUT ,65535 + ,65535 + ,65535 + ,65535 + ,65535 + ,65535 + ,65535 + ,65535 + ,8
+```
+outputs 64 kilobytes of zeros.
+
+### COME FROM and NEXT FROM
+This implementation implements non-computed and gerund `COME FROM` and
+`NEXT FROM`, which are described in the
+[C-INTERCAL Manual](http://www.catb.org/~esr/intercal/ick.htm#COME-FROM-and-NEXT-FROM).
+
+This implementation allows multiple `COME FROM` and `NEXT FROM` statements
+to target a line.  It is only a run time error if the sum of the chance of
+execution qualifiers of the non-abstained statements `COMING FROM` or
+`NEXTING FROM` this line add up to more than 100%.  Otherwise, it randomly
+goes to one of them (or none of them) based on their chance of execution
+qualifiers.  Apparently, single-threaded C-INTERCAL version 0.30 disallows
+this at compile time.
+
+### Single bit output
+This implementation extends INTERCAL to allow single bit output.
 ```
     PLEASE READ OUT
 ```
@@ -184,16 +225,8 @@ a bit causes the 8 bits to be written and the buffer to be cleared.  The
 significant bit and the last bit as the most significant bit.  Any bits in
 the buffer when the program terminates are discarded.
 
-### Alternative binary output
-A 16-bit array argument of `READ OUT` statement will output the number of
-bits equal to the name of the array.  For example, `,1` outputs one bit,
-`,2` outputs two bits, `,10` outputs ten bits, etc.  The contents of the
-array list the bit indexes of the one bits.  Zeros are ignored.  Duplicate
-indexes and indexes greater than the number of bits ought to result in some
-error, but are ignored.
-
-### Binary input
-This implementation extends INTERCAL to allow binary input.
+### Single bit input
+This implementation extends INTERCAL to allow single bit input.
 ```
     PLEASE WRITE IN TO (label1+label2)
 ```
@@ -206,31 +239,6 @@ a bit causes 8 bits to be read as a byte.  The least significant bit is
 returned, and the remaining bits are put in the buffer.  Subsequent inputs
 removes the least significant remaining bit from the buffer and returns it
 until the buffer is empty.
-
-### Alternative binary input
-An array argument to `WRITE INTO` inputs bits.  If the array does not have
-at least 2 elements, error 240 results.  The first element contains the
-number of consecutive zero bits initially input.  The second element contains
-the number of consecutive one bits subsequently input.  The third element
-contains the number of consecutive zero bits subsequently input, etc.
-Consecutive elements with zero indicates that no more bits have been input,
-otherwise subsequent bits can be input by subsequent `WRITE` statements.  An
-implementation may split up runs of consecutive identical bits.  For example,
-the last element of the array could be set to one, and a subsequent `WRITE`
-would read the continuation of the run of bits.  (Not yet implemented.)
-
-### COME FROM and NEXT FROM
-This implementation implements non-computed and gerund `COME FROM` and
-`NEXT FROM`, which are described in the
-[C-INTERCAL Manual](http://www.catb.org/~esr/intercal/ick.htm#COME-FROM-and-NEXT-FROM).
-
-This implementation allows multiple `COME FROM` and `NEXT FROM` statements
-to target a line.  It is only a run time error if the sum of the chance of
-execution qualifiers of the non-abstained statements `COMING FROM` or
-`NEXTING FROM` this line add up to more than 100%.  Otherwise, it randomly
-goes one of them (or none of them) based on their chance of execution
-qualifiers.  Apparently, single-threaded C-INTERCAL version 0.30 disallows
-this at compile time.
 
 An optimization
 ---------------

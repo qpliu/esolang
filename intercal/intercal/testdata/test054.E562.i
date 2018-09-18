@@ -1,2 +1,2 @@
-DO ,1 <- #1
-DO WRITE IN ,1
+DO ;1 <- #1
+DO WRITE IN ;1
