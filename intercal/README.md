@@ -5,10 +5,11 @@ with the exception of using Unicode instead of EBCDIC.
 COMPILAC is the PUKE INTERCAL interpreter.
 
 INTERLAC is the PUKE INTERCAL compiler targeting LLVM.  It works with
-version 3, version 5, and version 6.  It probably needs only minimal
-changes for later LLVM versions.  For example, `@llvm.memset.p0i8.i32`
-and `@llvm.memcpy.p0i8.p0i8.i32` drop their align arguments at some
-later version (in LLVM version 7 or LLVM version 8).
+version 3, version 5, version 6, and version 7.  It probably works with
+version 4 as well.
+
+It runs on macOS 10.13 with Go 1.9.  It probably works on other versions
+and other platforms, but it's never been tried.
 
 This implementation attempts to follow the 1973 document in
 preference to any later changes or additions.  As the 1973 document
