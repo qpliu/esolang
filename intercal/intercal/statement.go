@@ -268,7 +268,10 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			s.Error = Err197
 			return
 		} else if dupIndex, ok := labelTable[s.Label]; ok {
-			statements[dupIndex].Error = Err182
+			if dupIndex >= 0 {
+				statements[dupIndex].Error = Err182
+			}
+			labelTable[s.Label] = -1
 			s.Error = Err182
 			return
 		}
@@ -1077,6 +1080,10 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int) 
 	case StatementNext, StatementAbstainLabel, StatementReinstateLabel:
 		targetLabel := s.Operands.(uint16)
 		if targetIndex, ok := labelTable[targetLabel]; ok {
+			if targetIndex < 0 {
+				s.Error = Err182
+				targetIndex = len(statements)
+			}
 			if s.Type == StatementNext {
 				s.Operands = targetIndex
 			} else {
@@ -1118,16 +1125,26 @@ func (s *Statement) Resolve(statements []*Statement, labelTable map[uint16]int) 
 		if !ok {
 			s.Error = Err139
 			break
+		} else if index0 < 0 {
+			s.Error = Err182
+			break
 		}
 		index1, ok := labelTable[labels[1]]
 		if !ok {
 			s.Error = Err139
 			break
+		} else if index1 < 0 {
+			s.Error = Err182
+			break
 		}
 		s.Operands = [2]int{index0, index1}
 	case StatementComeFromLabel, StatementNextFromLabel:
 		if sourceIndex, ok := labelTable[s.Operands.(uint16)]; ok {
-			statements[sourceIndex].Goto = append(statements[sourceIndex].Goto, s.Index)
+			if sourceIndex < 0 {
+				s.Error = Err182
+			} else {
+				statements[sourceIndex].Goto = append(statements[sourceIndex].Goto, s.Index)
+			}
 		}
 	case StatementComeFromGerundList, StatementNextFromGerundList:
 		list := s.Operands.(map[StatementType]bool)
