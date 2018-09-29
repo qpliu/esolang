@@ -15,11 +15,15 @@ func usage() {
 func main() {
 	srcFileIndex := 1
 	strictFlag := false
+	qFlag := false
 	for {
 		if srcFileIndex >= len(os.Args) {
 			usage()
 		} else if os.Args[srcFileIndex] == "-strict" {
 			strictFlag = true
+			srcFileIndex++
+		} else if os.Args[srcFileIndex] == "-q" {
+			qFlag = true
 			srcFileIndex++
 		} else {
 			break
@@ -42,7 +46,9 @@ func main() {
 		intercal.Strict(statements)
 	}
 
-	intercal.ListStatements(statements, os.Stderr)
+	if !qFlag {
+		intercal.ListStatements(statements, os.Stderr)
+	}
 
 	input := intercal.NewIntercalReader(os.Stdin)
 	output := intercal.NewIntercalWriter(os.Stdout)
