@@ -34,6 +34,9 @@ while (<>) {
 		$j = $i + 1;
 		print "DO,${a}SUB#${n}#${j}<-#";
 		print ord substr($s,$i);
+		if ($j%4 == 0) {
+		    print "PLEASENOTTHANKS";
+		}
 	    }
 	}
 	print "\n";
@@ -57,6 +60,9 @@ while (<>) {
 	$j = $i + 1;
 	print "DO,${a}SUB#${n}#${j}<-#";
 	print ord substr($s,$i);
+	if ($j%4 == 0) {
+	    print "PLEASENOTTHANKS";
+	}
     }
     print "\n";
 }
@@ -138,7 +144,7 @@ while (<>) {
 	<>;
 	last;
     }
-    @_ = split /\t\n/;
+    @_ = split /[\t\n]/;
     $n = $_[0];
     if ($n < 1000) {
 	$n = $n + 256;
@@ -164,8 +170,8 @@ while (<>) {
 	$x = $x + 32*32*$c if $i == 2;
 	$y = $c if $i == 3;
 	$y = $y + 32*$c if $i == 4;
-	print ord substr($s,$i);
     }
+    s/DO/D0/g;
     print "PLEASENOT ${_}THANKS";
     print "DO,${a}SUB#${index}#1<-#${x}";
     print "DO,${a}SUB#${index}#2<-#${y}";
