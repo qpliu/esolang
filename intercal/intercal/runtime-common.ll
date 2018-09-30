@@ -2521,25 +2521,24 @@ define {i1,i1} @peek_input_binary() {
 define %val @input_binary_array(%arr_vrbl* %arr) {
     %range = call {i32,i32,i1} @arr_writein_range(%arr_vrbl* %arr)
     %rangeok = extractvalue {i32,i32,i1} %range,2
-    br i1 %rangeok,label %check_range,label %ret_err241
+    br i1 %rangeok,label %init_loop,label %ret_err241
 
   ret_err241:
     ret %val insertvalue(%val insertvalue(%val zeroinitializer,i2 2,0),i32 241,1)
 
-  check_range:
+  init_loop:
     %arrval_ptr = getelementptr %arr_vrbl,%arr_vrbl* %arr,i32 0,i32 1
     %arrval = load %arr_val*,%arr_val** %arrval_ptr
     %start_index = extractvalue {i32,i32,i1} %range,0
     %end_index = extractvalue {i32,i32,i1} %range,1
     %last_index = sub i32 %end_index,1
-    %size_is_at_least_2_check = icmp ugt i32 %last_index,%start_index
-    br i1 %size_is_at_least_2_check,label %index_loop,label %ret_err241
+    br label %index_loop
 
   index_loop:
-    %index = phi i32 [%start_index,%check_range],[%next_index,%store_count]
-    %eof = phi i1 [0,%check_range],[%next_eof,%store_count]
-    %bit = phi i1 [0,%check_range],[%next_bit,%store_count]
-    %count = phi i32 [0,%check_range],[%next_start_count,%store_count]
+    %index = phi i32 [%start_index,%init_loop],[%next_index,%store_count]
+    %eof = phi i1 [0,%init_loop],[%next_eof,%store_count]
+    %bit = phi i1 [0,%init_loop],[%next_bit,%store_count]
+    %count = phi i32 [0,%init_loop],[%next_start_count,%store_count]
     %next_index = add i32 %index,1
     %next_bit = xor i1 %bit,1
     %index_check = icmp ult i32 %index,%last_index

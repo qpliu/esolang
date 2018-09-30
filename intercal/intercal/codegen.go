@@ -89,6 +89,8 @@ func (cgs *codeGenState) collectStmtInfo() {
 			for _, index := range stmt.Operands.([]int) {
 				cgs.stmtInfo[index].reinstated = true
 			}
+		case StatementDebug:
+			stmt.Type = StatementUnrecognizable
 		}
 	}
 }

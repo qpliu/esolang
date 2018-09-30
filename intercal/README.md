@@ -158,7 +158,7 @@ using these extensions will result in a fatal runtime error.
 
 ### Binary input
 A 16-bit array argument to `WRITE IN` inputs bits.  If the array does not have
-at least 2 elements, error 240 results.  The first element contains the
+at least 1 element, error 241 results.  The first element contains the
 number of consecutive zero bits initially input.  The second element contains
 the number of consecutive one bits subsequently input.  The third element
 contains the number of consecutive zero bits subsequently input, etc.

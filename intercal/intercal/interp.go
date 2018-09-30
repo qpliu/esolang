@@ -1,6 +1,7 @@
 package intercal
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -391,6 +392,47 @@ func (s *State) runStmt(stmt *Statement, input *IntercalReader, output *Intercal
 		return nil
 
 	case StatementComeFromLabel, StatementComeFromGerundList, StatementNextFromLabel, StatementNextFromGerundList:
+		if err := s.gotoNext(stmt); err != nil {
+			return err.At(s, stmt)
+		}
+		return nil
+
+	case StatementDebug:
+		fmt.Printf("%d:line%d sp:%d<", stmt.Index, stmt.Tokens[0].Location.Line, len(s.NEXTingStack))
+		if len(s.NEXTingStack) > 0 {
+			for i := len(s.NEXTingStack) - 1; i >= 0 && i >= len(s.NEXTingStack)-4; i-- {
+				fmt.Printf(" %d:line%d", s.NEXTingStack[i], s.Statements[s.NEXTingStack[i]].Tokens[0].Location.Line)
+			}
+		}
+		fmt.Printf("> [")
+		i := 0
+		for i < len(stmt.Tokens) {
+			if stmt.Tokens[i].Type == TokenUTurn {
+				i++
+				break
+			}
+			i++
+		}
+		for i < len(stmt.Tokens) {
+			if stmt.Tokens[i].Type == TokenUTurnBack {
+				break
+			}
+			fmt.Printf("%s", stmt.Tokens[i].StringValue)
+			i++
+		}
+		fmt.Printf("]")
+		if stmt.Operands != nil {
+			val, _, err := stmt.Operands.(Expr).Eval(s)
+			if err != nil {
+				fmt.Printf(":E%d:%s", err.Code(), err.Message())
+			} else {
+				fmt.Printf(":%d", val)
+				if val > 32 && val < 128 {
+					fmt.Printf(" %c", val)
+				}
+			}
+		}
+		fmt.Printf("\n")
 		if err := s.gotoNext(stmt); err != nil {
 			return err.At(s, stmt)
 		}

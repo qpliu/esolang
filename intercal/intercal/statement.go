@@ -91,6 +91,9 @@ const (
 	StatementNextFromGerundList
 	// Operands is uint16/map[StatementType]bool
 	// Resolve() populates Statement.Goto
+
+	StatementDebug
+	// Operands is Expr
 )
 
 const (
@@ -697,6 +700,17 @@ func (s *Statement) Parse(statements []*Statement, statementIndex int, labelTabl
 			}
 			index++
 		}
+	case TokenUTurn:
+		s.Type = StatementDebug
+		index++
+		for index < len(s.Tokens) {
+			if s.Tokens[index].Type == TokenUTurnBack {
+				s.Operands, _, _ = s.parseExpr(index+1, false, false, false, TokenString)
+				break
+			}
+			index++
+		}
+
 	default:
 		return
 	}

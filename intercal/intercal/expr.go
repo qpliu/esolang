@@ -140,7 +140,7 @@ func (v Array16) WriteIn(state *State, r *IntercalReader) *Error {
 	if val.Ignored {
 		return nil
 	}
-	if len(val.Value.Values) < 2 {
+	if len(val.Value.Values) == 0 {
 		return Err241
 	}
 	eof := false
