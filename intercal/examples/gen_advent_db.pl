@@ -276,4 +276,55 @@ while (<>) {
     }
 }
 
+$a = "60006";
+$n = "1";
+$s = "";
+
+while (<>) {
+    if ($_ eq "-1\n") {
+	if ($s ne "") {
+	    if ($s =~ /\>\$\</) {
+	    } else {
+		print "THANKS";
+		for ($i = 0; $i < length $s; $i++) {
+		    $j = $i + 1;
+		    print "DO,${a}SUB#${n}#${j}<-#";
+		    print ord substr($s,$i);
+		    if ($j%4 == 0) {
+			print "PLEASENOTTHANKS";
+		    }
+		}
+		print "\n";
+	    }
+	}
+	<>;
+	last;
+    }
+    $str = $_;
+    $str =~ s/DO/D0/g;
+    $str =~ s/PLEASE/PLEA5E/g;
+    $str =~ s/\)$/\)\*/;
+    @_ = split /\t/;
+    if ($_[0] eq $n) {
+	$s = $s . $_[1];
+    } else {
+	if ($s =~ /\>\$\</) {
+	} else {
+	    print "THANKS";
+	    for ($i = 0; $i < length $s; $i++) {
+		$j = $i + 1;
+		print "DO,${a}SUB#${n}#${j}<-#";
+		print ord substr($s,$i);
+		if ($j%4 == 0) {
+		    print "PLEASENOTTHANKS";
+		}
+	    }
+	    print "\n";
+	}
+	$n = $_[0];
+	$s = $_[1];
+    }
+    print "PLEASENOT ${str}";
+}
+
 print "\tDO RESUME #1\n";
