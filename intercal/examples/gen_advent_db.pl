@@ -279,7 +279,6 @@ while (<>) {
 $a = "60006";
 $n = "1";
 $s = "";
-
 while (<>) {
     if ($_ eq "-1\n") {
 	if ($s ne "") {
@@ -325,6 +324,35 @@ while (<>) {
 	$s = $_[1];
     }
     print "PLEASENOT ${str}";
+}
+
+$a = "60007";
+while (<>) {
+    if ($_ eq "-1\n") {
+	<>;
+	last;
+    }
+    print "PLEASENOT ${_}THANKS";
+    @_ = split /[\t\n]/;
+    print "DO,${a}SUB#$_[0]#1<-#$_[1]";
+    if ($_[2] eq "-1") {
+	print "DO,${a}SUB#$_[0]#2<-#65535\n";
+    } elsif ($_[2] ne "") {
+	print "DO,${a}SUB#$_[0]#2<-#$_[2]\n";
+    } else {
+	print "\n";
+    }
+}
+
+$a = "60008";
+while (<>) {
+    if ($_ eq "-1\n") {
+	<>;
+	last;
+    }
+    print "PLEASENOT ${_}THANKS";
+    @_ = split /[\t\n]/;
+    print "DO,${a}SUB#$_[0]<-#$_[1]\n";
 }
 
 print "\tDO RESUME #1\n";
