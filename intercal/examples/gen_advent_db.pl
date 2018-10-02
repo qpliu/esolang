@@ -4,7 +4,7 @@
 
 <>;
 
-print "\tPLEASE INITIALIZE DATABASE DATA\n(61000)\n";
+print "\tPLEASE INITIALIZE DATABASE DATA\n(65000)\n";
 
 $a = "60001";
 $n = "1";
