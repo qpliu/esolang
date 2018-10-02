@@ -38,6 +38,9 @@ while (<>) {
 		if ($j%4 == 0) {
 		    print "PLEASENOTTHANKS";
 		}
+		if ($j%11 == 0) {
+		    print "\n";
+		}
 	    }
 	}
 	print "\n";
@@ -317,6 +320,9 @@ while (<>) {
 		if ($j%4 == 0) {
 		    print "PLEASENOTTHANKS";
 		}
+		if ($j%11 == 0) {
+		    print "\n";
+		}
 	    }
 	    print "\n";
 	}
@@ -353,6 +359,115 @@ while (<>) {
     print "PLEASENOT ${_}THANKS";
     @_ = split /[\t\n]/;
     print "DO,${a}SUB#$_[0]<-#$_[1]\n";
+}
+
+$a = "60009";
+while (<>) {
+    if ($_ eq "-1\n") {
+	<>;
+	last;
+    }
+    print "PLEASENOT ${_}THANKS";
+    @_ = split /[\t\n]/;
+    $b = 1 << $_[0];
+    $c = 1023^$b;
+    for ($i = 1; $i <= $#_; $i++) {
+	print "DO,${a}SUB#$_[$i]<-',${a}SUB#$_[$i]¢#${b}'~'#${c}¢#${b}'";
+    }
+    print "\n";
+}
+
+$a = "60010";
+$n = 1;
+while (<>) {
+    if ($_ eq "-1\n") {
+	<>;
+	last;
+    }
+    $str = $_;
+    $str =~ s/DO/D0/g;
+    $str =~ s/PLEASE/PLEA5E/g;
+    print "PLEASENOT ${str}THANKS";
+    @_ = split /\t/;
+    print "DO,${a}SUB#${n}#1<-#$_[0]";
+    for ($i = 0; $i < length $_[1]; $i++) {
+	$j = $i + 2;
+	print "DO,${a}SUB#${n}#${j}<-#";
+	print ord substr($_[1],$i);
+	if ($j%4 == 0) {
+	    print "PLEASENOTTHANKS";
+	}
+    }
+    $n++;
+    print "\n";
+}
+
+$a = "60011";
+while (<>) {
+    if ($_ eq "-1\n") {
+	<>;
+	last;
+    }
+    print "PLEASENOT ${_}THANKS";
+    @_ = split /\t/;
+    print "DO,${a}SUB#$_[0]#1<-#$_[1]";
+    print "DO,${a}SUB#$_[0]#2<-#$_[2]";
+    print "DO,${a}SUB#$_[0]#3<-#$_[3]";
+    print "DO,${a}SUB#$_[0]#4<-#$_[4]";
+    print "\n";
+}
+
+$a = "60012";
+$n = "1";
+$s = "";
+while (<>) {
+    if ($_ eq "-1\n") {
+	if ($s ne "") {
+	    if ($s =~ /\>\$\</) {
+	    } else {
+		print "THANKS";
+		for ($i = 0; $i < length $s; $i++) {
+		    $j = $i + 1;
+		    print "DO,${a}SUB#${n}#${j}<-#";
+		    print ord substr($s,$i);
+		    if ($j%4 == 0) {
+			print "PLEASENOTTHANKS";
+		    }
+		}
+		print "\n";
+	    }
+	}
+	<>;
+	last;
+    }
+    $str = $_;
+    $str =~ s/DO/D0/g;
+    $str =~ s/PLEASE/PLEA5E/g;
+    $str =~ s/\)$/\)\*/;
+    @_ = split /\t/;
+    if ($_[0] eq $n) {
+	$s = $s . $_[1];
+    } else {
+	if ($s =~ /\>\$\</) {
+	} else {
+	    print "THANKS";
+	    for ($i = 0; $i < length $s; $i++) {
+		$j = $i + 1;
+		print "DO,${a}SUB#${n}#${j}<-#";
+		print ord substr($s,$i);
+		if ($j%4 == 0) {
+		    print "PLEASENOTTHANKS";
+		}
+		if ($j%11 == 0) {
+		    print "\n";
+		}
+	    }
+	    print "\n";
+	}
+	$n = $_[0];
+	$s = $_[1];
+    }
+    print "PLEASENOT ${str}";
 }
 
 print "\tDO RESUME #1\n";
