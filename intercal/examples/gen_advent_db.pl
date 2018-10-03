@@ -12,7 +12,6 @@ $s = "";
 $comment = "PLEASENOT 1\n";
 $count = 0;
 
-<>;
 while (<>) {
     last unless /^([^\t]*)\t(.*)$/;
     $num = $1;
@@ -72,25 +71,26 @@ while (<>) {
     }
     print "\n";
 }
+<>;
 
 $a = "60013";
 $b = "60003";
-$n = "1";
+$n = "0";
 $index = 1;
 while (<>) {
     if ($_ eq "-1\n") {
 	<>;
 	last;
     }
-    @_ = split /\t/;
+    @_ = split /[\t\n]/;
     $str = $_;
     $str =~ s/DO/D0/g;
     $str =~ s/PLEASE/PLEA5E/g;
     print "PLEASENOT ${str}THANKS";
     if ($n ne $_[0]) {
-	print "DO,${a}SUB#${n}<-#${index}";
+	print "DO,${a}SUB#$_[0]<-#${index}";
+	$n = $_[0];
     }
-    $n = $_[0];
     $c = $_[1];
     print "DO,${b}SUB#${index}#1<-#${n}";
     $x = $c%1000;
@@ -137,11 +137,12 @@ while (<>) {
 	print "DO,${b}SUB#${index}#1<-#${n}";
 	print "DO,${b}SUB#${index}#2<-#${x}DO,${b}SUB#${index}#3<-#${y}";
 	for ($i = 8; $i <= $#_; $i++) {
-	    $j = $i - 6;
+	    $j = $i - 4;
 	    print "DO,${b}SUB#${index}#${j}<-#$_[$i]";
 	}
 	$index++;
     }
+    print "\n";
 }
 
 $a = "60004";
@@ -306,7 +307,7 @@ while (<>) {
     $str =~ s/DO/D0/g;
     $str =~ s/PLEASE/PLEA5E/g;
     $str =~ s/\)$/\)\*/;
-    @_ = split /\t/;
+    @_ = split /\t/, $_, 2;
     if ($_[0] eq $n) {
 	$s = $s . $_[1];
     } else {
