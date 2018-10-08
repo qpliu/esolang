@@ -1,0 +1,60 @@
+n
+e
+get lamp
+xyzzy
+on
+e
+get cage
+invent
+pit
+e
+get bird
+invent
+w
+d
+s
+get gold
+n
+n
+free bird
+invent
+drop cage
+invent
+s
+get jewel
+n
+w
+get coins
+e
+n
+get silver
+n
+plover
+ne
+get pyramid
+s
+plover
+plugh
+drop pyramid
+drop coins
+drop jewel
+drop silver
+drop gold
+get bottle
+get food
+get keys
+plugh
+s
+d
+bedquilt
+slab
+s
+d
+pour water
+quit
+y
+u
+w
+u
+reservoir
+get water
