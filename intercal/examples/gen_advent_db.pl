@@ -415,6 +415,10 @@ while (<>) {
     print "DO,${a}SUB#$_[0]#2<-#$_[2]";
     print "DO,${a}SUB#$_[0]#3<-#$_[3]";
     print "DO,${a}SUB#$_[0]#4<-#$_[4]";
+    if ($_[0] >= 4) {
+	print "DO,${a}SUB#$_[0]#5<-#";
+	print 1<<$_[0];
+    }
     print "\n";
 }
 
