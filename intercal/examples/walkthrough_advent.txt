@@ -58,10 +58,41 @@ slab
 s
 d
 pour water
+invent
 u
 w
 u
 reservoir
 get water
+invent
+s
+s
+d
+s
+d
+pour water
+u
+e
+d
+get oil
+u
+w
+d
+climb
+w
+get eggs
+n
+invent
+pour oil
+invent
+n
+get trident
+w
+d
+drop bottle
+sw
+u
+toss eggs
+cross
 quit
 y
