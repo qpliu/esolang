@@ -10,6 +10,10 @@ pit
 e
 get bird
 invent
+get cage
+get bird
+drop cage
+get bird
 w
 d
 s
@@ -18,6 +22,7 @@ n
 n
 free bird
 invent
+get bird
 drop cage
 invent
 s
@@ -35,6 +40,7 @@ get pyramid
 s
 plover
 plugh
+invent
 drop pyramid
 drop coins
 drop jewel
@@ -43,6 +49,7 @@ drop gold
 get bottle
 get food
 get keys
+invent
 plugh
 s
 d
@@ -51,10 +58,10 @@ slab
 s
 d
 pour water
-quit
-y
 u
 w
 u
 reservoir
 get water
+quit
+y
