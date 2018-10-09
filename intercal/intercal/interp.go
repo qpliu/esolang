@@ -94,7 +94,7 @@ func (s *State) Run(input *IntercalReader, output *IntercalWriter) *Error {
 			}
 		}
 		runStmtCount := int(stmt.Chance) / 100
-		if stmt.Chance%100 > 0 && uint16(s.Random.Intn(100)) >= stmt.Chance%100 {
+		if stmt.Chance%100 > 0 && uint16(s.Random.Intn(100)) < stmt.Chance%100 {
 			runStmtCount++
 		}
 		if runStmtCount > 0 {
