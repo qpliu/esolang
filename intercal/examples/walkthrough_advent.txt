@@ -92,7 +92,156 @@ d
 drop bottle
 sw
 u
+over
 toss eggs
-cross
+over
+ne
+barren
+e
+feed bear
+open chain
+get chain
+get bear
+w
+fork
+ne
+e
+get spice
+fork
+w
+w
+over
+free bear
+over
+say Need
+say Extra
+say Over
+say Until
+say TrollBridge
+say And
+say Bear
+say Implemented
+over
+sw
+d
+drop keys
+bedquilt
+e
+n
+open clam
+d
+d
+get pearl
+u
+u
+s
+u
+e
+u
+n
+plugh
+invent
+drop chain
+drop spice
+drop trident
+drop pearl
+plugh
+s
+d
+bedquilt
+w
+oriental
+n
+w
+drop axe
+drop lamp
+e
+get emerald
+w
+get axe
+get lamp
+nw
+s
+get vase
+se
+e
+get pillow
+w
+w
+w
+d
+climb
+w
+fee
+fie
+foe
+foo
+get eggs
+s
+d
+u
+w
+u
+s
+kill dragon
+yes
+get rug
+e
+e
+n
+n
+plugh
+invent
+drop rug
+drop pillow
+drop vase
+drop emerald
+drop eggs
+xyzzy
+get rod
+pit
+d
+w
+wave rod
+w
+get diamond
+w
+s
+e
+s
+s
+s
+n
+e
+n
+e
+nw
+get chest
+get diamond
+se
+n
+d
+debris
+xyzzy
+invent
+drop rod
+drop chest
+drop diamond
+plugh
+s
+d
+bedquilt
+e
+e
+get magazine
+e
+drop magazine
+n
+sw
+get rod
+ne
+drop rod
+sw
+blast
 quit
 y
