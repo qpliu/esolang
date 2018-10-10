@@ -203,7 +203,7 @@ pit
 d
 w
 wave rod
-w
+over
 get diamond
 w
 s
