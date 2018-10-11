@@ -37,8 +37,12 @@ n
 plover
 ne
 get pyramid
+read tablet
 s
+get emerald
+invent
 plover
+invent
 plugh
 invent
 drop pyramid
@@ -113,15 +117,6 @@ w
 over
 free bear
 over
-say Need
-say Extra
-say Over
-say Until
-say TrollBridge
-say And
-say Bear
-say Implemented
-over
 sw
 d
 drop keys
@@ -154,6 +149,7 @@ oriental
 n
 w
 drop axe
+e
 drop lamp
 e
 get emerald
@@ -233,7 +229,13 @@ d
 bedquilt
 e
 e
+read
+read magazine
+off
 get magazine
+read
+read magazine
+on
 e
 drop magazine
 n
