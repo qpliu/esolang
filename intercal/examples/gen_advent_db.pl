@@ -128,20 +128,11 @@ while (<>) {
 	die "travel table: $_";
     }
     print "DO,${b}SUB#${index}#2<-#${x}DO,${b}SUB#${index}#3<-#${y}";
-    for ($i = 2; $i <= $#_ && $i < 8; $i++) {
+    for ($i = 2; $i <= $#_; $i++) {
 	$j = $i + 2;
 	print "DO,${b}SUB#${index}#${j}<-#$_[$i]";
     }
     $index++;
-    if ($#_ >= 8) {
-	print "DO,${b}SUB#${index}#1<-#${n}";
-	print "DO,${b}SUB#${index}#2<-#${x}DO,${b}SUB#${index}#3<-#${y}";
-	for ($i = 8; $i <= $#_; $i++) {
-	    $j = $i - 4;
-	    print "DO,${b}SUB#${index}#${j}<-#$_[$i]";
-	}
-	$index++;
-    }
     print "\n";
 }
 
