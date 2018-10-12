@@ -1,249 +1,256 @@
-n
-e
-get lamp
-xyzzy
-on
-e
-get cage
-invent
-pit
-e
-get bird
-invent
-get cage
-get bird
-drop cage
-get bird
-w
-d
-s
-get gold
-n
-n
-free bird
-invent
-get bird
-drop cage
-invent
-s
-get jewel
-n
-w
-get coins
-e
-n
-get silver
-n
-plover
-ne
-get pyramid
-read tablet
-s
-get emerald
-invent
-plover
-invent
-plugh
-invent
-drop pyramid
-drop coins
-drop jewel
-drop silver
-drop gold
-get bottle
-get food
-get keys
-invent
-plugh
-s
-d
-bedquilt
-slab
-s
-d
-pour water
-invent
-u
-w
-u
-reservoir
-get water
-invent
-s
-s
-d
-s
-d
-pour water
-u
-e
-d
-get oil
-u
-w
-d
-climb
-w
-get eggs
-n
-invent
-pour oil
-invent
-n
-get trident
-w
-d
-drop bottle
-sw
-u
-over
-toss eggs
-over
-ne
-barren
-e
-feed bear
-open chain
-get chain
-get bear
-w
-fork
-ne
-e
-get spice
-fork
-w
-w
-over
-free bear
-over
-sw
-d
-drop keys
-bedquilt
-e
-n
-open clam
-d
-d
-get pearl
-u
-u
-s
-u
-e
-u
-n
-plugh
-invent
-drop chain
-drop spice
-drop trident
-drop pearl
-plugh
-s
-d
-bedquilt
-w
-oriental
-n
-w
-drop axe
-e
-drop lamp
-e
-get emerald
-w
-get axe
-get lamp
-nw
-s
-get vase
-se
-e
-get pillow
-w
-w
-w
-d
-climb
-w
-fee
-fie
-foe
-foo
-get eggs
-s
-d
-u
-w
-u
-s
-kill dragon
-yes
-get rug
-e
-e
-n
-n
-plugh
-invent
-drop rug
-drop pillow
-drop vase
-drop emerald
-drop eggs
-xyzzy
-get rod
-pit
-d
-w
-wave rod
-over
-get diamond
-w
-s
-e
-s
-s
-s
-n
-e
-n
-e
-nw
-get chest
-get diamond
-se
-n
-d
-debris
-xyzzy
-invent
-drop rod
-drop chest
-drop diamond
-plugh
-s
-d
-bedquilt
-e
-e
-read
-read magazine
-off
-get magazine
-read
-read magazine
-on
-e
-drop magazine
-n
-sw
-get rod
-ne
-drop rod
-sw
-blast
-quit
-y
+#!/usr/bin/expect -f
+spawn ../COMPILAC -q ./advent.i /tmp/adb.i
+proc cmd command {
+	expect {
+		"THERE IS A LITTLE AXE HERE.*>" {
+			send "get axe\n"
+			expect "OK"
+			exp_continue
+		}
+		"\n>" { send "${command}\n" }
+	}
+}
+cmd n
+cmd e
+cmd "get lamp"
+cmd xyzzy
+cmd on
+cmd e
+cmd "get cage"
+cmd invent
+cmd pit
+cmd e
+cmd "get bird"
+cmd w
+cmd d
+cmd s
+cmd "get gold"
+cmd n
+cmd n
+cmd "free bird"
+cmd invent
+cmd "get bird"
+cmd "drop cage"
+cmd invent
+cmd s
+cmd "get jewel"
+cmd n
+cmd w
+cmd "get coins"
+cmd e
+cmd n
+cmd "get silver"
+cmd n
+cmd plover
+cmd ne
+cmd "get pyramid"
+cmd "read tablet"
+cmd s
+cmd "get emerald"
+cmd invent
+cmd plover
+cmd invent
+cmd plugh
+cmd invent
+cmd "drop pyramid"
+cmd "drop coins"
+cmd "drop jewel"
+cmd "drop silver"
+cmd "drop gold"
+cmd "get bottle"
+cmd "get food"
+cmd "get keys"
+cmd invent
+cmd plugh
+cmd s
+cmd d
+cmd bedquilt
+cmd slab
+cmd s
+cmd d
+cmd "pour water"
+cmd invent
+cmd u
+cmd w
+cmd u
+cmd reservoir
+cmd "get water"
+cmd invent
+cmd s
+cmd s
+cmd d
+cmd s
+cmd d
+cmd "pour water"
+cmd u
+cmd e
+cmd d
+cmd "get oil"
+cmd u
+cmd w
+cmd d
+cmd climb
+cmd w
+cmd "get eggs"
+cmd n
+cmd invent
+cmd "pour oil"
+cmd invent
+cmd n
+cmd "get trident"
+cmd w
+cmd d
+cmd "drop bottle"
+cmd sw
+cmd u
+cmd cross
+cmd "toss eggs"
+cmd cross
+cmd ne
+cmd barren
+cmd e
+cmd "feed bear"
+cmd "open chain"
+cmd "get chain"
+cmd "get bear"
+cmd w
+cmd fork
+cmd ne
+cmd e
+cmd "get spice"
+cmd fork
+cmd w
+cmd w
+cmd cross
+cmd "free bear"
+cmd cross
+cmd sw
+cmd d
+cmd "drop keys"
+cmd bedquilt
+cmd e
+cmd n
+cmd "open clam"
+cmd d
+cmd d
+cmd "get pearl"
+cmd u
+cmd u
+cmd s
+cmd u
+cmd e
+cmd u
+cmd n
+cmd plugh
+cmd invent
+cmd "drop chain"
+cmd "drop spice"
+cmd "drop trident"
+cmd "drop pearl"
+cmd plugh
+cmd s
+cmd d
+cmd bedquilt
+cmd w
+cmd oriental
+cmd n
+cmd w
+cmd e
+cmd "drop axe"
+cmd "drop lamp"
+cmd e
+cmd "get emerald"
+cmd w
+cmd "get lamp"
+cmd nw
+cmd s
+cmd "get vase"
+cmd se
+cmd e
+cmd "get pillow"
+cmd w
+cmd w
+cmd w
+cmd d
+cmd climb
+cmd w
+cmd fee
+cmd fie
+cmd foe
+cmd foo
+cmd "get eggs"
+cmd s
+cmd d
+cmd u
+cmd w
+cmd u
+cmd s
+cmd "kill dragon"
+cmd yes
+cmd "get rug"
+cmd e
+cmd e
+cmd n
+cmd n
+cmd plugh
+cmd invent
+cmd "drop rug"
+cmd "drop pillow"
+cmd "drop vase"
+cmd "drop emerald"
+cmd "drop eggs"
+cmd xyzzy
+cmd "get rod"
+cmd pit
+cmd d
+cmd w
+cmd "wave rod"
+cmd w
+cmd "get diamond"
+cmd w
+cmd s
+cmd e
+cmd s
+cmd s
+cmd s
+cmd n
+cmd e
+cmd n
+cmd e
+cmd nw
+cmd "get chest"
+cmd "get diamond"
+cmd se
+cmd n
+cmd d
+cmd debris
+cmd xyzzy
+cmd invent
+cmd "drop rod"
+cmd "drop chest"
+cmd "drop diamond"
+cmd plugh
+cmd s
+cmd d
+cmd bedquilt
+cmd e
+cmd e
+cmd read
+cmd "read magazine"
+cmd off
+cmd "get magazine"
+cmd read
+cmd "read magazine"
+cmd on
+cmd e
+cmd "drop magazine"
+cmd n
+cmd sw
+cmd "get rod"
+cmd ne
+cmd "drop rod"
+cmd sw
+cmd blast
+cmd quit
+cmd y
+expect "POINTS.\n"

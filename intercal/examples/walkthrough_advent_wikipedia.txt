@@ -1,6 +1,12 @@
-Y
-ENTER BUILDING
-GET LAMP
-INVENTORY
-QUIT
-Y
+#!/usr/bin/expect -f
+# Reproduce the image of the VT100 screen on the wikipedia page
+system cat ../../../gl/adv350-pdp10/adven.dat ../../../Advent/adv350-pdp10/adven.dat | perl ./gen_advent_db.pl ../../../gl/adv350-pdp10/adven.dat > /tmp/adb.i
+spawn ../COMPILAC -q ./advent.i /tmp/adb.i /tmp/adb2.i
+proc cmd command { expect ">" { send "${command}\n" } }
+cmd Y
+cmd "ENTER BUILDING"
+cmd "GET LAMP"
+cmd INVENTORY
+cmd QUIT
+cmd Y
+expect "POINTS.\n"
