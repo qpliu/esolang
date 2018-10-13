@@ -12,6 +12,14 @@ proc cmd command {
 			expect "OK"
 			exp_continue
 		}
+		"THREATENING LITTLE DWARVES*\n>" {
+			send "throw axe\n"
+			expect "\n>"
+			send "get axe\n"
+			expect "\n>"
+			send "throw axe\n"
+			exp_continue
+		}
 		"THREATENING LITTLE*\n>" {
 			send "throw axe\n"
 			exp_continue
@@ -247,6 +255,7 @@ expect {
 	}
 }
 cmd "get diamond"
+cmd "get vase"
 cmd se
 cmd n
 cmd d
@@ -256,6 +265,7 @@ cmd invent
 cmd "drop rod"
 cmd "drop chest"
 cmd "drop diamond"
+cmd "drop vase"
 cmd plugh
 cmd s
 cmd d
@@ -307,11 +317,8 @@ expect {
 		# exp_continue
 		send "quit\n"
 		cmd y
-		expect {
-			"POINT*.\n" {
-				exit
-			}
-		}
+		expect "POINT*.\n"
+		exit
 	}
 	"\n\\*" {
 		send "open grate\n"
