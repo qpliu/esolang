@@ -255,7 +255,6 @@ expect {
 	}
 }
 cmd "get diamond"
-cmd "get vase"
 cmd se
 cmd n
 cmd d
@@ -265,7 +264,6 @@ cmd invent
 cmd "drop rod"
 cmd "drop chest"
 cmd "drop diamond"
-cmd "drop vase"
 cmd plugh
 cmd s
 cmd d
