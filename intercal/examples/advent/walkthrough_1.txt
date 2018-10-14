@@ -1,0 +1,103 @@
+#!/usr/bin/expect -f
+spawn ../../COMPILAC -q ./advent.i /tmp/adb.i
+set pirate 0
+set closed 0
+set reincarnate 0
+proc cmd command {
+	upvar #0 closed closed
+	switch $closed {
+		1 {
+			return
+		}
+	}
+	expect {
+		"THERE IS A LITTLE AXE HERE.*>" {
+			send "get axe\n"
+			expect "OK"
+			exp_continue
+		}
+		"THREATENING LITTLE DWARVES*\n>" {
+			send "throw axe\n"
+			expect "\n>"
+			send "get axe\n"
+			expect "\n>"
+			send "throw axe\n"
+			exp_continue
+		}
+		"THREATENING LITTLE*\n>" {
+			send "throw axe\n"
+			exp_continue
+		}
+		"REINCARNATE YOU" {
+			upvar #0 reincarnate reincarnate
+			switch $reincarnate {
+				1 {
+					set reincarnate 0
+				}
+				default {
+					send "no\n"
+					expect "POINT*.\n"
+					exit
+				}
+			}
+		}
+		"THE CAVE IS NOW CLOSED" {
+			upvar #0 closed closed
+			set closed 1
+		}
+		"HAR, HAR" {
+			upvar #0 pirate pirate
+			switch $pirate {
+				0 {
+					expect "\n>"
+					send "quit\n"
+					expect "\n>"
+					send "y\n"
+					expect "POINT*.\n"
+					exit
+				}
+				default {
+					exp_continue
+				}
+			}
+		}
+		"\n>" { send "${command}\n" }
+	}
+}
+cmd yes
+cmd cave
+cmd inven
+cmd west
+cmd e
+cmd e
+cmd downs
+cmd west
+cmd s
+cmd s
+cmd s
+cmd d
+cmd "get grate"
+cmd enter
+cmd yes
+cmd no
+cmd house
+cmd enter
+cmd "carry keys"
+cmd inven
+cmd leave
+cmd depre
+cmd "unloc grate"
+cmd d
+cmd s
+cmd west
+cmd "take cage"
+cmd west
+set reincarnate 1
+while {$reincarnate eq 1} {
+	cmd n
+}
+cmd yes
+cmd "get lamp"
+cmd leave
+cmd depre
+cmd d
