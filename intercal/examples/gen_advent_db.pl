@@ -34,7 +34,7 @@ while (<>) {
 		$j = $i + 1;
 		print "DO,${a}SUB#${n}#${j}<-#";
 		print ord substr($s,$i);
-		if ($j%4 == 0) {
+		if ($j%3 == 0) {
 		    print "PLEASENOTTHANKS";
 		}
 		if ($j%11 == 0) {
@@ -65,7 +65,7 @@ while (<>) {
 	$j = $i + 1;
 	print "DO,${a}SUB#${n}#${j}<-#";
 	print ord substr($s,$i);
-	if ($j%4 == 0) {
+	if ($j%3 == 0) {
 	    print "PLEASENOTTHANKS";
 	}
     }
@@ -195,7 +195,7 @@ while (<>) {
 		    $j = $i + 1;
 		    print "DO,${a}SUB#${n}#${p}#${j}<-#";
 		    print ord substr($s,$i);
-		    if ($j%4 == 0) {
+		    if ($j%3 == 0) {
 			print "PLEASENOTTHANKS";
 		    }
 		}
@@ -222,7 +222,7 @@ while (<>) {
 			$j = $i + 1;
 			print "DO,${a}SUB#${n}#${p}#${j}<-#";
 			print ord substr($s,$i);
-			if ($j%4 == 0) {
+			if ($j%3 == 0) {
 			    print "PLEASENOTTHANKS";
 			}
 		    }
@@ -242,7 +242,7 @@ while (<>) {
 		    $j = $i + 1;
 		    print "DO,${a}SUB#${n}#${p}#${j}<-#";
 		    print ord substr($s,$i);
-		    if ($j%4 == 0) {
+		    if ($j%3 == 0) {
 			print "PLEASENOTTHANKS";
 		    }
 		}
@@ -260,7 +260,7 @@ while (<>) {
 		$j = $i + 1;
 		print "DO,${a}SUB#${n}#${p}#${j}<-#";
 		print ord substr($s,$i);
-		if ($j%4 == 0) {
+		if ($j%3 == 0) {
 		    print "PLEASENOTTHANKS";
 		}
 	    }
@@ -284,7 +284,7 @@ while (<>) {
 		    $j = $i + 1;
 		    print "DO,${a}SUB#${n}#${j}<-#";
 		    print ord substr($s,$i);
-		    if ($j%4 == 0) {
+		    if ($j%3 == 0) {
 			print "PLEASENOTTHANKS";
 		    }
 		}
@@ -309,7 +309,7 @@ while (<>) {
 		$j = $i + 1;
 		print "DO,${a}SUB#${n}#${j}<-#";
 		print ord substr($s,$i);
-		if ($j%4 == 0) {
+		if ($j%3 == 0) {
 		    print "PLEASENOTTHANKS";
 		}
 		if ($j%11 == 0) {
@@ -386,7 +386,7 @@ while (<>) {
 	$j = $i + 2;
 	print "DO,${a}SUB#${n}#${j}<-#";
 	print ord substr($_[1],$i);
-	if ($j%4 == 0) {
+	if ($j%3 == 0) {
 	    print "PLEASENOTTHANKS";
 	}
     }
@@ -426,7 +426,7 @@ while (<>) {
 		    $j = $i + 1;
 		    print "DO,${a}SUB#${n}#${j}<-#";
 		    print ord substr($s,$i);
-		    if ($j%4 == 0) {
+		    if ($j%3 == 0) {
 			print "PLEASENOTTHANKS";
 		    }
 		}
@@ -451,7 +451,7 @@ while (<>) {
 		$j = $i + 1;
 		print "DO,${a}SUB#${n}#${j}<-#";
 		print ord substr($s,$i);
-		if ($j%4 == 0) {
+		if ($j%3 == 0) {
 		    print "PLEASENOTTHANKS";
 		}
 		if ($j%11 == 0) {

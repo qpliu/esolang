@@ -1,6 +1,15 @@
 #!/usr/bin/expect -f
 spawn ../COMPILAC -q ./advent.i /tmp/adb.i
+set pirate 0
+set closed 0
 proc cmd command {
+	upvar #0 pirate pirate
+	upvar #0 closed closed
+	switch $closed {
+		1 {
+			return
+		}
+	}
 	expect {
 		"THERE IS A LITTLE AXE HERE.*>" {
 			send "get axe\n"
@@ -37,6 +46,29 @@ proc cmd command {
 			send "no\n"
 			expect "point*.\n"
 			exit
+		}
+		"THE CAVE IS NOW CLOSED" {
+			upvar #0 closed closed
+			set closed 1
+		}
+		"The cave is now closed" {
+			upvar #0 closed closed
+			set closed 1
+		}
+		"HAR, HAR" {
+			switch $pirate {
+				0 {
+					expect "\n>"
+					send "quit\n"
+					expect "\n>"
+					send "y\n"
+					expect "POINT*.\n"
+					exit
+				}
+				default {
+					exp_continue
+				}
+			}
 		}
 		"\n>" { send "${command}\n" }
 		"\n\\*" { send "${command}\n" }
@@ -215,6 +247,7 @@ cmd "drop pillow"
 cmd "drop vase"
 cmd "drop emerald"
 cmd "drop eggs"
+set pirate 1
 cmd xyzzy
 cmd "get rod"
 cmd pit
@@ -303,26 +336,10 @@ cmd debris
 cmd off
 cmd e
 cmd e
-expect {
-	"THE CAVE IS NOW CLOSED*\n>" {
-		send "sw\n"
-	}
-	"The cave is now closed*\n\\*" {
-		send "sw\n"
-	}
-	"\n>" {
-		# send "open grate\n"
-		# exp_continue
-		send "quit\n"
-		cmd y
-		expect "POINT*.\n"
-		exit
-	}
-	"\n\\*" {
-		send "open grate\n"
-		exp_continue
-	}
+while {$closed ne 1} {
+      cmd "open grate"
 }
+set closed 0
 cmd sw
 cmd "get rod"
 cmd ne
