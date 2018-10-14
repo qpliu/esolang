@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-spawn ../COMPILAC -q ./advent.i /tmp/adb.i
+spawn ../../COMPILAC -q ./advent.i /tmp/adb.i
 set pirate 0
 set closed 0
 proc cmd command {

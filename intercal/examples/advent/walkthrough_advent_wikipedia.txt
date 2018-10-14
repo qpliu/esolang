@@ -1,7 +1,7 @@
 #!/usr/bin/expect -f
 # Reproduce the image of the VT100 screen on the wikipedia page
-system cat ../../../gl/adv350-pdp10/adven.dat ../../../adv_crowther/adv350-pdp10/adven.dat 2>/dev/null | perl ./gen_advent_db.pl > /tmp/adb.i
-spawn ../COMPILAC -q ./advent.i /tmp/adb.i
+system cat ../../../../gl/adv350-pdp10/adven.dat ../../../../adv_crowther/adv350-pdp10/adven.dat 2>/dev/null | perl ./gen_advent_db.pl > /tmp/adb.i
+spawn ../../COMPILAC -q ./advent.i /tmp/adb.i
 proc cmd command { expect ">" { send "${command}\n" } }
 cmd Y
 cmd "ENTER BUILDING"
