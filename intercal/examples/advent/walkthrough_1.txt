@@ -93,11 +93,70 @@ cmd west
 cmd "take cage"
 cmd west
 set reincarnate 1
+cmd west
 while {$reincarnate eq 1} {
-	cmd n
+	cmd xyzzy
 }
 cmd yes
 cmd "get lamp"
 cmd leave
 cmd depre
 cmd d
+cmd west
+cmd west
+cmd "light lamp"
+cmd "get rod"
+cmd up
+cmd "get keys"
+cmd u
+cmd "get bird"
+cmd inventory
+cmd "drop rod"
+cmd inven
+cmd "get bird"
+cmd e
+cmd "get cage"
+cmd west
+cmd "get bird"
+cmd "get rod"
+cmd look
+cmd west
+cmd west
+cmd look
+cmd d
+cmd w
+cmd w
+cmd e
+cmd n
+cmd s
+cmd up
+cmd down
+cmd "kill snake"
+cmd "drop cage"
+cmd look
+cmd "get bird"
+cmd look
+cmd inven
+cmd "drop bird"
+cmd look
+cmd score
+cmd no
+cmd s
+cmd score
+cmd no
+cmd "get jewelry"
+cmd n
+cmd w
+cmd score
+cmd no
+cmd "get coins"
+cmd w
+cmd n
+cmd s
+cmd w
+cmd w
+cmd n
+cmd n
+cmd back
+cmd w
+cmd e
