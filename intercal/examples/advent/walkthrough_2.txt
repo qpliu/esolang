@@ -4,6 +4,7 @@ set pirate 0
 set closed 0
 set reincarnate 0
 set dwarf 0
+set last_cmd ""
 proc cmd command {
 	upvar #0 closed closed
 	upvar #0 reincarnate reincarnate
@@ -20,6 +21,7 @@ proc cmd command {
 	expect {
 		"PLEASE ANSWER THE QUESTION." {
 			expect "\n>"
+			puts "FAILED UNEXPECTED STATE"
 			exit
 		}
 		"THERE IS A LITTLE AXE HERE*\n>" {
@@ -29,12 +31,14 @@ proc cmd command {
 
 		}
 		"DWARF WITH A BIG KNIFE BLOCKS" {
+			upvar #0 last_cmd last_cmd
 			expect "\n>"
-			send "quit\n"
+			send "throw axe\n"
 			expect "\n>"
-			send "y\n"
-			expect "POINT*.\n"
-			exit
+			send "get axe\n"
+			expect "\n>"
+			send "${last_cmd}\n"
+			exp_continue
 		}
 		"THREATENING LITTLE DWARVES" {
 			upvar #0 dwarf dwarf
@@ -78,6 +82,7 @@ proc cmd command {
 					expect "\n>"
 					send "no\n"
 					expect "POINT*.\n"
+					puts "FAILED UNEXPECTED DEATH"
 					exit
 				}
 			}
@@ -99,11 +104,16 @@ proc cmd command {
 					expect "\n>"
 					send "y\n"
 					expect "POINT*.\n"
+					puts "FAILED UNEXPECTED PIRATE"
 					exit
 				}
 			}
 		}
-		"\n>" { send "${command}\n" }
+		"\n>" {
+			upvar #0 last_cmd last_cmd
+			set last_cmd $command
+			send "${command}\n"
+		}
 	}
 }
 cmd yes
@@ -141,6 +151,7 @@ while {$reincarnate eq 1} {
 	cmd xyzzy
 	set count [expr $count+1]
 	if {$count>20} {
+		puts "FAILED FALLING INTO PIT"
 		exit
 	}
 }
@@ -221,7 +232,8 @@ set count 0
 while {$reincarnate eq 1} {
 	cmd xyzzy
 	set count [expr $count+1]
-	if {$count>100} {
+	if {$count>200} {
+		puts "FAILED WAITING TO BE KILLED BY DWARF"
 		exit
 	}
 }
@@ -313,7 +325,8 @@ set count 0
 while {$pirate eq 1} {
 	cmd xyzzy
 	set count [expr $count+1]
-	if {$count>100} {
+	if {$count>200} {
+		puts "FAILED WAITING FOR PIRATE"
 		exit
 	}
 }
@@ -348,3 +361,327 @@ cmd yes
 cmd "get dragon"
 cmd "get rug"
 cmd n
+cmd n
+cmd n
+cmd s
+cmd s
+cmd s
+cmd e
+cmd e
+cmd n
+cmd n
+cmd w
+cmd e
+cmd plugh
+cmd inventory
+cmd score
+cmd n
+cmd "drop persian"
+cmd score
+cmd n
+cmd plugh
+cmd s
+cmd d
+cmd e
+cmd d
+cmd u
+cmd w
+cmd w
+cmd d
+cmd n
+cmd u
+cmd d
+cmd d
+cmd d
+cmd u
+cmd u
+cmd "get clam"
+cmd s
+cmd "drop clam"
+cmd "unlock clam"
+cmd s
+cmd e
+cmd e
+cmd w
+expect {
+	"DO YOU NEED HELP GETTING OUT OF HERE" {
+		expect "\n>"
+		send "yes\n"
+		expect "\n>"
+		send "yes\n"
+	}
+	"\n>" {
+		send "w\n"
+		exp_continue
+	}
+}
+cmd n
+set count 0
+expect {
+	"YOU HAVE CRAWLED AROUND IN SOME LITTLE HOLES" {
+		expect "\n>"
+		send "n\n"
+		set count [expr $count+1]
+		if {$count>100} {
+			puts "FAILED LEAVING WITT'S END"
+			exit
+		}
+		exp_continue
+	}
+	"\n>" {
+		send "w\n"
+	}
+}
+cmd w
+cmd w
+cmd d
+cmd u
+cmd w
+cmd down
+cmd u
+cmd w
+cmd n
+cmd n
+cmd n
+cmd n
+cmd s
+cmd sw
+cmd u
+cmd sw
+cmd d
+cmd se
+cmd "get vase"
+set pirate 1
+cmd n
+cmd w
+cmd e
+set count 0
+while {$pirate eq 1} {
+	cmd xyzzy
+	set count [expr $count+1]
+	if {$count>200} {
+		puts "FAILED WAITING FOR PIRATE"
+		exit
+	}
+}
+set pirate 1
+cmd inventory
+cmd "drop keys"
+cmd "drop lantern"
+cmd "drop cage"
+cmd "drop axe"
+cmd e
+cmd "get emerald"
+cmd ne
+cmd look
+cmd sw
+cmd look
+cmd s
+cmd plover
+cmd "drop emerald"
+cmd plover
+cmd "get emerald"
+cmd w
+cmd "get keys"
+cmd "get lamp"
+cmd nw
+cmd s
+cmd se
+cmd e
+cmd "get pillow"
+cmd w
+cmd ne
+cmd u
+set count 0
+expect {
+	"YOU HAVE CRAWLED AROUND IN SOME LITTLE HOLES" {
+		expect "\n>"
+		send "u\n"
+		set count [expr $count+1]
+		if {$count>100} {
+			puts "FAILED LEAVING BEDQUILT"
+			exit
+		}
+		exp_continue
+	}
+	"DUSTY ROCK" {
+		expect "\n>"
+		send "bedquilt\n"
+		expect "\n>"
+		send "u\n"
+		exp_continue
+	}
+	"\n>" {
+		send "n\n"
+	}
+}
+cmd n
+cmd w
+cmd s
+cmd s
+cmd d
+cmd w
+cmd e
+cmd s
+cmd s
+cmd s
+cmd n
+cmd e
+cmd e
+cmd nw
+cmd "drop axe"
+cmd "drop keys"
+cmd "get chest"
+cmd "get gold"
+cmd "get silver"
+cmd "get vase"
+cmd "get emerald"
+cmd look
+cmd se
+cmd n
+cmd d
+cmd e
+cmd e
+cmd xyzzy
+cmd "drop chest"
+cmd "drop gold"
+cmd "drop silver"
+cmd "drop vase"
+cmd "drop emerald"
+cmd "drop pillow"
+cmd look
+cmd score
+cmd no
+cmd inventory
+cmd "get bottle"
+cmd plugh
+cmd s
+cmd d
+cmd w
+cmd d
+cmd w
+cmd w
+cmd w
+cmd w
+cmd d
+cmd "say water"
+cmd "pour water"
+cmd climb
+cmd w
+cmd u
+cmd n
+cmd n
+cmd inventory
+cmd "get water"
+cmd inventory
+cmd s
+cmd s
+cmd d
+cmd s
+cmd d
+cmd "pour water"
+cmd climb
+cmd w
+cmd "get nest"
+cmd e
+cmd w
+cmd n
+cmd s
+cmd n
+cmd n
+cmd s
+cmd s
+cmd d
+cmd u
+cmd u
+cmd e
+cmd d
+cmd inventory
+cmd "get oil"
+cmd inventory
+cmd climb
+cmd u
+cmd w
+cmd climb
+cmd d
+cmd climb
+cmd fee
+cmd fie
+cmd foe
+cmd fum
+cmd foo
+cmd fee
+cmd fie
+cmd foe
+cmd foo
+cmd w
+cmd get
+cmd n
+cmd pour
+cmd look
+cmd unlock
+cmd look
+cmd n
+cmd drink
+cmd "get trident"
+cmd w
+cmd d
+cmd sw
+cmd u
+cmd cross
+cmd "hit troll"
+cmd "throw eggs"
+cmd look
+cmd cross
+cmd cross
+cmd ne
+cmd e
+cmd se
+cmd s
+cmd enter
+cmd "get chain"
+cmd unlock
+cmd "kill bear"
+cmd yes
+cmd "get bear"
+cmd leave
+cmd w
+cmd n
+cmd ne
+cmd e
+cmd "get spices"
+cmd w
+cmd n
+cmd s
+cmd s
+cmd w
+cmd w
+cmd "throw spices"
+cmd cross
+cmd sw
+cmd d
+cmd se
+cmd se
+cmd ne
+cmd e
+cmd n
+cmd "unlock clam"
+cmd d
+cmd d
+cmd "get pearl"
+cmd u
+cmd u
+cmd s
+cmd u
+cmd e
+cmd u
+cmd n
+cmd plugh
+cmd "drop trident"
+cmd "drop pearl"
+cmd "get food"
+cmd score
+cmd no
+cmd xyzzy
+cmd w
+puts "SUCCESS"
