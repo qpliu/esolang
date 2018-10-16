@@ -18,6 +18,10 @@ proc cmd command {
 		}
 	}
 	expect {
+		"PLEASE ANSWER THE QUESTION." {
+			expect "\n>"
+			exit
+		}
 		"THERE IS A LITTLE AXE HERE*\n>" {
 			send "get axe\n"
 			expect "OK"
@@ -85,16 +89,17 @@ proc cmd command {
 		"HAR, HAR" {
 			upvar #0 pirate pirate
 			switch $pirate {
-				0 {
+				1 {
+					set pirate 2
+					exp_continue
+				}
+				default {
 					expect "\n>"
 					send "quit\n"
 					expect "\n>"
 					send "y\n"
 					expect "POINT*.\n"
 					exit
-				}
-				default {
-					exp_continue
 				}
 			}
 		}
@@ -216,25 +221,130 @@ set count 0
 while {$reincarnate eq 1} {
 	cmd xyzzy
 	set count [expr $count+1]
-	if {$count>20} {
+	if {$count>100} {
 		exit
 	}
 }
+set dwarf 0
 set reincarnate 0
 cmd yes
 cmd leave
 cmd "get lamp"
 cmd enter
 cmd xyzzy
-set reincarnate 1
+cmd "on lamp"
+cmd w
+cmd w
+cmd w
+cmd d
+cmd d
+cmd w
+cmd w
+cmd w
+cmd "get keys"
+cmd "get rod"
+cmd "get diamonds"
+cmd "get jewel"
+cmd "get coins"
+cmd e
+cmd e
+cmd jump
+cmd "swing rod"
+cmd look
+cmd jump
+cmd over
+cmd e
+cmd s
+cmd "get gold"
+cmd "drop rod"
+cmd "get gold"
+cmd n
+cmd u
+cmd "drop gold"
+cmd u
+cmd e
+cmd e
+cmd e
+cmd xyzzy
+cmd score
+cmd no
+cmd inventory
+cmd "drop diamonds"
+cmd "drop jewelry"
+cmd "drop coins"
+cmd score
+cmd no
+cmd xyzzy
+cmd w
+cmd w
+cmd w
+cmd d
+cmd "get gold"
+cmd n
+cmd n
+cmd "get silver"
+set pirate 1
+cmd n
+cmd w
+cmd wave
+cmd e
+cmd e
+cmd e
+cmd d
+cmd s
+cmd s
+cmd nw
+cmd ne
+cmd se
+cmd sw
+expect {
+	"THERE IS NO WAY TO GO THAT DIRECTION*\n>" {
+		send "sw\n"
+		exp_continue
+	}
+	"\n>" {
+		send "w\n"
+	}
+}
+cmd w
+cmd e
+cmd e
 set count 0
-while {$reincarnate eq 1} {
-	cmd w
+while {$pirate eq 1} {
+	cmd xyzzy
 	set count [expr $count+1]
-	if {$count>20} {
+	if {$count>100} {
 		exit
 	}
 }
-set reincarnate 0
-cmd no
-expect "POINT*.\n"
+set pirate 0
+cmd inventory
+cmd "get bird"
+cmd u
+cmd w
+cmd w
+cmd "get cage"
+cmd e
+cmd e
+cmd d
+cmd "get bird"
+cmd sw
+expect {
+	"THERE IS NO WAY TO GO THAT DIRECTION*\n>" {
+		send "sw\n"
+		exp_continue
+	}
+	"\n>" {
+		send "w\n"
+	}
+}
+cmd "drop bird"
+cmd n
+cmd "kill dragon"
+cmd "throw axe"
+cmd yes
+cmd "kill dragon"
+cmd yes
+cmd "get dragon"
+cmd "get rug"
+cmd n
