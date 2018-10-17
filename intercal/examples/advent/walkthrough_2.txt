@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-spawn ../../COMPILAC -q ./advent.i /tmp/adb.i
+spawn ../../COMPILAC -q -seed 14 ./advent.i /tmp/adb.i
 set pirate 0
 set closed 0
 set reincarnate 0
@@ -535,8 +535,10 @@ cmd "get chest"
 cmd "get gold"
 cmd "get silver"
 cmd "get vase"
-cmd "get emerald"
+cmd "drop emerald"
 cmd look
+cmd "drop axe"
+cmd "get emerald"
 cmd se
 cmd n
 cmd d
@@ -684,4 +686,179 @@ cmd score
 cmd no
 cmd xyzzy
 cmd w
+cmd w
+cmd w
+cmd d
+cmd w
+cmd w
+cmd w
+cmd s
+cmd e
+cmd s
+cmd s
+cmd s
+cmd n
+cmd e
+cmd n
+cmd e
+cmd nw
+cmd "get keys"
+cmd se
+cmd w
+cmd s
+cmd d
+cmd w
+cmd d
+cmd d
+cmd n
+cmd d
+cmd w
+cmd d
+cmd w
+cmd w
+cmd w
+cmd w
+cmd d
+cmd climb
+cmd w
+cmd fee
+cmd fie
+cmd foe
+cmd foo
+cmd "get eggs"
+cmd n
+cmd n
+cmd w
+cmd d
+cmd sw
+cmd u
+cmd cross
+cmd "throw axe"
+cmd "get axe"
+cmd "throw eggs"
+cmd cross
+cmd ne
+cmd e
+cmd se
+cmd s
+cmd enter
+cmd "throw food"
+cmd "get bear"
+cmd "get chain"
+cmd "unlock chain"
+cmd "get chain"
+cmd "get bear"
+cmd look
+cmd leave
+cmd w
+cmd n
+cmd w
+cmd w
+cmd cross
+cmd "drop bear"
+cmd cross
+cmd sw
+cmd d
+cmd se
+cmd se
+cmd w
+cmd w
+cmd d
+cmd climb
+cmd w
+cmd fee
+cmd fie
+cmd foe
+cmd foo
+cmd "get eggs"
+cmd s
+cmd d
+cmd u
+cmd w
+cmd u
+cmd s
+cmd e
+cmd e
+cmd n
+cmd n
+cmd "say plugh"
+cmd inventory
+cmd "drop eggs"
+cmd "drop chain"
+cmd plugh
+cmd plover
+cmd ne
+cmd "get pyramid"
+cmd s
+cmd plover
+cmd plugh
+cmd "drop pyramid"
+cmd score
+cmd no
+cmd plugh
+cmd e
+cmd u
+cmd w
+cmd w
+cmd n
+cmd w
+cmd w
+cmd n
+cmd e
+cmd e
+cmd sw
+cmd sw
+cmd d
+cmd u
+cmd s
+cmd n
+cmd n
+cmd w
+cmd e
+cmd n
+cmd s
+cmd n
+cmd ne
+cmd e
+cmd e
+cmd "read magazine"
+cmd u
+cmd u
+cmd e
+cmd u
+cmd n
+cmd plugh
+cmd e
+cmd u
+cmd u
+cmd e
+cmd e
+cmd e
+cmd xyzzy
+cmd e
+cmd e
+cmd unlock
+while {$closed ne 1} {
+	cmd w
+}
+set closed 0
+cmd "get bottle"
+cmd "drop bottle"
+cmd look
+cmd sw
+cmd "get bird"
+cmd inventory
+cmd ne
+cmd "drop bird"
+cmd look
+cmd "get oyster"
+cmd read
+cmd no
+cmd shazam
+cmd sw
+cmd "get rod"
+cmd "drop rod"
+cmd ne
+cmd blast
+expect "POINT*.\n"
 puts "SUCCESS"

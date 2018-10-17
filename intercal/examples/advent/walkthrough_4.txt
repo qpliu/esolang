@@ -1,0 +1,204 @@
+#!/usr/bin/expect -f
+spawn ../../COMPILAC -q -seed 7 ./advent.i /tmp/adb.i
+set axe 0
+set closed 0
+set die 0
+set pirate 0
+set last_cmd ""
+proc cmd command {
+	upvar #0 closed closed
+	switch $closed {
+		1 {
+			return
+		}
+	}
+	expect {
+		"PLEASE ANSWER THE QUESTION." {
+			expect "\n>"
+			puts "FAILED UNEXPECTED STATE"
+			exit
+		}
+		"THERE IS A LITTLE AXE HERE" {
+			upvar #0 axe axe
+			switch $axe {
+				1 {
+				}
+				default {
+					expect "\n>"
+					send "get axe\n"
+					expect "OK"
+				}
+			}
+			exp_continue
+		}
+		"DWARF WITH A BIG KNIFE BLOCKS" {
+			upvar #0 axe axe
+			upvar #0 last_cmd last_cmd
+			switch $axe {
+				1 {
+					expect "\n>"
+					puts "FAILED BLOCKED BY DWARF"
+					exit
+				}
+				default {
+					expect "\n>"
+					send "throw axe\n"
+					expect "\n>"
+					send "get axe\n"
+					expect "\n>"
+					send "${last_cmd}\n"
+				}
+			}
+			exp_continue
+		}
+		"THREATENING LITTLE DWARVES" {
+			upvar #0 axe axe
+			switch $axe {
+				1 {
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "throw axe\n"
+					expect "\n>"
+					send "get axe\n"
+					expect "\n>"
+					send "throw axe\n"
+					exp_continue
+				}
+			}
+		}
+		"THREATENING LITTLE DWARF" {
+			upvar #0 axe axe
+			switch $axe {
+				1 {
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "throw axe\n"
+					expect "\n>"
+					send "get axe\n"
+					exp_continue
+				}
+			}
+		}
+		"REINCARNAT" {
+			upvar #0 die die
+			switch $die {
+				1 {
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "no\n"
+					expect "POINT*.\n"
+					puts "FAILED UNEXPECTED DEATH"
+					exit
+				}
+			}
+		}
+		"THE CAVE IS NOW CLOSED" {
+			upvar #0 closed closed
+			set closed 1
+		}
+		"HAR, HAR" {
+			upvar #0 pirate pirate
+			switch $pirate {
+				1 {
+					set pirate 2
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "quit\n"
+					expect "\n>"
+					send "y\n"
+					expect "POINT*.\n"
+					puts "FAILED UNEXPECTED PIRATE"
+					exit
+				}
+			}
+		}
+		"\n>" {
+			upvar #0 last_cmd last_cmd
+			set last_cmd $command
+			send "${command}\n"
+		}
+	}
+}
+cmd no
+cmd brief
+cmd enter
+cmd on
+cmd "get lamp"
+cmd "get bottle"
+cmd xyzzy
+cmd e
+cmd "get cage"
+cmd w
+cmd w
+cmd w
+cmd "get bird"
+cmd w
+cmd d
+cmd s
+cmd n
+cmd d
+cmd "free bird"
+cmd "drop cage"
+cmd s
+cmd n
+cmd w
+cmd get
+cmd e
+cmd sw
+cmd w
+cmd kill
+cmd yes
+cmd n
+cmd d
+cmd s
+cmd d
+cmd pour
+cmd u
+cmd w
+cmd u
+cmd n
+cmd n
+cmd "get water"
+cmd s
+cmd s
+cmd d
+cmd s
+cmd d
+cmd pour
+cmd u
+cmd e
+cmd d
+cmd "get oil"
+cmd u
+cmd w
+cmd d
+cmd climb
+cmd w
+cmd n
+cmd pour
+cmd n
+cmd get
+
+
+cmd look
+
+exit
+
+cmd off
+set count 0
+while {$pirate eq 0} {
+	cmd look
+	set count [expr $count+1]
+	if {$count>0} {
+		puts "FAILED WAITING FOR PIRATE"
+		exit
+	}
+}
