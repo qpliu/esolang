@@ -1,17 +1,19 @@
 #!/usr/bin/expect -f
-spawn ../../COMPILAC -q -seed 11 ./advent.i /tmp/adb.i
-# Test die by carrying gold nugget into small pit.
-set axe 0
+spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
+# Check getting killed by multiple knives.
+set axe no
 set closed 0
 set die 0
 set pirate 0
 set last_cmd ""
 proc cmd command {
 	upvar #0 closed closed
-	switch $closed {
-		1 {
-			return
-		}
+	if {$closed eq 1} {
+		return
+	}
+	upvar #0 die die
+	if {$die eq 2} {
+		return
 	}
 	expect {
 		"PLEASE ANSWER THE QUESTION." {
@@ -22,6 +24,8 @@ proc cmd command {
 		"THERE IS A LITTLE AXE HERE" {
 			upvar #0 axe axe
 			switch $axe {
+				no {
+				}
 				1 {
 				}
 				default {
@@ -36,6 +40,9 @@ proc cmd command {
 			upvar #0 axe axe
 			upvar #0 last_cmd last_cmd
 			switch $axe {
+				no {
+					exp_continue
+				}
 				1 {
 					expect "\n>"
 					puts "FAILED BLOCKED BY DWARF"
@@ -55,6 +62,9 @@ proc cmd command {
 		"THREATENING LITTLE DWARVES" {
 			upvar #0 axe axe
 			switch $axe {
+				no {
+					exp_continue
+				}
 				1 {
 					exp_continue
 				}
@@ -72,6 +82,9 @@ proc cmd command {
 		"THREATENING LITTLE DWARF" {
 			upvar #0 axe axe
 			switch $axe {
+				no {
+					exp_continue
+				}
 				1 {
 					exp_continue
 				}
@@ -88,6 +101,7 @@ proc cmd command {
 			upvar #0 die die
 			switch $die {
 				1 {
+					set die 2
 					exp_continue
 				}
 				default {
@@ -141,22 +155,57 @@ cmd w
 cmd w
 cmd "get bird"
 cmd w
-cmd w
 cmd d
 cmd s
-cmd "get gold"
 cmd n
+cmd d
+cmd "free bird"
+cmd "drop cage"
+cmd s
 cmd n
-cmd "drop bird"
-cmd n
-cmd n
-cmd plugh
-cmd xyzzy
 cmd w
+cmd e
+cmd n
+cmd d
+cmd e
+cmd d
+cmd u
 cmd w
 cmd w
 cmd d
-set die 1
+cmd e
+cmd w
+cmd w
+cmd w
+cmd w
+cmd w
 cmd n
-expect "POINTS.\n"
+cmd w
+cmd w
+cmd w
+cmd w
+cmd u
+cmd s
+cmd kill
+cmd yes
+cmd e
+cmd e
+cmd w
+cmd w
+cmd w
+cmd w
+cmd e
+cmd s
+cmd s
+cmd ne
+set die 1
+cmd look
+cmd look
+cmd look
+cmd look
+cmd look
+cmd look
+cmd look
+cmd no
+expect "POINT*.\n"
 puts SUCCESS

@@ -1,5 +1,7 @@
 #!/usr/bin/expect -f
-spawn ../../COMPILAC -q -seed 7 ./advent.i /tmp/adb.i
+spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
+# Check that the pirate does not steal the emerald or pyramid from
+# plover room or dark room.
 set axe 0
 set closed 0
 set die 0
@@ -133,6 +135,8 @@ cmd enter
 cmd on
 cmd "get lamp"
 cmd "get bottle"
+cmd "get food"
+cmd "get keys"
 cmd xyzzy
 cmd e
 cmd "get cage"
@@ -153,6 +157,8 @@ cmd w
 cmd get
 cmd e
 cmd sw
+cmd sw
+cmd sw
 cmd w
 cmd kill
 cmd yes
@@ -160,7 +166,7 @@ cmd n
 cmd d
 cmd s
 cmd d
-cmd pour
+cmd "water plant"
 cmd u
 cmd w
 cmd u
@@ -172,7 +178,7 @@ cmd s
 cmd d
 cmd s
 cmd d
-cmd pour
+cmd "water plant"
 cmd u
 cmd e
 cmd d
@@ -183,22 +189,47 @@ cmd d
 cmd climb
 cmd w
 cmd n
-cmd pour
+cmd "oil door"
 cmd n
 cmd get
-
-
-cmd look
-
-exit
-
+cmd w
+cmd d
+cmd se
+cmd se
+cmd ne
+cmd e
+cmd n
+cmd open
+cmd d
+cmd d
+cmd u
+cmd u
+cmd s
+cmd u
+cmd e
+cmd u
+cmd n
+cmd n
+cmd plover
+cmd "drop trident"
+cmd ne
+cmd get
+cmd s
 cmd off
+cmd invent
 set count 0
-while {$pirate eq 0} {
+set pirate 1
+while {$pirate eq 1} {
 	cmd look
 	set count [expr $count+1]
-	if {$count>0} {
+	if {$count>300} {
 		puts "FAILED WAITING FOR PIRATE"
 		exit
 	}
 }
+cmd look
+cmd invent
+cmd quit
+cmd yes
+expect "POINT*.\n"
+puts SUCCESS

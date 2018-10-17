@@ -308,14 +308,6 @@ cmd e
 cmd "drop magazine"
 cmd n
 expect {
-	"MAIN PASSAGE*\n>" {
-		send "n\n"
-		exp_continue
-	}
-	"main passage*\n\\*" {
-		send "n\n"
-		exp_continue
-	}
 	"DO YOU NEED HELP GETTING OUT*\n>" {
 		send "n\n"
 		expect "\n>"
@@ -325,6 +317,14 @@ expect {
 	"Do you need help getting out*\n\*\*" {
 		send "n\n"
 		expect "\n\*"
+		send "n\n"
+		exp_continue
+	}
+	"MAIN PASSAGE*\n>" {
+		send "n\n"
+		exp_continue
+	}
+	"main passage*\n\\*" {
 		send "n\n"
 		exp_continue
 	}

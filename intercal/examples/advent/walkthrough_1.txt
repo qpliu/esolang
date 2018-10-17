@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-spawn ../../COMPILAC -q ./advent.i /tmp/adb.i
+spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
 set pirate 0
 set closed 0
 set reincarnate 0
@@ -238,3 +238,4 @@ while {$reincarnate eq 1} {
 set reincarnate 0
 cmd no
 expect "POINT*.\n"
+puts SUCCESS
