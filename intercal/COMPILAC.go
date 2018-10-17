@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"./intercal"
 )
@@ -16,6 +17,7 @@ func main() {
 	srcFileIndex := 1
 	strictFlag := false
 	qFlag := false
+	randomSeed := int64(0)
 	for {
 		if srcFileIndex >= len(os.Args) {
 			usage()
@@ -24,6 +26,17 @@ func main() {
 			srcFileIndex++
 		} else if os.Args[srcFileIndex] == "-q" {
 			qFlag = true
+			srcFileIndex++
+		} else if os.Args[srcFileIndex] == "-seed" {
+			srcFileIndex++
+			if srcFileIndex >= len(os.Args) {
+				usage()
+			}
+			if seed, err := strconv.ParseInt(os.Args[srcFileIndex], 10, 64); err != nil {
+				usage()
+			} else {
+				randomSeed = seed
+			}
 			srcFileIndex++
 		} else {
 			break
@@ -53,6 +66,9 @@ func main() {
 	input := intercal.NewIntercalReader(os.Stdin)
 	output := intercal.NewIntercalWriter(os.Stdout)
 	state := intercal.NewState(statements)
+	if randomSeed != 0 {
+		state.Random.Seed(randomSeed)
+	}
 
 	if err := state.Run(input, output); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
