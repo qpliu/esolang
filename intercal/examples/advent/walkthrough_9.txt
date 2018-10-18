@@ -1,0 +1,216 @@
+#!/usr/bin/expect -f
+spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
+# Test lamp.
+set axe 0
+set closed 0
+set die 0
+set pirate 0
+set last_cmd ""
+proc cmd command {
+	upvar #0 closed closed
+	if {$closed eq 1} {
+		return
+	}
+	upvar #0 die die
+	if {$die eq 2} {
+		return
+	}
+	expect {
+		"PLEASE ANSWER THE QUESTION." {
+			expect "\n>"
+			puts "FAILED UNEXPECTED STATE"
+			exit
+		}
+		"THERE IS A LITTLE AXE HERE" {
+			upvar #0 axe axe
+			switch $axe {
+				no {
+				}
+				1 {
+				}
+				default {
+					expect "\n>"
+					send "get axe\n"
+					expect "OK"
+				}
+			}
+			exp_continue
+		}
+		"DWARF WITH A BIG KNIFE BLOCKS" {
+			upvar #0 axe axe
+			upvar #0 last_cmd last_cmd
+			switch $axe {
+				no {
+					exp_continue
+				}
+				1 {
+					expect "\n>"
+					puts "FAILED BLOCKED BY DWARF"
+					exit
+				}
+				default {
+					expect "\n>"
+					send "throw axe\n"
+					expect "\n>"
+					send "get axe\n"
+					expect "\n>"
+					send "${last_cmd}\n"
+				}
+			}
+			exp_continue
+		}
+		"THREATENING LITTLE DWARVES" {
+			upvar #0 axe axe
+			switch $axe {
+				no {
+					exp_continue
+				}
+				1 {
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "throw axe\n"
+					expect "\n>"
+					send "get axe\n"
+					expect "\n>"
+					send "throw axe\n"
+					exp_continue
+				}
+			}
+		}
+		"THREATENING LITTLE DWARF" {
+			upvar #0 axe axe
+			switch $axe {
+				no {
+					exp_continue
+				}
+				1 {
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "throw axe\n"
+					expect "\n>"
+					send "get axe\n"
+					exp_continue
+				}
+			}
+		}
+		"REINCARNAT" {
+			upvar #0 die die
+			switch $die {
+				1 {
+					set die 2
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "no\n"
+					expect "POINT*.\n"
+					puts "FAILED UNEXPECTED DEATH"
+					exit
+				}
+			}
+		}
+		"THE CAVE IS NOW CLOSED" {
+			upvar #0 closed closed
+			set closed 1
+		}
+		"HAR, HAR" {
+			upvar #0 pirate pirate
+			switch $pirate {
+				1 {
+					set pirate 2
+					exp_continue
+				}
+				default {
+					expect "\n>"
+					send "quit\n"
+					expect "\n>"
+					send "y\n"
+					expect "POINT*.\n"
+					puts "FAILED UNEXPECTED PIRATE"
+					exit
+				}
+			}
+		}
+		"\n>" {
+			upvar #0 last_cmd last_cmd
+			set last_cmd $command
+			send "${command}\n"
+		}
+	}
+}
+cmd no
+cmd in
+cmd on
+cmd "get lamp"
+cmd xyzzy
+cmd e
+cmd "get cage"
+cmd w
+cmd w
+cmd w
+cmd "get bird"
+cmd w
+cmd d
+cmd d
+cmd "free bird"
+cmd w
+cmd get
+cmd w
+cmd s
+cmd s
+cmd ne
+cmd s
+cmd s
+cmd "drop coins"
+set count 0
+cmd look
+expect {
+	"YOUR LAMP IS GETTING DIM" {
+	}
+	"\n>" {
+		send "foo\n"
+		set count [expr $count+1]
+		if {$count>330} {
+			puts FAIL
+			exit
+		}
+		exp_continue
+	}
+}
+cmd look
+expect {
+	"YOUR LAMP IS GETTING DIM" {
+	}
+	"\n>" {
+		send "foo\n"
+		set count [expr $count+1]
+		if {$count>2800} {
+			puts FAIL
+			exit
+		}
+		exp_continue
+	}
+}
+cmd look
+expect {
+	"YOUR LAMP HAS RUN OUT OF POWER" {
+	}
+	"\n>" {
+		send "foo\n"
+		set count [expr $count+1]
+		if {$count>2830} {
+			puts FAIL
+			exit
+		}
+		exp_continue
+	}
+}
+cmd look
+cmd quit
+cmd y
+expect "POINT*\n"
+puts SUCCESS
