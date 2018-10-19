@@ -154,57 +154,118 @@ proc cmd command {
 	}
 }
 cmd no
-cmd s
-cmd s
-cmd "enter water"
-set resp "YOUR FEET ARE NOW WET"
-cmd "enter stream"
-set resp "YOUR FEET ARE NOW WET"
-cmd house
+cmd on
+set resp "YOU HAVE NO SOURCE OF LIGHT"
+cmd off
+set resp "YOU HAVE NO SOURCE OF LIGHT"
 cmd enter
-set resp "THERE IS A BOTTLE OF WATER"
-cmd "get keys"
 cmd "get lamp"
 cmd "get bottle"
-cmd leave
-cmd grate
-set resp "THE GRATE IS LOCKED"
-cmd pray
-set resp "SORRY, I DON'T KNOW THE WORD"
-cmd open
-cmd down
-cmd w
-cmd w
-cmd grate
-set resp "YOU'RE BELOW THE GRATE"
-cmd w
-cmd "enter water"
-set resp "WHERE"
-cmd "enter stream"
-set resp "WHERE"
-cmd "get cage"
+cmd "get food"
+cmd "unlock keys"
+set resp "YOU CAN'T UNLOCK THE KEYS"
+cmd "wave lamp"
+set resp "NOTHING HAPPENS"
+cmd "wave keys"
+set resp "YOU AREN'T CARRYING IT"
+cmd "get keys"
+cmd xyzzy
+cmd e
+cmd "unlock cage"
+set resp "IT HAS NO LOCK"
+cmd get
 cmd w
 cmd on
 cmd w
 cmd w
-cmd "get bird"
+cmd get
 cmd w
 cmd d
 cmd d
 cmd "free bird"
+cmd "get bird"
+cmd n
+cmd d
+cmd w
+cmd d
+cmd n
+cmd unlock
+cmd "free bird"
 cmd "drop cage"
+cmd "get clam"
+cmd attack
+set resp "ATTACK WHAT"
+cmd u
+cmd attack
+set resp "THE SHELL IS VERY STRONG"
+cmd d
+cmd s
+cmd "attack bird"
+cmd look
+cmd attack
+set resp "THE SHELL IS VERY STRONG"
+cmd "drop clam"
+cmd s
+cmd w
+cmd w
+cmd oriental
+cmd get
+cmd w
+cmd sw
+cmd u
+cmd "throw vase"
+cmd ne
+cmd ne
+cmd e
+cmd se
+cmd s
+cmd e
+cmd lock
+set resp "IT WAS ALREADY LOCKED"
+cmd unlock
+set resp "THERE IS NO WAY TO GET PAST THE BEAR"
+cmd "throw food"
+cmd "get chain"
+set resp "THE CHAIN IS STILL LOCKED"
+cmd "unlock chain"
+set resp "THE CHAIN IS NOW UNLOCKED"
+cmd "unlock chain"
+set resp "IT WAS ALREADY UNLOCKED"
+cmd "get chain"
+cmd "lock chain"
+set resp "THE CHAIN IS NOW LOCKED"
+cmd "get chain"
+cmd "lock bear"
+set resp "I DON'T KNOW HOW TO LOCK OR UNLOCK SUCH A THING"
+cmd unlock
+cmd "get chain"
+cmd "get bear"
+cmd w
+cmd lock
+set resp "THERE IS NOTHING HERE TO WHICH THE CHAIN CAN BE LOCKED"
 cmd n
+cmd w
+cmd n
+cmd w
+cmd w
+cmd sw
+cmd attack
+set resp "TROLLS ARE CLOSE RELATIVES WITH THE ROCKS"
+cmd "free bear"
+cmd lock
+cmd sw
+cmd sw
 cmd d
-cmd w
-cmd d
-cmd w
-cmd w
+cmd se
+cmd se
 cmd w
 cmd w
 cmd d
-cmd drink
-cmd "water plant"
-set resp "I SEE NO WATER HERE"
+cmd "get plant"
+set resp "THE PLANT HAS EXCEPTIONALLY DEEP ROOTS"
+cmd "water beanstalk"
+cmd "get plant"
+set resp "YOU CAN'T BE SERIOUS"
 cmd u
 cmd w
 cmd u
@@ -215,92 +276,8 @@ cmd s
 cmd s
 cmd d
 cmd s
-cmd s
 cmd d
-cmd "water plant"
-cmd u
-cmd w
-cmd u
-cmd n
-cmd n
-cmd "get water"
-cmd s
-cmd s
-cmd d
-cmd s
-cmd s
-cmd d
-cmd "water plant"
-cmd climb
-cmd n
-cmd "oil door"
-set resp "I SEE NO OIL HERE"
-cmd s
-cmd d
-cmd "get dwarf"
-set resp "I SEE NO DWARF HERE"
-cmd "get knife"
-set resp "I SEE NO KNIFE HERE"
-cmd u
-cmd lamp
-set resp "WHAT DO YOU WANT TO DO WITH THE"
-cmd "find jewelry"
-set resp "I CANNOT TELL YOU WHERE REMOTE THINGS ARE"
-cmd "carry pour"
-cmd "jump eat"
-cmd "throw drop"
-cmd w
-cmd u
-cmd s
-cmd kill
-cmd yes
-set axe no
-cmd e
-cmd e
-cmd "get knife"
-set resp "I SEE NO KNIFE HERE"
-cmd w
-cmd "get knife"
-set resp "THE DWARVES' KNIVES VANISH AS THEY STRIKE THE WALLS OF THE CAVE"
-cmd "get knife"
-set resp "I SEE NO KNIFE HERE"
-cmd "get knifey"
-set resp "I SEE NO KNIFEY HERE"
-cmd "read magazine"
-set resp "I SEE NO MAGAZINE HERE"
-set axe 0
-cmd n
-cmd d
-cmd w
-cmd d
-cmd w
-cmd n
-cmd back
-cmd n
-cmd back
-cmd n
-cmd back
-cmd n
-set resp "YOU HAVE CRAWLED AROUND IN SOME LITTLE HOLES"
-cmd back
-set resp "SORRY, BUT I NO LONGER SEEM TO REMEMBER HOW IT WAS YOU GOT HERE"
-cmd w
-cmd w
-cmd w
-cmd "find lamp"
-set resp "YOU ARE ALREADY CARRYING IT"
-cmd "find beanstalk"
-set resp "I BELIEVE WHAT YOU WANT IS RIGHT HERE WITH YOU"
-cmd d
-cmd "find beanstalk"
-set resp "I BELIEVE WHAT YOU WANT IS RIGHT HERE WITH YOU"
-cmd climb
-cmd "find beanstalk"
-set resp "I CANNOT TELL YOU WHERE REMOTE THINGS ARE"
-cmd d
-cmd back
-set resp "YOU CLAMBER UP THE PLANT"
-cmd d
+cmd "water beanstalk"
 cmd u
 cmd e
 cmd d
@@ -310,14 +287,58 @@ cmd w
 cmd d
 cmd climb
 cmd w
+cmd unlock
+set resp "IT WAS ALREADY UNLOCKED"
 cmd n
+cmd unlock
+set resp "UNLOCK WHAT"
+cmd s
+cmd "drop chain"
+cmd n
+cmd unlock
+set resp "THE DOOR IS EXTREMELY RUSTY"
 cmd "oil door"
+cmd unlock
 cmd n
+cmd unlock
+set resp "THERE IS NOTHING HERE WITH A LOCK"
+cmd get
 cmd w
 cmd d
-cmd back
-set resp "YOU CAN'T GET THERE FROM HERE"
-cmd quit
+cmd se
+cmd se
+cmd ne
+cmd e
+cmd n
+cmd "get clam"
+cmd unlock
+set resp "I ADVISE YOU TO PUT DOWN THE CLAM"
+cmd "drop clam"
+cmd unlock
+set resp "A GLISTENING PEARL FALLS OUT"
+cmd unlock
+set resp "THE OYSTER CREAKS OPEN"
+cmd "drop trident"
+set axe 1
+cmd s
+cmd attack
+set resp "THERE IS NOTHING HERE TO ATTACK"
+cmd w
+cmd w
+cmd w
+cmd w
+cmd w
+cmd u
+cmd s
+cmd attack
+set resp "ATTACK WHAT"
+cmd "attack dwarf"
+set resp "WITH WHAT"
+cmd "attack dragon"
+set resp "WITH WHAT"
 cmd yes
+cmd "attack dragon"
+set resp "THE POOR THING IS ALREADY DEAD"
+cmd quit
+cmd y
 expect "POINT*\n"
-puts SUCCESS
