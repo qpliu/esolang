@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
-# Test various commands.
+# Test various verbs, lock, unlock, attack.
 set axe 0
 set closed 0
 set die 0
@@ -342,3 +342,4 @@ set resp "THE POOR THING IS ALREADY DEAD"
 cmd quit
 cmd y
 expect "POINT*\n"
+puts SUCCESS

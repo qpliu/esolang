@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
-# Test bear and troll bridge, various motion words, various verbs.
+# Test various verbs.  Eat, drink, pour, rub.
 set axe 0
 set closed 0
 set die 0
@@ -154,130 +154,87 @@ proc cmd command {
 	}
 }
 cmd no
-cmd enter
-cmd "get lamp"
-cmd "get bottle"
-cmd "get food"
-cmd "get keys"
-cmd xyzzy
-cmd e
-cmd "get cage"
-cmd w
-cmd on
-cmd w
-cmd w
-cmd "get bird"
-cmd w
-cmd d
-cmd d
-cmd "free bird"
-cmd "drop cage"
-cmd n
-cmd d
-cmd w
-cmd d
-cmd w
-cmd w
-cmd oriental
-cmd get
-cmd w
-cmd sw
-cmd u
-cmd "throw vase"
-cmd ne
-cmd ne
-cmd e
-cmd se
-cmd s
-cmd e
-cmd "feed bear"
-cmd "unlock chain"
-cmd "get bear"
-cmd w
-cmd w
-cmd n
-cmd w
-cmd w
-cmd sw
-cmd sw
-cmd "free bear"
-set resp "THE BEAR LUMBERS TOWARD THE TROLL"
-cmd "feed bear"
-set resp "THERE IS NOTHING HERE TO EAT"
-cmd "get bear"
-set die 1
-cmd sw
-set resp "JUST AS YOU REACH THE OTHER SIDE, THE BRIDGE BUCKLES"
-cmd yes
-set die 0
-cmd leave
-cmd "get lamp"
 cmd in
-cmd plugh
+cmd "throw food"
+set resp "YOU AREN'T CARRYING IT"
+cmd "get lamp"
 cmd on
-cmd e
-cmd onward
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd left
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd right
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd leave
-set resp "I DON'T KNOW IN FROM OUT HERE"
-cmd inward
-set resp "I DON'T KNOW IN FROM OUT HERE"
+cmd out
+cmd "throw lamp"
+cmd look
+set resp "THERE IS A LAMP SHINING NEARBY"
+cmd get
+cmd in
+cmd eat
+set resp "THANK YOU, IT WAS DELICIOUS"
+cmd eat
+set resp "EAT WHAT"
+cmd "get bottle"
 cmd xyzzy
-set resp "NOTHING HAPPENS"
+cmd eat
+cmd "eat rod"
+set resp "DON'T BE RIDICULOUS"
+cmd w
+cmd w
+cmd eat
+cmd "eat bird"
+set resp "I THINK I JUST LOST MY APPETITE"
+cmd pour
+set resp "YOUR BOTTLE IS EMPTY"
+cmd pour
+set resp "POUR WHAT"
+cmd e
+cmd e
+cmd xyzzy
 cmd plugh
-set resp "NOTHING HAPPENS"
-cmd crawl
-set resp "WHICH WAY"
-cmd d
 cmd s
 cmd d
 cmd w
-cmd w
 cmd d
 cmd w
 cmd w
-cmd oriental
 cmd w
-cmd sw
+cmd d
+cmd "get oil"
 cmd u
-cmd carry
-set resp "CARRY WHAT"
-cmd "get bottle"
-cmd "feed bear"
-set resp "DON'T BE RIDICULOUS"
-cmd ne
-set resp "THERE IS NO LONGER ANY WAY ACROSS THE CHASM"
-cmd sw
-cmd d
-cmd ne
-cmd se
-cmd se
 cmd w
-cmd "drop bottle"
 cmd d
-cmd "get oil"
-set resp "YOU HAVE NOTHING IN WHICH TO CARRY IT"
+cmd "pour bottle"
+set resp "THE PLANT INDIGNANTLY SHAKES THE OIL OFF ITS LEAVES"
 cmd u
-cmd get
+cmd e
 cmd d
 cmd "get oil"
-set resp "YOUR BOTTLE IS ALREADY FULL"
-cmd "get bottle"
-set resp "YOU ARE ALREADY CARRYING IT"
-cmd "drop bottle"
-cmd "get oil"
-set resp "YOU HAVE NOTHING IN WHICH TO CARRY IT"
-cmd "drop oil"
+cmd pour
+set resp "YOUR BOTTLE IS EMPTY"
+cmd "pour oil"
 set resp "YOU AREN'T CARRYING IT"
-cmd "get bottle"
-cmd "drop water"
-cmd look
-set resp "THERE IS A BOTTLE OF WATER HERE"
+cmd "pour lamp"
+set resp "YOU CAN'T POUR THAT"
+cmd drink
+set resp "DRINK WHAT"
+cmd "drink lamp"
+set resp "DON'T BE RIDICULOUS"
+cmd u
+cmd w
+cmd w
+cmd u
+cmd n
+cmd n
+cmd drink
+set resp "YOU HAVE TAKEN A DRINK FROM THE STREAM"
+cmd "get water"
+cmd drink
+set resp "THE BOTTLE OF WATER IS NOW EMPTY"
+cmd rub
+set resp "RUB WHAT"
+cmd "rub lamp"
+set resp "RUBBING THE ELECTRIC LAMP IS NOT PARTICULARLY REWARDING"
+cmd "rub bottle"
+set resp "NOTHING UNEXPECTED HAPPENS"
+cmd "find lamp"
+set resp "YOU ARE ALREADY CARRYING IT"
 cmd quit
 cmd yes
-expect "POINT*\n"
+expect "POINTS*\n"
 puts SUCCESS

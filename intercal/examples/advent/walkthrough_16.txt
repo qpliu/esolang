@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
-# Test bear and troll bridge, various motion words, various verbs.
+# Test eggs and troll, read, break, wake.
 set axe 0
 set closed 0
 set die 0
@@ -72,7 +72,7 @@ proc cmd command {
 					exp_continue
 				}
 				1 {
-					exp_continue
+					set axe 0
 				}
 				default {
 					expect "\n>"
@@ -92,7 +92,7 @@ proc cmd command {
 					exp_continue
 				}
 				1 {
-					exp_continue
+					set axe 0
 				}
 				default {
 					expect "\n>"
@@ -154,130 +154,175 @@ proc cmd command {
 	}
 }
 cmd no
-cmd enter
+cmd in
 cmd "get lamp"
 cmd "get bottle"
-cmd "get food"
-cmd "get keys"
-cmd xyzzy
-cmd e
-cmd "get cage"
-cmd w
 cmd on
+cmd plugh
+cmd s
+cmd d
+cmd w
+cmd d
 cmd w
 cmd w
-cmd "get bird"
+cmd w
+cmd w
+cmd d
+cmd "water beanstalk"
+cmd u
+cmd w
+cmd u
+cmd n
+cmd n
+cmd "get water"
+cmd s
+cmd s
+cmd d
+cmd s
+cmd d
+cmd "water beanstalk"
+cmd climb
+cmd w
+cmd fee
+cmd fie
+cmd foe
+cmd foo
+set resp "NOTHING HAPPENS"
+cmd get
+cmd s
+cmd e
+cmd u
+cmd e
+cmd e
+cmd oriental
+cmd w
+cmd sw
+cmd u
+cmd "throw eggs"
+cmd fee
+cmd fie
+cmd foe
+cmd foo
+set resp "DONE"
+cmd ne
+set resp "THE TROLL STEPS OUT FROM BENEATH THE BRIDGE"
+cmd sw
+cmd d
+cmd se
+cmd se
+cmd ne
+cmd e
+cmd e
+cmd read
+set resp "I'M AFRAID THE MAGAZINE IS WRITTEN IN DWARVISH"
+cmd off
+cmd read
+set resp "READ WHAT"
+cmd "read magazine"
+set resp "I SEE NO MAGAZINE HERE"
+cmd get
+cmd on
+cmd u
+cmd u
+cmd e
+cmd u
+cmd n
+cmd plover
+cmd ne
+cmd read
+set resp "READ WHAT"
+cmd "read tablet"
+set resp "CONGRATULATIONS ON BRINGING LIGHT"
+cmd s
+cmd plover
+cmd s
+cmd d
+cmd w
+cmd d
+cmd n
+cmd "read clam"
+cmd s
+cmd "drop magazine"
+cmd w
+cmd w
+cmd w
+cmd d
+cmd "get oil"
+cmd u
+cmd w
+cmd d
+cmd climb
+cmd w
+cmd n
+cmd "oil door"
+cmd s
+set pirate 1
+cmd get
+cmd n
+cmd n
+set pirate 0
+cmd get
+cmd w
+cmd d
+cmd se
+cmd se
+cmd ne
+cmd e
+cmd n
+cmd open
+cmd "read oyster"
+cmd "drop trident"
+cmd s
+cmd w
+cmd w
+cmd oriental
+cmd "get vase"
+cmd "break vase"
+# set resp "YOU HAVE TAKEN THE VASE AND HURLED IT DELICATELY TO THE GROUND"
+cmd "break lamp"
+# set resp "IT IS BEYOND YOUR POWER"
+cmd se
+cmd w
+cmd w
+cmd w
+cmd u
+cmd n
+cmd "break mirror"
+# set resp "IT IS TOO FAR UP FOR YOU TO REACH"
+cmd "wake lamp"
+# set resp "DON'T BE RIDICULOUS"
+cmd s
+cmd s
+cmd kill
+cmd yes
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd get
+cmd w
+cmd w
+cmd w
+cmd get
 cmd w
 cmd d
 cmd d
 cmd "free bird"
-cmd "drop cage"
-cmd n
-cmd d
-cmd w
-cmd d
 cmd w
 cmd w
-cmd oriental
-cmd get
-cmd w
-cmd sw
-cmd u
-cmd "throw vase"
-cmd ne
-cmd ne
-cmd e
-cmd se
 cmd s
-cmd e
-cmd "feed bear"
-cmd "unlock chain"
-cmd "get bear"
-cmd w
-cmd w
-cmd n
-cmd w
-cmd w
-cmd sw
-cmd sw
-cmd "free bear"
-set resp "THE BEAR LUMBERS TOWARD THE TROLL"
-cmd "feed bear"
-set resp "THERE IS NOTHING HERE TO EAT"
-cmd "get bear"
-set die 1
-cmd sw
-set resp "JUST AS YOU REACH THE OTHER SIDE, THE BRIDGE BUCKLES"
-cmd yes
-set die 0
-cmd leave
-cmd "get lamp"
-cmd in
-cmd plugh
-cmd on
-cmd e
-cmd onward
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd left
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd right
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd leave
-set resp "I DON'T KNOW IN FROM OUT HERE"
-cmd inward
-set resp "I DON'T KNOW IN FROM OUT HERE"
-cmd xyzzy
-set resp "NOTHING HAPPENS"
-cmd plugh
-set resp "NOTHING HAPPENS"
-cmd crawl
-set resp "WHICH WAY"
-cmd d
 cmd s
-cmd d
-cmd w
-cmd w
-cmd d
-cmd w
-cmd w
-cmd oriental
-cmd w
-cmd sw
-cmd u
-cmd carry
-set resp "CARRY WHAT"
-cmd "get bottle"
-cmd "feed bear"
-set resp "DON'T BE RIDICULOUS"
 cmd ne
-set resp "THERE IS NO LONGER ANY WAY ACROSS THE CHASM"
-cmd sw
-cmd d
-cmd ne
-cmd se
-cmd se
-cmd w
-cmd "drop bottle"
-cmd d
-cmd "get oil"
-set resp "YOU HAVE NOTHING IN WHICH TO CARRY IT"
-cmd u
-cmd get
-cmd d
-cmd "get oil"
-set resp "YOUR BOTTLE IS ALREADY FULL"
-cmd "get bottle"
-set resp "YOU ARE ALREADY CARRYING IT"
-cmd "drop bottle"
-cmd "get oil"
-set resp "YOU HAVE NOTHING IN WHICH TO CARRY IT"
-cmd "drop oil"
-set resp "YOU AREN'T CARRYING IT"
-cmd "get bottle"
-cmd "drop water"
-cmd look
-set resp "THERE IS A BOTTLE OF WATER HERE"
+cmd s
+cmd s
+set resp "THIS IS NOT THE MAZE"
+cmd "read message"
+set resp "THIS IS NOT THE MAZE"
 cmd quit
 cmd yes
-expect "POINT*\n"
+expect "POINTS*\n"
 puts SUCCESS

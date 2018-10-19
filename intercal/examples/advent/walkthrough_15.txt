@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
-# Test bear and troll bridge, various motion words, various verbs.
+# Test various verbs.  Feed, fill.
 set axe 0
 set closed 0
 set die 0
@@ -72,7 +72,7 @@ proc cmd command {
 					exp_continue
 				}
 				1 {
-					exp_continue
+					set axe 0
 				}
 				default {
 					expect "\n>"
@@ -92,7 +92,7 @@ proc cmd command {
 					exp_continue
 				}
 				1 {
-					exp_continue
+					set axe 0
 				}
 				default {
 					expect "\n>"
@@ -154,9 +154,12 @@ proc cmd command {
 	}
 }
 cmd no
-cmd enter
+cmd in
 cmd "get lamp"
-cmd "get bottle"
+cmd "find lamp"
+set resp "YOU ARE ALREADY CARRYING IT"
+cmd "find keys"
+set resp "I BELIEVE WHAT YOU WANT IS RIGHT HERE"
 cmd "get food"
 cmd "get keys"
 cmd xyzzy
@@ -166,118 +169,138 @@ cmd w
 cmd on
 cmd w
 cmd w
+cmd "feed bird"
+set resp "IT'S NOT HUNGRY"
 cmd "get bird"
 cmd w
 cmd d
 cmd d
-cmd "free bird"
-cmd "drop cage"
+cmd "feed snake"
+set resp "THE SNAKE HAS NOW DEVOURED YOUR BIRD"
+cmd "feed snake"
+set resp "THERE'S NOTHING HERE IT WANTS TO EAT"
+cmd u
+cmd u
+cmd e
+cmd e
+cmd e
+cmd xyzzy
+cmd plugh
+cmd s
+cmd d
+cmd w
+cmd d
+cmd w
+cmd w
+cmd w
+cmd w
+cmd w
+cmd u
+cmd s
+cmd "feed dragon"
+set resp "THERE'S NOTHING HERE IT WANTS TO EAT"
+cmd "kill dragon"
+cmd yes
+cmd "feed dragon"
+set resp "DON'T BE RIDICULOUS"
+cmd "get rug"
+cmd e
+cmd d
 cmd n
-cmd d
-cmd w
-cmd d
-cmd w
-cmd w
+cmd n
 cmd oriental
-cmd get
 cmd w
 cmd sw
 cmd u
-cmd "throw vase"
+cmd "feed troll"
+set resp "GLUTTONY IS NOT ONE OF THE TROLL'S VICES"
+cmd "throw rug"
+set axe 1
+set count 0
+while {$axe eq 1} {
+	cmd look
+	set count [expr $count+1]
+	if {$count>50} {
+		puts FAIL
+		exit
+	}
+}
+cmd "feed dwarf"
+set resp "YOU FOOL, DWARVES EAT ONLY COAL"
+cmd "throw axe"
+cmd "throw axe"
 cmd ne
 cmd ne
 cmd e
 cmd se
 cmd s
+cmd "drop food"
 cmd e
 cmd "feed bear"
-cmd "unlock chain"
+set resp "THERE'S NOTHING HERE IT WANTS TO EAT"
+cmd "feed chain"
+set resp "WOULD YOU CARE TO EXPLAIN HOW"
+cmd "throw axe"
+set resp "THE AXE MISSES"
+cmd "get axe"
+set resp "YOU CAN'T BE SERIOUS"
+cmd leave
+cmd "get food"
+cmd enter
+cmd "throw food"
+cmd "get axe"
+set resp "OK"
+cmd "throw axe"
+set resp "THERE IS NOTHING HERE TO ATTACK"
 cmd "get bear"
+cmd unlock
+cmd "get bear"
+cmd inventory
+set resp "YOU ARE BEING FOLLOWED BY A VERY LARGE, TAME BEAR"
+cmd fork
 cmd w
 cmd w
-cmd n
-cmd w
-cmd w
-cmd sw
 cmd sw
 cmd "free bear"
-set resp "THE BEAR LUMBERS TOWARD THE TROLL"
-cmd "feed bear"
-set resp "THERE IS NOTHING HERE TO EAT"
-cmd "get bear"
-set die 1
 cmd sw
-set resp "JUST AS YOU REACH THE OTHER SIDE, THE BRIDGE BUCKLES"
-cmd yes
-set die 0
-cmd leave
-cmd "get lamp"
-cmd in
-cmd plugh
-cmd on
-cmd e
-cmd onward
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd left
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd right
-set resp "I AM UNSURE HOW YOU ARE FACING"
-cmd leave
-set resp "I DON'T KNOW IN FROM OUT HERE"
-cmd inward
-set resp "I DON'T KNOW IN FROM OUT HERE"
-cmd xyzzy
-set resp "NOTHING HAPPENS"
-cmd plugh
-set resp "NOTHING HAPPENS"
-cmd crawl
-set resp "WHICH WAY"
-cmd d
-cmd s
-cmd d
-cmd w
-cmd w
-cmd d
-cmd w
-cmd w
-cmd oriental
-cmd w
-cmd sw
-cmd u
-cmd carry
-set resp "CARRY WHAT"
-cmd "get bottle"
-cmd "feed bear"
-set resp "DON'T BE RIDICULOUS"
-cmd ne
-set resp "THERE IS NO LONGER ANY WAY ACROSS THE CHASM"
 cmd sw
 cmd d
-cmd ne
 cmd se
-cmd se
-cmd w
-cmd "drop bottle"
-cmd d
-cmd "get oil"
-set resp "YOU HAVE NOTHING IN WHICH TO CARRY IT"
-cmd u
 cmd get
-cmd d
-cmd "get oil"
+cmd se
+cmd ne
+cmd e
+cmd u
+cmd e
+cmd u
+cmd n
+cmd plugh
+cmd "fill vase"
+set resp "THE SUDDEN CHANGE IN TEMPERATURE HAS DELICATELY SHATTERED THE VASE"
+cmd "get vase"
+set resp "YOU CAN'T BE SERIOUS"
+cmd "fill lamp"
+set resp "YOU CAN'T FILL THAT"
+cmd "get bottle"
+cmd drink
+cmd fill
+set resp "YOUR BOTTLE IS NOW FULL OF WATER"
+cmd fill
 set resp "YOUR BOTTLE IS ALREADY FULL"
-cmd "get bottle"
-set resp "YOU ARE ALREADY CARRYING IT"
+cmd plugh
+cmd fill
+cmd drink
+cmd fill
+set resp "THERE IS NOTHING HERE WITH WHICH TO FILL THE BOTTLE"
 cmd "drop bottle"
-cmd "get oil"
-set resp "YOU HAVE NOTHING IN WHICH TO CARRY IT"
-cmd "drop oil"
-set resp "YOU AREN'T CARRYING IT"
-cmd "get bottle"
-cmd "drop water"
+cmd plugh
+cmd fill
+set resp "FILL WHAT"
 cmd look
-set resp "THERE IS A BOTTLE OF WATER HERE"
+set resp "THE FLOOR IS LITTERED WITH WORTHLESS SHARDS OF POTTERY"
+cmd blast
+set resp "BLASTING REQUIRES DYNAMITE"
 cmd quit
 cmd yes
-expect "POINT*\n"
+expect "POINTS*\n"
 puts SUCCESS
