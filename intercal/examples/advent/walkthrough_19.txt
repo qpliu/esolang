@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 spawn ../../COMPILAC -q -seed 1 ./advent.i /tmp/adb.i
-# Test eggs and troll, read, break, wake.
+# Test end-game.  Bird.
 set axe 0
 set closed 0
 set die 0
@@ -107,9 +107,11 @@ proc cmd command {
 		"REINCARNAT" {
 			upvar #0 die die
 			switch $die {
+				no {
+					exp_continue
+				}
 				1 {
 					set die 2
-					exp_continue
 				}
 				default {
 					expect "\n>"
@@ -127,9 +129,11 @@ proc cmd command {
 		"HAR, HAR" {
 			upvar #0 pirate pirate
 			switch $pirate {
+				no {
+					exp_continue
+				}
 				1 {
 					set pirate 2
-					exp_continue
 				}
 				default {
 					expect "\n>"
@@ -157,8 +161,31 @@ cmd no
 cmd in
 cmd "get lamp"
 cmd "get bottle"
+cmd "get food"
+cmd "get keys"
+cmd xyzzy
+cmd e
+cmd get
+cmd w
 cmd on
-cmd plugh
+cmd w
+cmd w
+cmd get
+cmd w
+cmd d
+cmd s
+cmd n
+cmd d
+cmd "free bird"
+cmd "drop cage"
+cmd s
+cmd n
+cmd n
+cmd n
+cmd plover
+cmd ne
+cmd s
+cmd plover
 cmd s
 cmd d
 cmd w
@@ -177,75 +204,14 @@ cmd n
 cmd "get water"
 cmd s
 cmd s
-cmd d
 cmd s
-cmd d
-cmd "water beanstalk"
-cmd climb
-cmd w
-cmd fee
-cmd fie
-cmd foe
-cmd foo
-set resp "NOTHING HAPPENS"
-cmd get
-cmd s
-cmd e
-cmd u
-cmd e
-cmd e
-cmd oriental
-cmd w
-cmd sw
-cmd u
-cmd "throw eggs"
-cmd fee
-cmd fie
-cmd foe
-cmd foo
-set resp "DONE"
-cmd ne
-set resp "THE TROLL STEPS OUT FROM BENEATH THE BRIDGE"
-cmd sw
-cmd d
-cmd se
-cmd se
-cmd ne
-cmd e
-cmd e
-cmd read
-set resp "I'M AFRAID THE MAGAZINE IS WRITTEN IN DWARVISH"
-cmd off
-cmd read
-set resp "READ WHAT"
-cmd "read magazine"
-set resp "I SEE NO MAGAZINE HERE"
-cmd get
-cmd on
-cmd u
-cmd u
-cmd e
-cmd u
 cmd n
-cmd plover
-cmd ne
-cmd read
-set resp "READ WHAT"
-cmd "read tablet"
-set resp "CONGRATULATIONS ON BRINGING LIGHT"
-cmd s
-cmd plover
+cmd d
 cmd s
 cmd d
-cmd w
-cmd d
-cmd n
-cmd "read clam"
-cmd s
-cmd "drop magazine"
-cmd w
-cmd w
-cmd w
+cmd pour
+cmd u
+cmd e
 cmd d
 cmd "get oil"
 cmd u
@@ -253,80 +219,120 @@ cmd w
 cmd d
 cmd climb
 cmd w
-cmd n
-cmd "oil door"
-cmd s
-set pirate 1
 cmd get
 cmd n
+cmd pour
 cmd n
-set pirate 0
 cmd get
 cmd w
+cmd d
+cmd sw
+cmd u
+cmd "throw eggs"
+cmd ne
+cmd ne
+cmd e
+cmd e
+cmd ne
+cmd e
+cmd w
+cmd s
+cmd se
+cmd s
+cmd e
+cmd "feed bear"
+cmd unlock
+cmd "get bear"
+cmd fork
+cmd w
+cmd w
+cmd sw
+cmd "free bear"
+set pirate no
+cmd sw
+cmd sw
 cmd d
 cmd se
 cmd se
 cmd ne
 cmd e
-cmd n
-cmd open
-cmd "read oyster"
-cmd "drop trident"
+cmd u
+cmd e
+cmd u
 cmd s
-cmd w
-cmd w
-cmd oriental
-cmd "get vase"
-cmd inventory
-cmd "break vase"
-set resp "YOU HAVE TAKEN THE VASE AND HURLED IT DELICATELY TO THE GROUND"
-cmd inventory
-cmd look
-set resp "THE FLOOR IS LITTERED WITH WORTHLESS SHARDS OF POTTERY"
-cmd "break lamp"
-set resp "IT IS BEYOND YOUR POWER"
-cmd se
-cmd w
-cmd w
 cmd w
 cmd u
+cmd w
+cmd e
+cmd s
+cmd e
+cmd s
+cmd s
+cmd s
+cmd e
 cmd n
-cmd "break mirror"
-set resp "IT IS TOO FAR UP FOR YOU TO REACH"
-cmd "wake lamp"
-set resp "DON'T BE RIDICULOUS"
+cmd e
+cmd n
+cmd e
+cmd e
+cmd nw
+cmd "get trident"
+cmd se
+cmd n
+cmd d
+cmd w
+cmd d
+cmd d
+cmd n
+cmd d
+cmd w
+cmd d
+cmd n
+cmd open
+cmd d
+cmd d
+cmd u
+cmd u
 cmd s
-cmd s
-cmd kill
-cmd yes
+cmd u
 cmd e
-cmd e
-cmd e
-cmd e
-cmd e
-cmd e
-cmd e
-cmd e
+cmd u
+cmd n
+cmd plugh
+cmd xyzzy
 cmd get
 cmd w
 cmd w
 cmd w
-cmd get
-cmd w
 cmd d
-cmd d
-cmd "free bird"
 cmd w
-cmd w
-cmd s
-cmd s
-cmd ne
-cmd s
-cmd s
-set resp "THIS IS NOT THE MAZE"
-cmd "read message"
-set resp "THIS IS NOT THE MAZE"
-cmd quit
-cmd yes
+cmd "wave rod"
+cmd west
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd e
+cmd off
+cmd e
+cmd open
+cmd u
+cmd building
+cmd in
+set count 0
+while {$count<35 && $closed eq 0} {
+	cmd look
+	set count [expr $count+1]
+}
+set closed 0
+cmd sw
+cmd "get cage"
+set resp "OK"
+cmd "attack bird"
+set resp "LEAVE THE POOR UNHAPPY BIRD ALONE"
+cmd "drop bird"
+expect "ALL OF THEM GET YOU"
 expect "POINTS*\n"
 puts SUCCESS
