@@ -1,18 +1,29 @@
 -- https://esolangs.org/wiki/Funciton
 
+-- Limitations:
+--   If the counter-clockwise input of cross operator is not in
+--   the range (minBound,maxBound) :: (Int,Int), then the clockwise
+--   (shift-left) output will be wrong.
+--   With ghc on my computer, the range is a signed 64-bit int
+--   (-9223372036854775808,9223372036854775807).
+
 import Data.Array(Array,array,assocs,bounds,inRange,(!))
+import Data.Bits(complement,shift,(.&.))
+import Data.Char(chr,ord)
 import Data.Map(Map)
 import qualified Data.Map
+import Data.Set(Set)
+import qualified Data.Set
 
-data Dir = N | S | E | W deriving (Eq,Show)
+data Dir = N | S | E | W deriving (Eq,Ord,Show)
+
+rotate :: Dir -> Dir
+rotate N = E
+rotate S = W
+rotate E = S
+rotate W = N
 
 data BoxType = Box0 | Box1 | Box2Opp | Box2Adj | Box3 | Box4 | Tee | Cross deriving (Eq,Show)
-
-data RawBox = RawBox {
-    rawBoxType :: BoxType,
-    rawNW, rawSE :: (Int,Int),
-    rawN, rawS, rawE, rawW :: Maybe (Int,Int)
-    } deriving Show
 
 data Box = Box {
     boxType :: BoxType,
@@ -22,22 +33,22 @@ data Box = Box {
     boxN, boxS, boxE, boxW :: BoxConnection
     } deriving Show
 
-data BoxConnection = BoxConn Dir (Int,Int) | BoxConnExit Dir | BoxConnNone deriving Show
+data BoxConnection = BoxConn Dir (Int,Int) | BoxConnExit Dir | BoxConnNone deriving (Eq,Show)
 
-rotate :: Dir -> Dir
-rotate N = E
-rotate S = W
-rotate E = S
-rotate W = N
+data RawBox = RawBox {
+    rawBoxType :: BoxType,
+    rawNW, rawSE :: (Int,Int),
+    rawN, rawS, rawE, rawW :: Maybe (Int,Int)
+    } deriving Show
 
-parse :: String -> [Box] -- undefined
-parse prog = boxes -- undefined
+parseBoxes :: String -> [Box]
+parseBoxes src = boxes
   where
     grid :: Array (Int,Int) Char
-    grid = array ((1,1),(width,height)) (concat (zipWith makeGridLine [1..] (lines prog)))
+    grid = array ((1,1),(width,height)) (concat (zipWith makeGridLine [1..] (lines src)))
       where
-        width = maximum (map length (lines prog))
-        height = length (lines prog)
+        width = maximum (map length (lines src))
+        height = length (lines src)
         makeGridLine y line = zip (map (flip (,) y) [1..]) (take width (line ++ repeat ' '))
 
     -- ─ │ ═ ║ ╔ ╗ ╚ ╝ ┌ ┐ └ ┘ ╓ ╖ ╙ ╜ ╒ ╕ ╘ ╛ ├ ┴ ┬ ┤ ┼ ╟ ╧ ╤ ╢ ╫ ╪
@@ -254,3 +265,124 @@ parse prog = boxes -- undefined
           | exits pos (rotate $ rotate $ rotate dir) = BoxConnExit (rotate $ rotate $ rotate dir)
           | connected pos (rotate $ rotate $ rotate dir) = trace (rotate $ rotate $ rotate dir) (move pos (rotate $ rotate $ rotate dir))
           | otherwise = error ("wtf@" ++ show pos)
+
+data Declaration = Declaration {
+    declName :: Maybe String,
+    declScope :: String,
+    declPrivate :: Bool,
+    declInputs :: Set Dir,
+    declOutputs :: Set Dir
+    } deriving Show
+
+parseDeclarations :: (String,String) -> [(Declaration,Map (Int,Int) Box)]
+parseDeclarations (scope,src) =
+    [(makeDeclaration graph,graph) | graph <- distinctGraphs]
+  where
+    boxes :: Map (Int,Int) Box
+    boxes = Data.Map.fromList [(boxId box,box) | box <- parseBoxes src]
+
+    distinctGraphs :: [Map (Int,Int) Box]
+    distinctGraphs = fst (Data.Map.fold collectDistinctGraphs ([],Data.Set.empty) boxes)
+
+    collectDistinctGraphs :: Box -> ([Map (Int,Int) Box],Set (Int,Int)) -> ([Map (Int,Int) Box],Set (Int,Int))
+    collectDistinctGraphs box (graphs,collected)
+      | Data.Set.member (boxId box) collected = (graphs,collected)
+      | otherwise = (graph:graphs,Data.Set.union collected (Data.Set.fromList (Data.Map.keys graph)))
+      where
+        graph = collect [BoxConn N (boxId box)] Data.Map.empty
+        collect [] graph = graph
+        collect (BoxConn _ bid:conns) graph
+          | not (Data.Map.member bid graph) = collect (boxN b:boxS b:boxE b:boxW b:conns) (Data.Map.insert bid b graph)
+          where b = boxes Data.Map.! bid
+        collect (_:conns) graph = collect conns graph
+
+    makeDeclaration :: Map (Int,Int) Box -> Declaration
+    makeDeclaration graph = Data.Map.fold buildDeclaration Declaration{declName=Nothing,declScope=scope,declPrivate=False,declInputs=Data.Set.empty,declOutputs=Data.Set.empty} graph
+
+    buildDeclaration :: Box -> Declaration -> Declaration
+    buildDeclaration Box{boxType=boxType,boxPrivate=boxPrivate,boxContents=boxContents,boxN=n,boxS=s,boxE=e,boxW=w} decl =
+        checkHeader (foldl buildOutput decl [n,s,e,w])
+      where
+        buildOutput decl@Declaration{declOutputs=outputs,declInputs=inputs} (BoxConnExit dir)
+          | Data.Set.member dir outputs = error "Invalid function: duplicate output"
+          | Data.Set.member dir inputs = error "Invalid function: input-output overlap"
+          | otherwise = decl{declOutputs=Data.Set.insert dir outputs}
+        buildOutput decl dir = decl
+        checkHeader decl
+          | boxType == Box2Opp = maybe (buildHeader decl) (const (error "Multiple declaration headers")) (declName decl)
+          | otherwise = decl
+        buildHeader decl@Declaration{declOutputs=outputs}
+          | Data.Set.null (Data.Set.intersection outputs inputs) =
+                decl{declName=Just boxContents,declPrivate=boxPrivate,declInputs=inputs}
+          | otherwise = error "Invalid function: input-output overlap"
+          where
+            inputs = Data.Set.fromList (map fst (filter ((/= BoxConnNone) . snd) [(N,s),(S,n),(E,w),(W,e)]))
+
+data Subprogram = Subprogram {
+    decl :: Declaration,
+    outputs :: Map Dir Expr
+    } deriving Show
+
+data Expr =
+    ExprStdIn
+  | ExprConst Integer
+  | ExprInput Dir
+  | ExprCall Subprogram [(Dir,Expr)] Dir
+  | ExprNand Expr Expr
+  | ExprLessThan Expr Expr
+  | ExprShiftLeft Expr Expr
+    -- Since lambdas are not closures, they can be statically enumerated.
+  | ExprLambda Integer
+  | ExprEvalLambda1 Expr Expr
+  | ExprEvalLambda2 Expr Expr
+    deriving Show
+
+resolve :: [(Declaration,Map (Int,Int) Box)] -> (Map Integer (Expr,Expr),[Subprogram])
+resolve declarations = undefined
+
+parse :: [(String,String)] -> (Map Integer (Expr,Expr),[Expr])
+parse prog = fmap (concatMap findOutputs) (resolve (concatMap parseDeclarations prog))
+  where
+    findOutputs Subprogram{decl=Declaration{declName=Nothing},outputs=outputs} = Data.Map.elems outputs
+    findOutputs _ = []
+
+eval :: (Integer,Map Integer (Expr,Expr)) -> [(Dir,Integer)] -> Expr -> Integer
+eval (stdin,lambdas) inputs ExprStdIn = stdin
+eval (stdin,lambdas) inputs (ExprConst n) = n
+eval (stdin,lambdas) inputs (ExprInput dir) = n
+  where Just n = lookup dir inputs
+eval (stdin,lambdas) inputs (ExprCall Subprogram{outputs=outputs} params dir) =
+    eval (stdin,lambdas) callInputs (outputs Data.Map.! dir)
+  where callInputs = map (fmap (eval (stdin,lambdas) inputs)) params
+eval (stdin,lambdas) inputs (ExprNand a b) = complement (ev a .&. ev b)
+  where ev = eval (stdin,lambdas) inputs
+eval (stdin,lambdas) inputs (ExprLessThan a b) = if ev a < ev b then -1 else 0
+  where ev = eval (stdin,lambdas) inputs
+eval (stdin,lambdas) inputs (ExprShiftLeft a b) = shift (ev a) (fromIntegral (ev b))
+  where ev = eval (stdin,lambdas) inputs
+eval (stdin,lambdas) inputs (ExprLambda n) = n
+eval (stdin,lambdas) inputs (ExprEvalLambda1 lambda input) = evalLambda (stdin,lambdas) inputs lambda input fst
+eval (stdin,lambdas) inputs (ExprEvalLambda2 lambda input) = evalLambda (stdin,lambdas) inputs lambda input snd
+
+evalLambda :: (Integer,Map Integer (Expr,Expr)) -> [(Dir,Integer)] -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> Integer
+evalLambda (stdin,lambdas) inputs lambda input chooseOutput =
+    eval (stdin,lambdas) (zip [N,S,E,W] (repeat (ev input))) (chooseOutput (lambdas Data.Map.! (ev lambda)))
+  where ev = eval (stdin,lambdas) inputs
+
+run :: [(String,String)] -> Integer -> [Integer]
+run prog inp = map (eval (inp,lambdas) []) outputs
+  where (lambdas,outputs) = parse prog
+
+encodeString :: String -> Integer
+encodeString str = enc 1 0 str
+  where
+    enc f n "" = n - f
+    enc f n (c:cs) = enc (f*2097152) (n + f*fromIntegral (ord c)) cs
+
+decodeString :: Integer -> String
+decodeString n
+  | n == 0 || n == -1 = ""
+  | otherwise = chr (fromIntegral (n `mod` 2097152)) : decodeString (n `div` 2097152)
+
+funkytown :: String -> IO ()
+funkytown prog = interact (decodeString . head . run [("",prog)] . encodeString)
