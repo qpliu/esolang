@@ -14,16 +14,27 @@ import Data.Map(Map)
 import qualified Data.Map
 import Data.Set(Set)
 import qualified Data.Set
+import System.Environment(getArgs)
 
 data Dir = N | S | E | W deriving (Eq,Ord,Show)
 
-rotate :: Dir -> Dir
-rotate N = E
-rotate S = W
-rotate E = S
-rotate W = N
+rotate :: Int -> Dir -> Dir
+rotate 0 dir = dir
+rotate 1 N = E
+rotate 1 S = W
+rotate 1 E = S
+rotate 1 W = N
+rotate 2 N = S
+rotate 2 S = N
+rotate 2 E = W
+rotate 2 W = E
+rotate 3 N = W
+rotate 3 S = E
+rotate 3 E = N
+rotate 3 W = S
+rotate n dir = rotate (n `mod` 4) dir
 
-data BoxType = Box0 | Box1 | Box2Opp | Box2Adj | Box3 | Box4 | Tee | Cross deriving (Eq,Show)
+data BoxType = Box1 | Box2Opp | Box2Adj | Box3 | Box4 | Tee | Cross deriving (Eq,Show)
 
 data Box = Box {
     boxType :: BoxType,
@@ -40,6 +51,12 @@ data RawBox = RawBox {
     rawNW, rawSE :: (Int,Int),
     rawN, rawS, rawE, rawW :: Maybe (Int,Int)
     } deriving Show
+
+boxConn :: Box -> Dir -> BoxConnection
+boxConn box N = boxN box
+boxConn box S = boxS box
+boxConn box E = boxE box
+boxConn box W = boxW box
 
 parseBoxes :: String -> [Box]
 parseBoxes src = boxes
@@ -201,7 +218,6 @@ parseBoxes src = boxes
       | otherwise = rawBoxes
 
     makeRawBoxType :: [Dir] -> BoxType
-    makeRawBoxType [] = Box0
     makeRawBoxType [_] = Box1
     makeRawBoxType [S,N] = Box2Opp
     makeRawBoxType [W,E] = Box2Opp
@@ -210,7 +226,7 @@ parseBoxes src = boxes
     makeRawBoxType [W,S] = Box2Adj
     makeRawBoxType [N,W] = Box2Adj
     makeRawBoxType [_,_,_] = Box3
-    makeRawBoxType _ = Box4
+    makeRawBoxType [_,_,_,_] = Box4
 
     filterOverlaps :: [RawBox] -> [RawBox]
     filterOverlaps [] = []
@@ -256,14 +272,14 @@ parseBoxes src = boxes
     traceConn :: Dir -> (Int,Int) -> BoxConnection
     traceConn dir pos = continue dir pos
       where
-        trace dir pos = maybe (continue dir pos) (BoxConn dir) (Data.Map.lookup pos rawOutlets)
+        trace dir pos = maybe (continue dir pos) ((BoxConn . rotate 2) dir) (Data.Map.lookup pos rawOutlets)
         continue dir pos
           | exits pos dir = BoxConnExit dir
           | connected pos dir = trace dir (move pos dir)
-          | exits pos (rotate dir) = BoxConnExit (rotate dir)
-          | connected pos (rotate dir) = trace (rotate dir) (move pos (rotate dir))
-          | exits pos (rotate $ rotate $ rotate dir) = BoxConnExit (rotate $ rotate $ rotate dir)
-          | connected pos (rotate $ rotate $ rotate dir) = trace (rotate $ rotate $ rotate dir) (move pos (rotate $ rotate $ rotate dir))
+          | exits pos (rotate 1 dir) = BoxConnExit (rotate 1 dir)
+          | connected pos (rotate 1 dir) = trace (rotate 1 dir) (move pos (rotate 1 dir))
+          | exits pos (rotate 3 dir) = BoxConnExit (rotate 3 dir)
+          | connected pos (rotate 3 dir) = trace (rotate 3 dir) (move pos (rotate 3 dir))
           | otherwise = error ("wtf@" ++ show pos)
 
 data Declaration = Declaration {
@@ -318,14 +334,95 @@ parseDeclarations (scope,src) =
           where
             inputs = Data.Set.fromList (map fst (filter ((/= BoxConnNone) . snd) [(N,s),(S,n),(E,w),(W,e)]))
 
+declarationErrors :: [Declaration] -> [String]
+declarationErrors declarations = fst (foldl check ([],Data.Set.empty) declarations)
+  where
+    check (errs,seen) Declaration{declName=Just name,declScope=scope,declPrivate=private,declInputs=inputs,declOutputs=outputs}
+      | inputs == Data.Set.fromList [N,S] && outputs == Data.Set.fromList [E,W] = (("Rotationally ambiguous:"++name):errs,seen) 
+      | inputs == Data.Set.fromList [E,W] && outputs == Data.Set.fromList [N,S] = (("Rotationally ambiguous:"++name):errs,seen) 
+      | private && Data.Set.member (Just scope,name) seen = (("Multiple definitions for:"++name):errs,seen)
+      | private = (errs,Data.Set.insert (Just scope,name) seen)
+      | Data.Set.member (Nothing,name) seen = (("Multiple definitions for:"++name):errs,seen)
+      | otherwise = (errs,Data.Set.insert (Nothing,name) seen)
+    check (dups,seen) _ = (dups,seen)
+
+data FlowBoxType =
+    FlowDecl
+  | FlowConst (Maybe Integer)
+  | FlowCall (Maybe String,String) (Set Dir) (Set Dir) -- name inputs outputs
+  | FlowTee
+  | FlowCross
+  | FlowLambda (String,(Int,Int)) -- (scope,boxId)
+  | FlowEvalLambda
+  deriving Show
+
+data FlowBox = FlowBox {
+    flowBoxId :: (Int,Int),
+    flowBoxType :: FlowBoxType,
+    flowIn, flowUnknown :: Map Dir (Dir,(Int,Int)),
+    flowOut :: Map Dir (Dir,Maybe (Int,Int))
+    } deriving Show
+
+resolveFlows :: [(Declaration,Map (Int,Int) Box)] -> [(Declaration,Map (Int,Int) FlowBox)]
+resolveFlows declarations = map resolveGraphFlows declarations
+  where
+    signatures :: Map (Maybe String,String) Declaration
+    signatures = Data.Map.fromList [(name decl,decl) | (decl,_) <- declarations, isFunction decl]
+      where
+        isFunction Declaration{declName=Nothing} = False
+        isFunction _ = True
+        name Declaration{declName=Just n,declScope=scope,declPrivate=private}
+          | private = (Just scope,n)
+          | otherwise = (Nothing,n)
+
+    signature :: String -> String -> Declaration
+    signature scope name =
+        maybe (maybe (error ("Undefined function:" ++ name)) id (Data.Map.lookup (Nothing,name) signatures)) id (Data.Map.lookup (Just scope,name) signatures)
+
+    callBoxType :: Declaration -> FlowBoxType
+    callBoxType Declaration{declName=Just name,declScope=scope,declPrivate=private,declInputs=inputs,declOutputs=outputs} =
+       FlowCall (if private then Just scope else Nothing,name) inputs outputs
+
+    resolveGraphFlows :: (Declaration,Map (Int,Int) Box) -> (Declaration,Map (Int,Int) FlowBox)
+    resolveGraphFlows (decl@Declaration{declScope=scope},boxes) = (decl,iterativeResolve (Data.Map.map (initialFlows scope) boxes))
+
+    initialFlows :: String -> Box -> FlowBox
+    initialFlows scope Box{boxType=boxType,boxId=boxId,boxContents=boxContents,boxN=n,boxS=s,boxE=e,boxW=w}
+      | boxType == Box1 = FlowBox{flowBoxId=boxId,flowBoxType=FlowEvalLambda,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Box2Opp = FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowIn=Data.Map.empty,flowOut=Data.Map.union outs (Data.Map.map (fmap Just) unknowns),flowUnknown=Data.Map.empty}
+      | boxType == Box2Adj = FlowBox{flowBoxId=boxId,flowBoxType=callBoxType (signature scope boxContents),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Box3 = FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda (scope,boxId),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Box4 = FlowBox{flowBoxId=boxId,flowBoxType=FlowConst (if null boxContents then Nothing else Just (read (supportWeirdUnicodeMinus boxContents))),flowIn=Data.Map.empty,flowOut=Data.Map.union outs (Data.Map.map (fmap Just) unknowns),flowUnknown=Data.Map.empty}
+      | boxType == Tee = FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Cross = FlowBox{flowBoxId=boxId,flowBoxType=FlowCross,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      where
+        outs = foldl addOut Data.Map.empty [(N,n),(S,s),(E,e),(W,w)]
+        addOut outs (dir,BoxConnExit exitDir) = Data.Map.insert dir (exitDir,Nothing) outs
+        addOut outs _ = outs
+        unknowns = foldl addUnknown Data.Map.empty [(N,n),(S,s),(E,e),(W,w)]
+        addUnknown unknowns (dir,BoxConn connDir connId) = Data.Map.insert dir (connDir,connId) unknowns
+        addUnknown unknowns _ = unknowns
+
+    iterativeResolve :: Map (Int,Int) FlowBox -> Map (Int,Int) FlowBox
+    iterativeResolve = id --undefined
+
+supportWeirdUnicodeMinus :: String -> String
+supportWeirdUnicodeMinus str
+  | take 1 str == "−" = '-' : drop 1 str
+  | otherwise = str
+
 data Subprogram = Subprogram {
     decl :: Declaration,
     outputs :: Map Dir Expr
-    } deriving Show
+    }
+
+instance Show Subprogram where
+    show Subprogram{decl=Declaration{declName=name,declScope=scope},outputs=outputs} = unlines (map showOutput (Data.Map.assocs outputs))
+      where
+        showOutput (dir,expr) = scope ++ maybe "" ("/" ++) name ++ ":" ++ show dir ++ "=" ++ show expr
 
 data Expr =
-    ExprStdIn
-  | ExprConst Integer
+    ExprConst (Maybe Integer)
   | ExprInput Dir
   | ExprCall Subprogram [(Dir,Expr)] Dir
   | ExprNand Expr Expr
@@ -335,20 +432,36 @@ data Expr =
   | ExprLambda Integer
   | ExprEvalLambda1 Expr Expr
   | ExprEvalLambda2 Expr Expr
-    deriving Show
+
+instance Show Expr where
+    show (ExprConst Nothing) = "stdin"
+    show (ExprConst (Just n)) = show n
+    show (ExprInput dir) = show dir
+    show (ExprCall Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir) = "call(" ++ show scope ++ "/" ++ show name ++ ":" ++ show args ++ show dir ++ ")"
+    show (ExprNand a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprLessThan a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprShiftLeft a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprLambda n) = "lambda(" ++ show n ++ ")"
+    show (ExprEvalLambda1 lambda inp) = "evallambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
+    show (ExprEvalLambda2 lambda inp) = "evallambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
 
 resolve :: [(Declaration,Map (Int,Int) Box)] -> (Map Integer (Expr,Expr),[Subprogram])
-resolve declarations = undefined
+resolve declarations = foldl resolve1 (Data.Map.empty,[]) declarations
+  where resolve1 = undefined
 
 parse :: [(String,String)] -> (Map Integer (Expr,Expr),[Expr])
-parse prog = fmap (concatMap findOutputs) (resolve (concatMap parseDeclarations prog))
+parse prog
+  | null errs = fmap (concatMap findOutputs) (resolve declarations)
+  | otherwise = error (unlines errs)
   where
+    declarations = concatMap parseDeclarations prog
+    errs = declarationErrors (map fst declarations)
     findOutputs Subprogram{decl=Declaration{declName=Nothing},outputs=outputs} = Data.Map.elems outputs
     findOutputs _ = []
 
 eval :: (Integer,Map Integer (Expr,Expr)) -> [(Dir,Integer)] -> Expr -> Integer
-eval (stdin,lambdas) inputs ExprStdIn = stdin
-eval (stdin,lambdas) inputs (ExprConst n) = n
+eval (stdin,lambdas) inputs (ExprConst Nothing) = stdin
+eval (stdin,lambdas) inputs (ExprConst (Just n)) = n
 eval (stdin,lambdas) inputs (ExprInput dir) = n
   where Just n = lookup dir inputs
 eval (stdin,lambdas) inputs (ExprCall Subprogram{outputs=outputs} params dir) =
@@ -386,3 +499,9 @@ decodeString n
 
 funkytown :: String -> IO ()
 funkytown prog = interact (decodeString . head . run [("",prog)] . encodeString)
+
+main :: IO ()
+main = do
+    srcFiles <- getArgs
+    srcs <- mapM readFile srcFiles
+    interact (decodeString . head . run (zip srcFiles srcs) . encodeString)
