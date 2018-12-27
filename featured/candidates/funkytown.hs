@@ -517,12 +517,14 @@ instance Show Subprogram where
         showOutput (dir,expr) = scope ++ maybe "" ("/" ++) name ++ ":" ++ show dir ++ "=" ++ show expr
 
 type LambdaId = (String,(Int,Int))
+type SplitterId = (String,(Int,Int))
 
 data Expr =
     ExprConst (Maybe Integer)
   | ExprInput Dir
   | ExprCall Subprogram [(Dir,Expr)] Dir
   | ExprNand Expr Expr
+  | ExprSplitter SplitterId Expr
   | ExprLessThan Expr Expr
   | ExprShiftLeft Expr Expr
   | ExprLambda LambdaId Expr Expr
@@ -536,6 +538,7 @@ instance Show Expr where
     show (ExprInput dir) = show dir
     show (ExprCall Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir) = "call(" ++ show scope ++ "/" ++ show name ++ ":" ++ show args ++ show dir ++ ")"
     show (ExprNand a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprSplitter splitterId expr) = "splitter(" ++ show splitterId ++ "," ++ show expr ++ ")"
     show (ExprLessThan a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprShiftLeft a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprLambda lambdaId _ _) = "lambda" ++ show lambdaId
@@ -573,33 +576,49 @@ parse prog
     findOutputs Subprogram{decl=Declaration{declName=Nothing},outputs=outputs} = Data.Map.elems outputs
     findOutputs _ = []
 
+data State = State {
+    stStdin :: Integer,
+    stNextLambda :: Integer,
+    stCallArgs :: Map Dir Value,
+    stLambdaArgs :: Map LambdaId Value,
+    stSplitterValues :: Map SplitterId Value
+    }
+
 data Value = Value Integer (Map Integer Closure)
-type Closure = (LambdaId,((Expr,Expr),(Map Dir Value,Map LambdaId Value)))
+type Closure = (LambdaId,((Expr,Expr),State))
 
-eval :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> ((Integer,Integer),Value)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprConst Nothing) = (state,Value stdin Data.Map.empty)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprConst (Just n)) = (state,Value n Data.Map.empty)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprInput dir) = (state,callArgs Data.Map.! dir)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprCall Subprogram{outputs=outputs} params dir) =
-    eval callState (Data.Map.fromList callInputs,Data.Map.empty) (outputs Data.Map.! dir)
+eval :: State -> Expr -> (State,Value)
+eval state (ExprConst Nothing) = (state,Value (stStdin state) Data.Map.empty)
+eval state (ExprConst (Just n)) = (state,Value n Data.Map.empty)
+eval state (ExprInput dir) = (state,stCallArgs state Data.Map.! dir)
+eval state (ExprCall Subprogram{outputs=outputs} params dir) =
+    (callerState{stNextLambda=stNextLambda returnState},returnValue)
   where
-    (callState,callInputs) = foldl evalCallParam (state,[]) params
-    evalCallParam (state,results) param =
-        let (nextState,val) = eval state args (snd param)
-        in  (nextState,(fst param,val):results)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprNand aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> complement (a .&. b)) Data.Map.union
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLessThan aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> if a < b then -1 else 0) (const (const Data.Map.empty))
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprShiftLeft aExpr bExpr) = evalBinop state args aExpr bExpr shiftInteger Data.Map.union
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLambda lambdaId expr1 expr2) = ((stdin,nextLambda+1),Value nextLambda (Data.Map.fromList [(nextLambda,(lambdaId,((expr1,expr2),(callArgs,lambdaArgs))))]))
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLambdaInput lambdaId) = (state,lambdaArgs Data.Map.! lambdaId)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprInvokeLambda1 lambda input) = evalInvokeLambda state args lambda input fst
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprInvokeLambda2 lambda input) = evalInvokeLambda state args lambda input snd
-
-evalBinop :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> Expr -> (Integer -> Integer -> Integer) -> (Map Integer Closure -> Map Integer Closure -> Map Integer Closure) -> ((Integer,Integer),Value)
-evalBinop state@(stdin,nextLambda) args@(callArgs,lambdaArgs) aExpr bExpr opVal opClosure = (state2,Value (opVal aVal bVal) (opClosure aClosures bClosures))
+    (returnState,returnValue) = eval callerState{stCallArgs=Data.Map.fromList callArgs,stLambdaArgs=Data.Map.empty,stSplitterValues=Data.Map.empty} (outputs Data.Map.! dir)
+    (callerState,callArgs) = foldl evalCallParam (state,[]) params
+    evalCallParam (state,callArgs) param = (nextState,(fst param,val):callArgs)
+      where (nextState,val) = eval state (snd param)
+eval state (ExprNand expr1 expr2)
+  | val1 == 0 = (state1,Value (-1) Data.Map.empty)
+  | otherwise = (state2,Value (complement (val1 .&. val2)) (Data.Map.union closures1 closures2))
   where
-    (state1,Value aVal aClosures) = eval state args aExpr
-    (state2,Value bVal bClosures) = eval state1 args bExpr
+    (state1,Value val1 closures1) = eval state expr1
+    (state2,Value val2 closures2) = eval state1 expr2
+eval state (ExprSplitter splitterId expr) = maybe evalSplit ((,) state) (Data.Map.lookup splitterId (stSplitterValues state))
+  where
+    evalSplit = (state1{stSplitterValues=Data.Map.insert splitterId value1 (stSplitterValues state1)},value1)
+    (state1,value1) = eval state expr
+eval state (ExprLessThan expr1 expr2) = (state2,Value (if val1 < val2 then -1 else 0) Data.Map.empty)
+  where
+    (state1,Value val1 closures1) = eval state expr1
+    (state2,Value val2 closures2) = eval state1 expr2
+eval state (ExprShiftLeft expr1 expr2) = (state2,Value (shiftInteger val1 val2) (Data.Map.union closures1 closures2))
+  where
+    (state1,Value val1 closures1) = eval state expr1
+    (state2,Value val2 closures2) = eval state1 expr2
+eval state (ExprLambda lambdaId expr1 expr2) = (state{stNextLambda=1+stNextLambda state},Value (stNextLambda state) (Data.Map.fromList [(stNextLambda state,(lambdaId,((expr1,expr2),state)))]))
+eval state (ExprInvokeLambda1 lambda expr) = evalInvokeLambda state lambda expr fst
+eval state (ExprInvokeLambda2 lambda expr) = evalInvokeLambda state lambda expr snd
 
 shiftInteger :: Integer -> Integer -> Integer
 shiftInteger a b
@@ -607,15 +626,16 @@ shiftInteger a b
   | b < fromIntegral (minBound :: Int) = shiftInteger (shift a minBound) (b - fromIntegral (minBound :: Int))
   | otherwise = shift a (fromIntegral b)
 
-evalInvokeLambda :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> ((Integer,Integer),Value)
-evalInvokeLambda state@(stdin,nextLambda) args@(callArgs,lambdaArgs) lambda input chooseOutput = eval state2 (closureArgs,Data.Map.insert lambdaId inputVal closureLambdas) (chooseOutput closureExprs)
+evalInvokeLambda :: State -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> (State,Value)
+evalInvokeLambda state lambdaExpr inputExpr chooseOutput = (state2{stNextLambda=stNextLambda state3},value3)
   where
-    (state1,Value lambdaEnum closures) = eval state args lambda
-    (state2,inputVal) = eval state1 args input
-    (lambdaId,(closureExprs,(closureArgs,closureLambdas))) = closures Data.Map.! lambdaEnum
+    (state1,Value lambdaValue lambdaClosures) = eval state lambdaExpr
+    (state2,input) = eval state1 inputExpr
+    (lambdaId,(lambdaOutputs,lambdaState)) = lambdaClosures Data.Map.! lambdaValue
+    (state3,value3) = eval lambdaState{stNextLambda=stNextLambda state2,stLambdaArgs=Data.Map.insert lambdaId input (stLambdaArgs lambdaState)} (chooseOutput lambdaOutputs)
 
 run :: [(String,String)] -> Integer -> [Integer]
-run prog inp = map (getVal . eval (inp,1) (Data.Map.empty,Data.Map.empty)) (parse prog)
+run prog inp = map (getVal . eval State{stStdin=inp,stNextLambda=1,stCallArgs=Data.Map.empty,stLambdaArgs=Data.Map.empty,stSplitterValues=Data.Map.empty}) (parse prog)
   where getVal (_,(Value val _)) = val
 
 encodeString :: String -> Integer
