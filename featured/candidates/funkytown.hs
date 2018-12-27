@@ -1,12 +1,5 @@
 -- https://esolangs.org/wiki/Funciton
 
--- Limitations:
---   If the counter-clockwise input of cross operator is not in
---   the range (minBound,maxBound) :: (Int,Int), then the clockwise
---   (shift-left) output will be wrong.
---   With ghc on my computer, the range is a signed 64-bit int
---   (-9223372036854775808,9223372036854775807).
-
 import Data.Array(Array,array,assocs,bounds,inRange,(!))
 import Data.Bits(complement,shift,(.&.))
 import Data.Char(chr,ord)
@@ -358,7 +351,7 @@ data FlowBoxType =
   | FlowTee
   | FlowCross
   | FlowLambda (String,(Int,Int)) -- (scope,boxId)
-  | FlowEvalLambda
+  | FlowInvokeLambda
   deriving (Eq,Show)
 
 data FlowBox = FlowBox {
@@ -395,11 +388,11 @@ resolveFlows declarations = map resolveGraphFlows declarations
     initialFlows scope Box{boxType=boxType,boxId=boxId,boxContents=boxContents,boxN=n,boxS=s,boxE=e,boxW=w}
       | boxType == Box1 && Data.Map.size outs > 2 = error ("Lambda invocation with more than 2 outputs:"++show boxId)
       | boxType == Box1 && Data.Map.size outs + Data.Map.size unknowns /= 4 = error ("Lambda invocation without 4 connections:"++show boxId)
-      | boxType == Box1 = FlowBox{flowBoxId=boxId,flowBoxType=FlowEvalLambda,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Box1 = FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
       | boxType == Box2Opp = FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowIn=Data.Map.empty,flowOut=Data.Map.union outs (Data.Map.map (fmap Just) unknowns),flowUnknown=Data.Map.empty}
       | boxType == Box2Adj = FlowBox{flowBoxId=boxId,flowBoxType=callBoxType (signature scope boxContents),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
-      | boxType == Box3 && Data.Map.size outs > 2 = error ("Lambda definition with more than 2 outputs:"++show boxId)
-      | boxType == Box3 && Data.Map.size outs + Data.Map.size unknowns /= 4 = error ("Lambda definition without 4 connections:"++show boxId)
+      | boxType == Box3 && Data.Map.size outs > 2 = error ("Lambda creation with more than 2 outputs:"++show boxId)
+      | boxType == Box3 && Data.Map.size outs + Data.Map.size unknowns /= 4 = error ("Lambda creation without 4 connections:"++show boxId)
       | boxType == Box3 = FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda (scope,boxId),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
       | boxType == Box4 = FlowBox{flowBoxId=boxId,flowBoxType=FlowConst (if null boxContents then Nothing else Just (read (supportWeirdUnicodeMinus boxContents))),flowIn=Data.Map.empty,flowOut=Data.Map.union outs (Data.Map.map (fmap Just) unknowns),flowUnknown=Data.Map.empty}
       | boxType == Tee && Data.Map.size outs == 2 && Data.Set.fromList (Data.Map.keys outs) /= Data.Set.fromList (map (rotate 2) (Data.Map.keys outs)) = error ("T with adjacent outputs:"++show boxId)
@@ -422,17 +415,26 @@ resolveFlows declarations = map resolveGraphFlows declarations
         resolve1 (box@FlowBox{flowBoxId=boxId,flowBoxType=boxType,flowUnknown=unknowns}:boxes)
           | Data.Map.null unknowns = resolve1 boxes
           -- if other end of connection is determined, connection is determined
-          | otherEndDetermined (head (Data.Map.elems unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOtherEnd box (head (Data.Map.assocs unknowns))) flowBoxes)
+          | otherEndDetermined (Data.Map.elems unknowns) = iterativeResolve (Data.Map.insert boxId (updateFromOtherEnd box (head (Data.Map.assocs unknowns))) flowBoxes)
+          | otherEndDetermined (drop 1 (Data.Map.elems unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOtherEnd box (head (drop 1 (Data.Map.assocs unknowns)))) flowBoxes)
+          | otherEndDetermined (drop 2 (Data.Map.elems unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOtherEnd box (head (drop 2 (Data.Map.assocs unknowns)))) flowBoxes)
+          | otherEndDetermined (drop 3 (Data.Map.elems unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOtherEnd box (head (drop 3 (Data.Map.assocs unknowns)))) flowBoxes)
           -- any connection determines the other 2 connections for Tee
           | boxType == FlowTee && Data.Map.size unknowns < 3 = iterativeResolve (Data.Map.insert boxId (determineTeeFlow box) flowBoxes)
           -- call with 1 valid rotation is determined
           | flowIsCall box && length (validCallRotations box) == 1 = iterativeResolve (Data.Map.insert boxId (determineCall box (head (validCallRotations box))) flowBoxes)
-          -- undefined
-          -- inputs and outputs are always on opposite sides of cross, lambda definitions, and lambda invocations
-          -- Starkov construct is a flow sink (could syntactically be a flow source, but using it as such will be an error)
+          -- inputs and outputs are always on opposite sides of cross, lambda creations, and lambda invocations
+          | flowIsCross box && oppositeSideDetermined box (Data.Map.keys unknowns) = iterativeResolve (Data.Map.insert boxId (updateFromOppositeSide box (head (Data.Map.keys unknowns))) flowBoxes)
+          | flowIsCross box && oppositeSideDetermined box (drop 1 (Data.Map.keys unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOppositeSide box (head (drop 1 (Data.Map.keys unknowns)))) flowBoxes)
+          | flowIsCross box && oppositeSideDetermined box (drop 2 (Data.Map.keys unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOppositeSide box (head (drop 2 (Data.Map.keys unknowns)))) flowBoxes)
+          -- Starkov construct is a sink (could syntactically be a source, but using it as such ought to be an error)
+          | boxType == FlowTee && flowIsStarkov box = iterativeResolve (Data.Map.insert boxId (determineStarkov box) flowBoxes)
           | otherwise = resolve1 boxes
 
-        otherEndDetermined (otherDir,otherId) = Data.Map.notMember otherDir (flowUnknown (flowBoxes Data.Map.! otherId))
+        otherEndDetermined :: [(Dir,(Int,Int))] -> Bool
+        otherEndDetermined ((otherDir,otherId):_) = Data.Map.notMember otherDir (flowUnknown (flowBoxes Data.Map.! otherId))
+        otherEndDetermined [] = False
+        updateFromOtherEnd :: FlowBox -> (Dir,(Dir,(Int,Int))) -> FlowBox
         updateFromOtherEnd box@FlowBox{flowUnknown=unknowns,flowIn=ins,flowOut=outs} (dir,(otherDir,otherId))
           | Data.Map.member otherDir (flowIn (flowBoxes Data.Map.! otherId)) = box{flowUnknown=Data.Map.delete dir unknowns,flowOut=Data.Map.insert dir (otherDir,Just otherId) outs}
           | Data.Map.member otherDir (flowOut (flowBoxes Data.Map.! otherId)) = box{flowUnknown=Data.Map.delete dir unknowns,flowIn=Data.Map.insert dir (otherDir,otherId) ins}
@@ -465,7 +467,33 @@ resolveFlows declarations = map resolveGraphFlows declarations
               | any (not . (`Data.Set.member` (Data.Set.union callIns callOuts))) (unknownDirs rot ++ inDirs rot ++ outDirs rot) = False
               | otherwise = True
         determineCall :: FlowBox -> Int -> FlowBox
-        determineCall = undefined
+        determineCall box@FlowBox{flowBoxType=FlowCall _ callIns callOuts,flowUnknown=unknowns,flowIn=ins,flowOut=outs} rot
+          | Data.Set.member (rotate rot dir) callIns = box{flowUnknown=Data.Map.delete dir unknowns,flowIn=Data.Map.insert dir dest ins}
+          | Data.Set.member (rotate rot dir) callOuts = box{flowUnknown=Data.Map.delete dir unknowns,flowOut=Data.Map.insert dir (fmap Just dest) outs}
+          | otherwise = error ("wtf@"++show box)
+          where ((dir,dest):_) = Data.Map.assocs unknowns
+
+        flowIsCross :: FlowBox -> Bool
+        flowIsCross FlowBox{flowBoxType=FlowCross} = True
+        flowIsCross FlowBox{flowBoxType=FlowLambda _} = True
+        flowIsCross FlowBox{flowBoxType=FlowInvokeLambda} = True
+        flowIsCross _ = False
+        oppositeSideDetermined :: FlowBox -> [Dir] -> Bool
+        oppositeSideDetermined _ [] = False
+        oppositeSideDetermined FlowBox{flowIn=ins,flowOut=outs} (dir:_) =
+            Data.Map.member (rotate 2 dir) ins || Data.Map.member (rotate 2 dir) outs
+        updateFromOppositeSide :: FlowBox -> Dir -> FlowBox
+        updateFromOppositeSide box@FlowBox{flowUnknown=unknowns,flowIn=ins,flowOut=outs} dir
+          | Data.Map.member (rotate 2 dir) ins = box{flowUnknown=Data.Map.delete dir unknowns,flowOut=Data.Map.insert dir (fmap Just (unknowns Data.Map.! dir)) outs}
+          | Data.Map.member (rotate 2 dir) outs = box{flowUnknown=Data.Map.delete dir unknowns,flowIn=Data.Map.insert dir (unknowns Data.Map.! dir) ins}
+          | otherwise = error ("wtf@"++show box)
+
+        flowIsStarkov :: FlowBox -> Bool
+        flowIsStarkov FlowBox{flowBoxId=boxId,flowUnknown=unknowns} =
+            not (Data.Map.null (Data.Map.filter ((== boxId) . snd) unknowns))
+        determineStarkov :: FlowBox -> FlowBox
+        determineStarkov box@FlowBox{flowBoxId=boxId,flowUnknown=unknowns} = box{flowUnknown=Data.Map.delete dir unknowns,flowIn=Data.Map.fromList [(dir,dest)]}
+          where [(dir,dest)] = filter ((/= boxId) . snd . snd) (Data.Map.assocs unknowns)
 
     supportWeirdUnicodeMinus :: String -> String
     supportWeirdUnicodeMinus str
@@ -474,6 +502,9 @@ resolveFlows declarations = map resolveGraphFlows declarations
 
 flowErrors :: (Declaration,Map (Int,Int) FlowBox) -> [String]
 flowErrors (decl,flows) = [] -- undefined
+    -- input pointing at input or output pointing at output
+    -- invalid tee/cross/lambda creation/lambda invocation inputs/outputs orientations
+    -- not exactly one valid rotation for calls
 
 data Subprogram = Subprogram {
     decl :: Declaration,
@@ -496,8 +527,8 @@ data Expr =
   | ExprShiftLeft Expr Expr
   | ExprLambda LambdaId Expr Expr
   | ExprLambdaInput LambdaId
-  | ExprEvalLambda1 Expr Expr
-  | ExprEvalLambda2 Expr Expr
+  | ExprInvokeLambda1 Expr Expr
+  | ExprInvokeLambda2 Expr Expr
 
 instance Show Expr where
     show (ExprConst Nothing) = "stdin"
@@ -509,11 +540,25 @@ instance Show Expr where
     show (ExprShiftLeft a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprLambda lambdaId _ _) = "lambda" ++ show lambdaId
     show (ExprLambdaInput lambdaId) = "lambdainput" ++ show lambdaId
-    show (ExprEvalLambda1 lambda inp) = "evallambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
-    show (ExprEvalLambda2 lambda inp) = "evallambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
+    show (ExprInvokeLambda1 lambda inp) = "invokelambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
+    show (ExprInvokeLambda2 lambda inp) = "invokelambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
 
 resolve :: (Declaration,Map (Int,Int) FlowBox) -> Subprogram
-resolve declaration = undefined
+resolve (decl,flowBoxes) = Subprogram{decl=decl,outputs=Data.Map.fromList (map (fmap (exprs Data.Map.!)) subprogramOutputs)}
+  where
+    exprs :: Map ((Int,Int),Dir) Expr
+    exprs = Data.Map.fromList (concatMap makeBoxOutputExprs (Data.Map.elems flowBoxes))
+
+    makeBoxOutputExprs :: FlowBox -> [(((Int,Int),Dir),Expr)]
+    makeBoxOutputExprs = undefined
+
+    subprogramOutputs :: [(Dir,((Int,Int),Dir))]
+    subprogramOutputs = Data.Map.fold findSubprogramOutputs [] flowBoxes
+      where
+        findSubprogramOutputs FlowBox{flowBoxId=boxId,flowOut=outs} outputs =
+            Data.Map.foldWithKey (findSubprogramOutput boxId) outputs outs
+        findSubprogramOutput boxId flowDir (outputDir,Nothing) outputs = (outputDir,(boxId,flowDir)) : outputs
+        findSubprogramOutput _ _ _ outputs = outputs
 
 parse :: [(String,String)] -> [Expr]
 parse prog
@@ -542,22 +587,32 @@ eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprCall Subprogram{ou
     evalCallParam (state,results) param =
         let (nextState,val) = eval state args (snd param)
         in  (nextState,(fst param,val):results)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprNand aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> complement (a .&. b))
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLessThan aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> if a < b then -1 else 0)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprShiftLeft aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> shift a (fromIntegral b))
+eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprNand aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> complement (a .&. b)) Data.Map.union
+eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLessThan aExpr bExpr) = evalBinop state args aExpr bExpr (\ a b -> if a < b then -1 else 0) (const (const Data.Map.empty))
+eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprShiftLeft aExpr bExpr) = evalBinop state args aExpr bExpr shiftInteger Data.Map.union
 eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLambda lambdaId expr1 expr2) = ((stdin,nextLambda+1),Value nextLambda (Data.Map.fromList [(nextLambda,(lambdaId,((expr1,expr2),(callArgs,lambdaArgs))))]))
 eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprLambdaInput lambdaId) = (state,lambdaArgs Data.Map.! lambdaId)
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprEvalLambda1 lambda input) = evalLambda state args lambda input fst
-eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprEvalLambda2 lambda input) = evalLambda state args lambda input snd
+eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprInvokeLambda1 lambda input) = evalInvokeLambda state args lambda input fst
+eval state@(stdin,nextLambda) args@(callArgs,lambdaArgs) (ExprInvokeLambda2 lambda input) = evalInvokeLambda state args lambda input snd
 
-evalBinop :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> Expr -> (Integer -> Integer -> Integer) -> ((Integer,Integer),Value)
-evalBinop state@(stdin,nextLambda) args@(callArgs,lambdaArgs) aExpr bExpr op = (state2,Value (op aVal bVal) (Data.Map.union aClosures bClosures))
+evalBinop :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> Expr -> (Integer -> Integer -> Integer) -> (Map Integer Closure -> Map Integer Closure -> Map Integer Closure) -> ((Integer,Integer),Value)
+evalBinop state@(stdin,nextLambda) args@(callArgs,lambdaArgs) aExpr bExpr opVal opClosure = (state2,Value (opVal aVal bVal) (opClosure aClosures bClosures))
   where
     (state1,Value aVal aClosures) = eval state args aExpr
     (state2,Value bVal bClosures) = eval state1 args bExpr
 
-evalLambda :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> ((Integer,Integer),Value)
-evalLambda state@(stdin,nextLambda) args@(callArgs,lambdaArgs) lambda input chooseOutput = undefined
+shiftInteger :: Integer -> Integer -> Integer
+shiftInteger a b
+  | b > fromIntegral (maxBound :: Int) = shiftInteger (shift a maxBound) (b - fromIntegral (maxBound :: Int))
+  | b < fromIntegral (minBound :: Int) = shiftInteger (shift a minBound) (b - fromIntegral (minBound :: Int))
+  | otherwise = shift a (fromIntegral b)
+
+evalInvokeLambda :: (Integer,Integer) -> (Map Dir Value,Map LambdaId Value) -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> ((Integer,Integer),Value)
+evalInvokeLambda state@(stdin,nextLambda) args@(callArgs,lambdaArgs) lambda input chooseOutput = eval state2 (closureArgs,Data.Map.insert lambdaId inputVal closureLambdas) (chooseOutput closureExprs)
+  where
+    (state1,Value lambdaEnum closures) = eval state args lambda
+    (state2,inputVal) = eval state1 args input
+    (lambdaId,(closureExprs,(closureArgs,closureLambdas))) = closures Data.Map.! lambdaEnum
 
 run :: [(String,String)] -> Integer -> [Integer]
 run prog inp = map (getVal . eval (inp,1) (Data.Map.empty,Data.Map.empty)) (parse prog)
@@ -586,3 +641,10 @@ main = do
 tmp srcFiles = do
     srcs <- mapM readFile srcFiles
     return (resolveFlows (concatMap parseDeclarations (zip srcFiles srcs)))
+
+-- Example of an unresolvable function call:
+--          ┌──────┐
+-- ╓───╖  ┌─┴─╖  ┌─┴─╖
+-- ║ f ╟──┤ · ╟─ │ f ║
+-- ╙───╜  ╘═╤═╝  ╘═╤═╝
+--          └──────┘
