@@ -361,6 +361,20 @@ data FlowBox = FlowBox {
     flowOut :: Map Dir (Dir,Maybe (Int,Int))
     } deriving Show
 
+flowValidCallRotations :: FlowBox -> [Int]
+flowValidCallRotations FlowBox{flowBoxType=FlowCall _ callIns callOuts,flowUnknown=unknowns,flowIn=ins,flowOut=outs} = filter isValid [0..3]
+  where
+    unknownDirs rot = map (rotate rot) (Data.Map.keys unknowns)
+    inDirs rot = map (rotate rot) (Data.Map.keys ins)
+    outDirs rot = map (rotate rot) (Data.Map.keys outs)
+    isValid rot 
+      | any (`Data.Set.member` callOuts) (inDirs rot) = False
+      | any (`Data.Set.member` callIns) (outDirs rot) = False
+      | any (not . (`Data.Set.member` callIns)) (inDirs rot) = False
+      | any (not . (`Data.Set.member` callOuts)) (outDirs rot) = False
+      | any (not . (`Data.Set.member` (Data.Set.union callIns callOuts))) (unknownDirs rot ++ inDirs rot ++ outDirs rot) = False
+      | otherwise = True
+
 resolveFlows :: [(Declaration,Map (Int,Int) Box)] -> [(Declaration,Map (Int,Int) FlowBox)]
 resolveFlows declarations = map resolveGraphFlows declarations
   where
@@ -422,7 +436,7 @@ resolveFlows declarations = map resolveGraphFlows declarations
           -- any connection determines the other 2 connections for Tee
           | boxType == FlowTee && Data.Map.size unknowns < 3 = iterativeResolve (Data.Map.insert boxId (determineTeeFlow box) flowBoxes)
           -- call with 1 valid rotation is determined
-          | flowIsCall box && length (validCallRotations box) == 1 = iterativeResolve (Data.Map.insert boxId (determineCall box (head (validCallRotations box))) flowBoxes)
+          | flowIsCall box && length (flowValidCallRotations box) == 1 = iterativeResolve (Data.Map.insert boxId (determineCall box (head (flowValidCallRotations box))) flowBoxes)
           -- inputs and outputs are always on opposite sides of cross, lambda creations, and lambda invocations
           | flowIsCross box && oppositeSideDetermined box (Data.Map.keys unknowns) = iterativeResolve (Data.Map.insert boxId (updateFromOppositeSide box (head (Data.Map.keys unknowns))) flowBoxes)
           | flowIsCross box && oppositeSideDetermined box (drop 1 (Data.Map.keys unknowns)) = iterativeResolve (Data.Map.insert boxId (updateFromOppositeSide box (head (drop 1 (Data.Map.keys unknowns)))) flowBoxes)
@@ -453,19 +467,6 @@ resolveFlows declarations = map resolveGraphFlows declarations
         flowIsCall :: FlowBox -> Bool
         flowIsCall FlowBox{flowBoxType=FlowCall _ _ _} = True
         flowIsCall _ = False
-        validCallRotations :: FlowBox -> [Int]
-        validCallRotations FlowBox{flowBoxType=FlowCall _ callIns callOuts,flowUnknown=unknowns,flowIn=ins,flowOut=outs} = filter isValid [0..3]
-          where
-            unknownDirs rot = map (rotate rot) (Data.Map.keys unknowns)
-            inDirs rot = map (rotate rot) (Data.Map.keys ins)
-            outDirs rot = map (rotate rot) (Data.Map.keys outs)
-            isValid rot 
-              | any (`Data.Set.member` callOuts) (inDirs rot) = False
-              | any (`Data.Set.member` callIns) (outDirs rot) = False
-              | any (not . (`Data.Set.member` callIns)) (inDirs rot) = False
-              | any (not . (`Data.Set.member` callOuts)) (outDirs rot) = False
-              | any (not . (`Data.Set.member` (Data.Set.union callIns callOuts))) (unknownDirs rot ++ inDirs rot ++ outDirs rot) = False
-              | otherwise = True
         determineCall :: FlowBox -> Int -> FlowBox
         determineCall box@FlowBox{flowBoxType=FlowCall _ callIns callOuts,flowUnknown=unknowns,flowIn=ins,flowOut=outs} rot
           | Data.Set.member (rotate rot dir) callIns = box{flowUnknown=Data.Map.delete dir unknowns,flowIn=Data.Map.insert dir dest ins}
@@ -501,10 +502,52 @@ resolveFlows declarations = map resolveGraphFlows declarations
       | otherwise = str
 
 flowErrors :: (Declaration,Map (Int,Int) FlowBox) -> [String]
-flowErrors (decl,flows) = [] -- undefined
-    -- input pointing at input or output pointing at output
+flowErrors (decl@Declaration{declScope=scope},flows) = concat [concatMap unknownConnections boxes,concatMap connectionMismatches boxes,concatMap invalidOrientations boxes,concatMap ambiguousOrInvalidCalls boxes]
+  where
+    boxes :: [FlowBox]
+    boxes = Data.Map.elems flows
+
+    unknownConnections :: FlowBox -> [String]
+    unknownConnections FlowBox{flowBoxId=boxId,flowUnknown=unknown}
+      | Data.Map.null unknown = []
+      | otherwise = ["Unresolvable connection "++scope++show boxId++show (Data.Map.keys unknown)]
+
+    -- input not connected to output or output not connected to input
+    connectionMismatches :: FlowBox -> [String]
+    connectionMismatches FlowBox{flowBoxId=boxId,flowIn=ins,flowOut=outs} =
+        Data.Map.fold checkFlowIn (Data.Map.fold checkFlowOut [] outs) ins
+      where
+        checkFlowIn (dir,srcBoxId) errs
+          | Data.Map.member dir (flowOut (flows Data.Map.! srcBoxId)) = errs
+          | otherwise = ("Mismatch flow to "++scope++show boxId):errs
+        checkFlowOut (dir,Nothing) errs = errs
+        checkFlowOut (dir,Just destBoxId) errs
+          | Data.Map.member dir (flowIn (flows Data.Map.! destBoxId)) = errs
+          | otherwise = ("Mismatch flow from "++scope++show boxId):errs
+
     -- invalid tee/cross/lambda creation/lambda invocation inputs/outputs orientations
+    invalidOrientations :: FlowBox -> [String]
+    invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=ins,flowOut=outs}
+      | Data.Map.size ins == 1 && Data.Map.member (rotate 1 inDir) outs && Data.Map.member (rotate 3 inDir) outs = []
+      | Data.Map.size outs == 1 && Data.Map.member (rotate 1 outDir) ins && Data.Map.member (rotate 3 outDir) ins = []
+      | otherwise = ["Invalid flows through "++scope++show boxId]
+      where
+        inDir = head (Data.Map.keys ins)
+        outDir = head (Data.Map.keys outs)
+    invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowCross,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
+    invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda _,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
+    invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
+    invalidOrientations _ = []
+    invalid4Orientation :: (Int,Int) -> (Map Dir ((Dir,(Int,Int)))) -> (Map Dir ((Dir,Maybe (Int,Int)))) -> [String]
+    invalid4Orientation boxId ins outs
+      | Data.Map.size ins == 2 && all ((`Data.Map.member` outs) . rotate 2) (Data.Map.keys ins) = []
+      | otherwise = ["Invalid flows through "++scope++show boxId]
+
     -- not exactly one valid rotation for calls
+    ambiguousOrInvalidCalls :: FlowBox -> [String]
+    ambiguousOrInvalidCalls box@FlowBox{flowBoxId=boxId}
+      | length (flowValidCallRotations box) == 1 = []
+      | otherwise = ["Ambiguous or invalid function call "++scope++show boxId]
 
 data Subprogram = Subprogram {
     decl :: Declaration,
@@ -517,63 +560,79 @@ instance Show Subprogram where
         showOutput (dir,expr) = scope ++ maybe "" ("/" ++) name ++ ":" ++ show dir ++ "=" ++ show expr
 
 type LambdaId = (String,(Int,Int))
-type SplitterId = (String,(Int,Int))
+type ExprId = (String,(Int,Int))
 
 data Expr =
     ExprConst (Maybe Integer)
   | ExprInput Dir
-  | ExprCall Subprogram [(Dir,Expr)] Dir
+  | ExprCall ExprId Subprogram [(Dir,Expr)] Dir
   | ExprNand Expr Expr
-  | ExprSplitter SplitterId Expr
-  | ExprLessThan Expr Expr
-  | ExprShiftLeft Expr Expr
+  | ExprSplitter ExprId Expr
+  | ExprLessThan ExprId Expr Expr
+  | ExprShiftLeft ExprId Expr Expr
   | ExprLambda LambdaId Expr Expr
   | ExprLambdaInput LambdaId
-  | ExprInvokeLambda1 Expr Expr
-  | ExprInvokeLambda2 Expr Expr
+  | ExprInvokeLambda1 ExprId Expr Expr
+  | ExprInvokeLambda2 ExprId Expr Expr
 
 instance Show Expr where
     show (ExprConst Nothing) = "stdin"
     show (ExprConst (Just n)) = show n
     show (ExprInput dir) = show dir
-    show (ExprCall Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir) = "call(" ++ show scope ++ "/" ++ show name ++ ":" ++ show args ++ show dir ++ ")"
+    show (ExprCall _ Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir) = "call(" ++ show scope ++ "/" ++ show name ++ ":" ++ show args ++ show dir ++ ")"
     show (ExprNand a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
-    show (ExprSplitter splitterId expr) = "splitter(" ++ show splitterId ++ "," ++ show expr ++ ")"
-    show (ExprLessThan a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
-    show (ExprShiftLeft a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprSplitter _ expr) = "splitter(" ++ show expr ++ ")"
+    show (ExprLessThan _ a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprShiftLeft _ a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprLambda lambdaId _ _) = "lambda" ++ show lambdaId
     show (ExprLambdaInput lambdaId) = "lambdainput" ++ show lambdaId
-    show (ExprInvokeLambda1 lambda inp) = "invokelambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
-    show (ExprInvokeLambda2 lambda inp) = "invokelambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
+    show (ExprInvokeLambda1 _ lambda inp) = "invokelambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
+    show (ExprInvokeLambda2 _ lambda inp) = "invokelambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
 
-resolve :: (Declaration,Map (Int,Int) FlowBox) -> Subprogram
-resolve (decl,flowBoxes) = Subprogram{decl=decl,outputs=Data.Map.fromList (map (fmap (exprs Data.Map.!)) subprogramOutputs)}
+resolve :: ((Maybe String,String) -> Subprogram) -> (Declaration,Map (Int,Int) FlowBox) -> ((Maybe String,String),Subprogram)
+resolve lookupFunction (decl@Declaration{declScope=scope},flowBoxes) = (subprogramName,Subprogram{decl=decl,outputs=Data.Map.fromList (map (fmap (exprs Data.Map.!)) subprogramOutputs)})
   where
-    exprs :: Map ((Int,Int),Dir) Expr
+    subprogramName :: (Maybe String,String)
+    subprogramName = (if declPrivate decl then Just scope else Nothing,maybe "" id (declName decl))
+
+    exprs :: Map (Dir,(Int,Int)) Expr
     exprs = Data.Map.fromList (concatMap makeBoxOutputExprs (Data.Map.elems flowBoxes))
 
-    makeBoxOutputExprs :: FlowBox -> [(((Int,Int),Dir),Expr)]
-    makeBoxOutputExprs = undefined
+    makeBoxOutputExprs :: FlowBox -> [((Dir,(Int,Int)),Expr)]
+    makeBoxOutputExprs FlowBox{flowBoxType=FlowDecl} = []
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowConst c,flowOut=outs} = [((dir,boxId),ExprConst c) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall name callIns callOuts,flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction name) undefined (rotate rot dir)) | dir <- Data.Map.keys outs]
+      where
+        rot = head (flowValidCallRotations box)
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=ins,flowOut=outs}
+      | Data.Map.size outs == 2 = [((dir,boxId),ExprSplitter (scope,boxId) (exprs Data.Map.! head (Data.Map.elems ins))) | dir <- Data.Map.keys outs]
+      | otherwise = [((outDir,boxId),ExprNand (exprs Data.Map.! (ins Data.Map.! rotate 3 outDir)) (exprs Data.Map.! (ins Data.Map.! rotate 1 outDir)))]
+      where outDir = head (Data.Map.keys outs)
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowCross,flowIn=ins,flowOut=outs} = undefined
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda lambdaId,flowIn=ins,flowOut=outs} = undefined
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=ins,flowOut=outs} = undefined
 
-    subprogramOutputs :: [(Dir,((Int,Int),Dir))]
+    subprogramOutputs :: [(Dir,(Dir,(Int,Int)))]
     subprogramOutputs = Data.Map.fold findSubprogramOutputs [] flowBoxes
       where
         findSubprogramOutputs FlowBox{flowBoxId=boxId,flowOut=outs} outputs =
             Data.Map.foldWithKey (findSubprogramOutput boxId) outputs outs
-        findSubprogramOutput boxId flowDir (outputDir,Nothing) outputs = (outputDir,(boxId,flowDir)) : outputs
+        findSubprogramOutput boxId flowDir (outputDir,Nothing) outputs = (outputDir,(flowDir,boxId)) : outputs
         findSubprogramOutput _ _ _ outputs = outputs
 
 parse :: [(String,String)] -> [Expr]
 parse prog
   | not (null declErrs) = error (unlines declErrs)
   | not (null flowErrs) = error (unlines flowErrs)
-  | otherwise = concatMap findOutputs (map resolve flows)
+  | otherwise = concatMap findOutputs subprograms
   where
     declarations = concatMap parseDeclarations prog
     declErrs = declarationErrors (map fst declarations)
     flows = resolveFlows declarations
     flowErrs = concatMap flowErrors flows
-    findOutputs Subprogram{decl=Declaration{declName=Nothing},outputs=outputs} = Data.Map.elems outputs
+    subprograms = map (resolve lookupSubprogram) flows
+    lookupSubprogram subprogramName = Data.Map.fromList subprograms Data.Map.! subprogramName
+    findOutputs (_,Subprogram{decl=Declaration{declName=Nothing},outputs=outputs}) = Data.Map.elems outputs
     findOutputs _ = []
 
 data State = State {
@@ -581,7 +640,7 @@ data State = State {
     stNextLambda :: Integer,
     stCallArgs :: Map Dir Value,
     stLambdaArgs :: Map LambdaId Value,
-    stSplitterValues :: Map SplitterId Value
+    stExprMemos :: Map ExprId (Map Dir Value)
     }
 
 data Value = Value Integer (Map Integer Closure)
@@ -591,34 +650,34 @@ eval :: State -> Expr -> (State,Value)
 eval state (ExprConst Nothing) = (state,Value (stStdin state) Data.Map.empty)
 eval state (ExprConst (Just n)) = (state,Value n Data.Map.empty)
 eval state (ExprInput dir) = (state,stCallArgs state Data.Map.! dir)
-eval state (ExprCall Subprogram{outputs=outputs} params dir) =
-    (callerState{stNextLambda=stNextLambda returnState},returnValue)
+eval state (ExprCall exprId Subprogram{outputs=outputs} params dir) =
+    (callerState{stNextLambda=stNextLambda returnState},returnValue) -- undefined try looking up output from stExpMemos
   where
-    (returnState,returnValue) = eval callerState{stCallArgs=Data.Map.fromList callArgs,stLambdaArgs=Data.Map.empty,stSplitterValues=Data.Map.empty} (outputs Data.Map.! dir)
+    (returnState,returnValue) = eval callerState{stCallArgs=Data.Map.fromList callArgs,stLambdaArgs=Data.Map.empty,stExprMemos=Data.Map.empty} (outputs Data.Map.! dir) -- undefined -- fold state through all outputs keeping stLambdaArgs/stExprMemos, then memoize all outputs in stExprMemos in returned state
     (callerState,callArgs) = foldl evalCallParam (state,[]) params
     evalCallParam (state,callArgs) param = (nextState,(fst param,val):callArgs)
       where (nextState,val) = eval state (snd param)
 eval state (ExprNand expr1 expr2)
-  | val1 == 0 = (state1,Value (-1) Data.Map.empty)
+  | val1 == 0 = (state1,Value (-1) closures1)
   | otherwise = (state2,Value (complement (val1 .&. val2)) (Data.Map.union closures1 closures2))
   where
     (state1,Value val1 closures1) = eval state expr1
     (state2,Value val2 closures2) = eval state1 expr2
-eval state (ExprSplitter splitterId expr) = maybe evalSplit ((,) state) (Data.Map.lookup splitterId (stSplitterValues state))
+eval state (ExprSplitter exprId expr) = maybe evalSplit ((,) state . (Data.Map.! N)) (Data.Map.lookup exprId (stExprMemos state))
   where
-    evalSplit = (state1{stSplitterValues=Data.Map.insert splitterId value1 (stSplitterValues state1)},value1)
+    evalSplit = (state1{stExprMemos=Data.Map.insert exprId (Data.Map.fromList [(N,value1)]) (stExprMemos state1)},value1)
     (state1,value1) = eval state expr
-eval state (ExprLessThan expr1 expr2) = (state2,Value (if val1 < val2 then -1 else 0) Data.Map.empty)
+eval state (ExprLessThan exprId expr1 expr2) = (state2,Value (if val1 < val2 then -1 else 0) Data.Map.empty) -- undefined try getting inputs from stExprMemos, otherwise save eval of inputs into stExprMemos
   where
     (state1,Value val1 closures1) = eval state expr1
     (state2,Value val2 closures2) = eval state1 expr2
-eval state (ExprShiftLeft expr1 expr2) = (state2,Value (shiftInteger val1 val2) (Data.Map.union closures1 closures2))
+eval state (ExprShiftLeft exprId expr1 expr2) = (state2,Value (shiftInteger val1 val2) (Data.Map.union closures1 closures2)) -- undefined try getting inputs from stExprMemos, otherwise save eval of inputs into stExprMemos
   where
     (state1,Value val1 closures1) = eval state expr1
     (state2,Value val2 closures2) = eval state1 expr2
 eval state (ExprLambda lambdaId expr1 expr2) = (state{stNextLambda=1+stNextLambda state},Value (stNextLambda state) (Data.Map.fromList [(stNextLambda state,(lambdaId,((expr1,expr2),state)))]))
-eval state (ExprInvokeLambda1 lambda expr) = evalInvokeLambda state lambda expr fst
-eval state (ExprInvokeLambda2 lambda expr) = evalInvokeLambda state lambda expr snd
+eval state (ExprInvokeLambda1 exprId lambda expr) = evalInvokeLambda exprId state lambda expr fst
+eval state (ExprInvokeLambda2 exprId lambda expr) = evalInvokeLambda exprId state lambda expr snd
 
 shiftInteger :: Integer -> Integer -> Integer
 shiftInteger a b
@@ -626,8 +685,8 @@ shiftInteger a b
   | b < fromIntegral (minBound :: Int) = shiftInteger (shift a minBound) (b - fromIntegral (minBound :: Int))
   | otherwise = shift a (fromIntegral b)
 
-evalInvokeLambda :: State -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> (State,Value)
-evalInvokeLambda state lambdaExpr inputExpr chooseOutput = (state2{stNextLambda=stNextLambda state3},value3)
+evalInvokeLambda :: ExprId -> State -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> (State,Value)
+evalInvokeLambda exprId state lambdaExpr inputExpr chooseOutput = (state2{stNextLambda=stNextLambda state3},value3) -- undefined try getting outputs from stExprMemos, otherwise eval both outputs and save them in stExprMemos
   where
     (state1,Value lambdaValue lambdaClosures) = eval state lambdaExpr
     (state2,input) = eval state1 inputExpr
@@ -635,7 +694,7 @@ evalInvokeLambda state lambdaExpr inputExpr chooseOutput = (state2{stNextLambda=
     (state3,value3) = eval lambdaState{stNextLambda=stNextLambda state2,stLambdaArgs=Data.Map.insert lambdaId input (stLambdaArgs lambdaState)} (chooseOutput lambdaOutputs)
 
 run :: [(String,String)] -> Integer -> [Integer]
-run prog inp = map (getVal . eval State{stStdin=inp,stNextLambda=1,stCallArgs=Data.Map.empty,stLambdaArgs=Data.Map.empty,stSplitterValues=Data.Map.empty}) (parse prog)
+run prog inp = map (getVal . eval State{stStdin=inp,stNextLambda=1,stCallArgs=Data.Map.empty,stLambdaArgs=Data.Map.empty,stExprMemos=Data.Map.empty}) (parse prog)
   where getVal (_,(Value val _)) = val
 
 encodeString :: String -> Integer
