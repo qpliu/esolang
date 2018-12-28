@@ -545,9 +545,10 @@ flowErrors (decl@Declaration{declScope=scope},flows) = concat [concatMap unknown
 
     -- not exactly one valid rotation for calls
     ambiguousOrInvalidCalls :: FlowBox -> [String]
-    ambiguousOrInvalidCalls box@FlowBox{flowBoxId=boxId}
+    ambiguousOrInvalidCalls box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall _ _ _}
       | length (flowValidCallRotations box) == 1 = []
       | otherwise = ["Ambiguous or invalid function call "++scope++show boxId]
+    ambiguousOrInvalidCalls _ = []
 
 data Subprogram = Subprogram {
     decl :: Declaration,
@@ -599,18 +600,25 @@ resolve lookupFunction (decl@Declaration{declScope=scope},flowBoxes) = (subprogr
     exprs = Data.Map.fromList (concatMap makeBoxOutputExprs (Data.Map.elems flowBoxes))
 
     makeBoxOutputExprs :: FlowBox -> [((Dir,(Int,Int)),Expr)]
-    makeBoxOutputExprs FlowBox{flowBoxType=FlowDecl} = []
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowOut=outs} = [((dir,boxId),ExprInput (rotate 2 dir)) | dir <- Data.Map.keys outs]
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowConst c,flowOut=outs} = [((dir,boxId),ExprConst c) | dir <- Data.Map.keys outs]
-    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall name callIns callOuts,flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction name) undefined (rotate rot dir)) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall name callIns callOuts,flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction name) (map makeParam (Data.Set.elems callIns)) (rotate rot dir)) | dir <- Data.Map.keys outs]
       where
         rot = head (flowValidCallRotations box)
+        makeParam paramDir = (paramDir,exprs Data.Map.! (ins Data.Map.! rotate (rot*3) paramDir))
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=ins,flowOut=outs}
       | Data.Map.size outs == 2 = [((dir,boxId),ExprSplitter (scope,boxId) (exprs Data.Map.! head (Data.Map.elems ins))) | dir <- Data.Map.keys outs]
       | otherwise = [((outDir,boxId),ExprNand (exprs Data.Map.! (ins Data.Map.! rotate 3 outDir)) (exprs Data.Map.! (ins Data.Map.! rotate 1 outDir)))]
       where outDir = head (Data.Map.keys outs)
-    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowCross,flowIn=ins,flowOut=outs} = undefined
-    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda lambdaId,flowIn=ins,flowOut=outs} = undefined
-    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=ins,flowOut=outs} = undefined
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCross} =
+        [((output1Dir,boxId),ExprShiftLeft (scope,boxId) input1 input2),((output2Dir,boxId),ExprLessThan (scope,boxId) input1 input2)]
+      where (input1,input2,output1Dir,output2Dir) = box4Connections box
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda lambdaId} =
+        [((output1Dir,boxId),ExprLambda lambdaId input1 input2),((output2Dir,boxId),ExprLambdaInput lambdaId)]
+      where (input1,input2,output1Dir,output2Dir) = box4Connections box
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=ins,flowOut=outs} =
+        [((output1Dir,boxId),ExprInvokeLambda1 (scope,boxId) input1 input2),((output2Dir,boxId),ExprInvokeLambda2 (scope,boxId) input1 input2)]
+      where (input1,input2,output1Dir,output2Dir) = box4Connections box
 
     subprogramOutputs :: [(Dir,(Dir,(Int,Int)))]
     subprogramOutputs = Data.Map.fold findSubprogramOutputs [] flowBoxes
@@ -619,6 +627,15 @@ resolve lookupFunction (decl@Declaration{declScope=scope},flowBoxes) = (subprogr
             Data.Map.foldWithKey (findSubprogramOutput boxId) outputs outs
         findSubprogramOutput boxId flowDir (outputDir,Nothing) outputs = (outputDir,(flowDir,boxId)) : outputs
         findSubprogramOutput _ _ _ outputs = outputs
+
+    box4Connections :: FlowBox -> (Expr,Expr,Dir,Dir) -- (input1,input2,output1Dir,output2Dir)
+    box4Connections box@FlowBox{flowIn=ins}
+      | all (`Data.Map.member` ins) [N,W] = (getInExpr N,getInExpr W,S,E)
+      | all (`Data.Map.member` ins) [W,S] = (getInExpr W,getInExpr S,E,N)
+      | all (`Data.Map.member` ins) [S,E] = (getInExpr S,getInExpr E,N,W)
+      | all (`Data.Map.member` ins) [E,N] = (getInExpr E,getInExpr N,W,S)
+      | otherwise = error ("wtf@"++show box)
+      where getInExpr dir = exprs Data.Map.! (ins Data.Map.! dir)
 
 parse :: [(String,String)] -> [Expr]
 parse prog
@@ -708,8 +725,13 @@ decodeString n
   | n == 0 || n == -1 = ""
   | otherwise = chr (fromIntegral (n `mod` 2097152)) : decodeString (n `div` 2097152)
 
-funkytown :: String -> IO ()
-funkytown prog = interact (decodeString . head . run [("",prog)] . encodeString)
+funkytown :: [String] -> String -> IO [String]
+funkytown srcFiles input = do
+    srcs <- mapM readFile srcFiles
+    return (map decodeString (run (zip srcFiles srcs) (encodeString input)))
+
+funciton :: String -> IO ()
+funciton prog = interact (decodeString . head . run [("",prog)] . encodeString)
 
 main :: IO ()
 main = do
@@ -719,7 +741,10 @@ main = do
 
 tmp srcFiles = do
     srcs <- mapM readFile srcFiles
-    return (resolveFlows (concatMap parseDeclarations (zip srcFiles srcs)))
+    let flows = resolveFlows (concatMap parseDeclarations (zip srcFiles srcs))
+        subprograms = map (resolve lookupSubprogram) flows
+        lookupSubprogram subprogramName = Data.Map.fromList subprograms Data.Map.! subprogramName
+    putStr (unlines (map (take 20000 . show) subprograms))
 
 -- Example of an unresolvable function call:
 --          ┌──────┐
