@@ -286,7 +286,7 @@ data Declaration = Declaration {
     declPrivate :: Bool,
     declInputs :: Set Dir,
     declOutputs :: Set Dir
-    } deriving Show
+    } deriving (Eq,Show)
 
 parseDeclarations :: (String,String) -> [(Declaration,Map (Int,Int) Box)]
 parseDeclarations (scope,src) =
@@ -347,7 +347,7 @@ declarationErrors declarations = fst (foldl check ([],Data.Set.empty) declaratio
 data FlowBoxType =
     FlowDecl
   | FlowConst (Maybe Integer)
-  | FlowCall (Maybe String,String) (Set Dir) (Set Dir) -- name inputs outputs
+  | FlowCall Declaration
   | FlowTee
   | FlowCross
   | FlowLambda (String,(Int,Int)) -- (scope,boxId)
@@ -362,7 +362,7 @@ data FlowBox = FlowBox {
     } deriving Show
 
 flowValidCallRotations :: FlowBox -> [Int]
-flowValidCallRotations FlowBox{flowBoxType=FlowCall _ callIns callOuts,flowUnknown=unknowns,flowIn=ins,flowOut=outs} = filter isValid [0..3]
+flowValidCallRotations FlowBox{flowBoxType=FlowCall Declaration{declInputs=callIns,declOutputs=callOuts},flowUnknown=unknowns,flowIn=ins,flowOut=outs} = filter isValid [0..3]
   where
     unknownDirs rot = map (rotate rot) (Data.Map.keys unknowns)
     inDirs rot = map (rotate rot) (Data.Map.keys ins)
@@ -391,10 +391,6 @@ resolveFlows declarations = map resolveGraphFlows declarations
     signature scope name =
         maybe (maybe (error ("Undefined function:" ++ name)) id (Data.Map.lookup (Nothing,name) signatures)) id (Data.Map.lookup (Just scope,name) signatures)
 
-    callBoxType :: Declaration -> FlowBoxType
-    callBoxType Declaration{declName=Just name,declScope=scope,declPrivate=private,declInputs=inputs,declOutputs=outputs} =
-       FlowCall (if private then Just scope else Nothing,name) inputs outputs
-
     resolveGraphFlows :: (Declaration,Map (Int,Int) Box) -> (Declaration,Map (Int,Int) FlowBox)
     resolveGraphFlows (decl@Declaration{declScope=scope},boxes) = (decl,iterativeResolve (Data.Map.map (initialFlows scope) boxes))
 
@@ -404,7 +400,7 @@ resolveFlows declarations = map resolveGraphFlows declarations
       | boxType == Box1 && Data.Map.size outs + Data.Map.size unknowns /= 4 = error ("Lambda invocation without 4 connections:"++show boxId)
       | boxType == Box1 = FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
       | boxType == Box2Opp = FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowIn=Data.Map.empty,flowOut=Data.Map.union outs (Data.Map.map (fmap Just) unknowns),flowUnknown=Data.Map.empty}
-      | boxType == Box2Adj = FlowBox{flowBoxId=boxId,flowBoxType=callBoxType (signature scope boxContents),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Box2Adj = FlowBox{flowBoxId=boxId,flowBoxType=FlowCall (signature scope boxContents),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
       | boxType == Box3 && Data.Map.size outs > 2 = error ("Lambda creation with more than 2 outputs:"++show boxId)
       | boxType == Box3 && Data.Map.size outs + Data.Map.size unknowns /= 4 = error ("Lambda creation without 4 connections:"++show boxId)
       | boxType == Box3 = FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda (scope,boxId),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
@@ -465,10 +461,10 @@ resolveFlows declarations = map resolveGraphFlows declarations
           where (dir,dest) = head (Data.Map.assocs unknowns)
 
         flowIsCall :: FlowBox -> Bool
-        flowIsCall FlowBox{flowBoxType=FlowCall _ _ _} = True
+        flowIsCall FlowBox{flowBoxType=FlowCall _} = True
         flowIsCall _ = False
         determineCall :: FlowBox -> Int -> FlowBox
-        determineCall box@FlowBox{flowBoxType=FlowCall _ callIns callOuts,flowUnknown=unknowns,flowIn=ins,flowOut=outs} rot
+        determineCall box@FlowBox{flowBoxType=FlowCall Declaration{declInputs=callIns,declOutputs=callOuts},flowUnknown=unknowns,flowIn=ins,flowOut=outs} rot
           | Data.Set.member (rotate rot dir) callIns = box{flowUnknown=Data.Map.delete dir unknowns,flowIn=Data.Map.insert dir dest ins}
           | Data.Set.member (rotate rot dir) callOuts = box{flowUnknown=Data.Map.delete dir unknowns,flowOut=Data.Map.insert dir (fmap Just dest) outs}
           | otherwise = error ("wtf@"++show box)
@@ -545,7 +541,7 @@ flowErrors (decl@Declaration{declScope=scope},flows) = concat [concatMap unknown
 
     -- not exactly one valid rotation for calls
     ambiguousOrInvalidCalls :: FlowBox -> [String]
-    ambiguousOrInvalidCalls box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall _ _ _}
+    ambiguousOrInvalidCalls box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall _}
       | length (flowValidCallRotations box) == 1 = []
       | otherwise = ["Ambiguous or invalid function call "++scope++show boxId]
     ambiguousOrInvalidCalls _ = []
@@ -602,7 +598,7 @@ resolve lookupFunction (decl@Declaration{declScope=scope},flowBoxes) = (subprogr
     makeBoxOutputExprs :: FlowBox -> [((Dir,(Int,Int)),Expr)]
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowOut=outs} = [((dir,boxId),ExprInput (rotate 2 dir)) | dir <- Data.Map.keys outs]
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowConst c,flowOut=outs} = [((dir,boxId),ExprConst c) | dir <- Data.Map.keys outs]
-    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall name callIns callOuts,flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction name) (map makeParam (Data.Set.elems callIns)) (rotate rot dir) rot) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall callee@Declaration{declInputs=callIns,declOutputs=callOuts},flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction (if declPrivate callee then Just (declScope callee) else Nothing,maybe "" id (declName callee))) (map makeParam (Data.Set.elems callIns)) (rotate rot dir) rot) | dir <- Data.Map.keys outs]
       where
         rot = head (flowValidCallRotations box)
         makeParam paramDir = (paramDir,exprs Data.Map.! (ins Data.Map.! rotate (rot*3) paramDir))
