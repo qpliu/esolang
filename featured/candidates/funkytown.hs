@@ -566,7 +566,7 @@ type ExprId = (String,(Int,Int))
 data Expr =
     ExprConst (Maybe Integer)
   | ExprInput Dir
-  | ExprCall ExprId Subprogram [(Dir,Expr)] Dir
+  | ExprCall ExprId Subprogram [(Dir,Expr)] Dir Int
   | ExprNand Expr Expr
   | ExprSplitter ExprId Expr
   | ExprLessThan ExprId Expr Expr
@@ -580,7 +580,7 @@ instance Show Expr where
     show (ExprConst Nothing) = "stdin"
     show (ExprConst (Just n)) = show n
     show (ExprInput dir) = show dir
-    show (ExprCall _ Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir) = "call(" ++ show scope ++ "/" ++ show name ++ ":" ++ show args ++ show dir ++ ")"
+    show (ExprCall exprId Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir rot) = "call " ++ name ++ "," ++ show dir ++ show rot ++ show (snd exprId) ++ show args
     show (ExprNand a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprSplitter _ expr) = "splitter(" ++ show expr ++ ")"
     show (ExprLessThan _ a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
@@ -602,7 +602,7 @@ resolve lookupFunction (decl@Declaration{declScope=scope},flowBoxes) = (subprogr
     makeBoxOutputExprs :: FlowBox -> [((Dir,(Int,Int)),Expr)]
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowOut=outs} = [((dir,boxId),ExprInput (rotate 2 dir)) | dir <- Data.Map.keys outs]
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowConst c,flowOut=outs} = [((dir,boxId),ExprConst c) | dir <- Data.Map.keys outs]
-    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall name callIns callOuts,flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction name) (map makeParam (Data.Set.elems callIns)) (rotate rot dir)) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall name callIns callOuts,flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction name) (map makeParam (Data.Set.elems callIns)) (rotate rot dir) rot) | dir <- Data.Map.keys outs]
       where
         rot = head (flowValidCallRotations box)
         makeParam paramDir = (paramDir,exprs Data.Map.! (ins Data.Map.! rotate (rot*3) paramDir))
@@ -667,13 +667,15 @@ eval :: State -> Expr -> (State,Value)
 eval state (ExprConst Nothing) = (state,Value (stStdin state) Data.Map.empty)
 eval state (ExprConst (Just n)) = (state,Value n Data.Map.empty)
 eval state (ExprInput dir) = (state,stCallArgs state Data.Map.! dir)
-eval state (ExprCall exprId Subprogram{outputs=outputs} params dir) =
-    (callerState{stNextLambda=stNextLambda returnState},returnValue) -- undefined try looking up output from stExpMemos
+eval state@State{stExprMemos=memos} (ExprCall exprId Subprogram{outputs=outputs} params dir _)
+  | exprId `Data.Map.member` memos = (state,(memos Data.Map.! exprId) Data.Map.! dir)
+  | otherwise = (callerState{stNextLambda=stNextLambda returnState,stExprMemos=Data.Map.insert exprId returnValues (stExprMemos callerState)},returnValues Data.Map.! dir)
   where
-    (returnState,returnValue) = eval callerState{stCallArgs=Data.Map.fromList callArgs,stLambdaArgs=Data.Map.empty,stExprMemos=Data.Map.empty} (outputs Data.Map.! dir) -- undefined -- fold state through all outputs keeping stLambdaArgs/stExprMemos, then memoize all outputs in stExprMemos in returned state
-    (callerState,callArgs) = foldl evalCallParam (state,[]) params
-    evalCallParam (state,callArgs) param = (nextState,(fst param,val):callArgs)
-      where (nextState,val) = eval state (snd param)
+    (callerState,callArgs) = foldl evalCall (state,[]) params
+    (returnState,returnVals) = foldl evalCall (callerState{stCallArgs=Data.Map.fromList callArgs,stLambdaArgs=Data.Map.empty,stExprMemos=Data.Map.empty},[]) (Data.Map.assocs outputs)
+    evalCall (state,values) (dir,expr) = (nextState,(dir,val):values)
+      where (nextState,val) = eval state expr
+    returnValues = Data.Map.fromList returnVals
 eval state (ExprNand expr1 expr2)
   | val1 == 0 = (state1,Value (-1) closures1)
   | otherwise = (state2,Value (complement (val1 .&. val2)) (Data.Map.union closures1 closures2))
@@ -684,14 +686,20 @@ eval state (ExprSplitter exprId expr) = maybe evalSplit ((,) state . (Data.Map.!
   where
     evalSplit = (state1{stExprMemos=Data.Map.insert exprId (Data.Map.fromList [(N,value1)]) (stExprMemos state1)},value1)
     (state1,value1) = eval state expr
-eval state (ExprLessThan exprId expr1 expr2) = (state2,Value (if val1 < val2 then -1 else 0) Data.Map.empty) -- undefined try getting inputs from stExprMemos, otherwise save eval of inputs into stExprMemos
+eval state@State{stExprMemos=memos} (ExprLessThan exprId expr1 expr2)
+  | exprId `Data.Map.member` memos = (state,evalLt ((memos Data.Map.! exprId) Data.Map.! N) ((memos Data.Map.! exprId) Data.Map.! W))
+  | otherwise = (state2{stExprMemos=Data.Map.insert exprId (Data.Map.fromList [(N,value1),(W,value2)]) (stExprMemos state2)},evalLt value1 value2)
   where
-    (state1,Value val1 closures1) = eval state expr1
-    (state2,Value val2 closures2) = eval state1 expr2
-eval state (ExprShiftLeft exprId expr1 expr2) = (state2,Value (shiftInteger val1 val2) (Data.Map.union closures1 closures2)) -- undefined try getting inputs from stExprMemos, otherwise save eval of inputs into stExprMemos
+    evalLt (Value val1 _) (Value val2 _) = Value (if val1 < val2 then -1 else 0) Data.Map.empty
+    (state1,value1) = eval state expr1
+    (state2,value2) = eval state1 expr2
+eval state@State{stExprMemos=memos} (ExprShiftLeft exprId expr1 expr2)
+  | exprId `Data.Map.member` memos = (state,evalShift ((memos Data.Map.! exprId) Data.Map.! N) ((memos Data.Map.! exprId) Data.Map.! W))
+  | otherwise = (state2{stExprMemos=Data.Map.insert exprId (Data.Map.fromList [(N,value1),(W,value2)]) (stExprMemos state2)},evalShift value1 value2)
   where
-    (state1,Value val1 closures1) = eval state expr1
-    (state2,Value val2 closures2) = eval state1 expr2
+    evalShift (Value val1 closures1) (Value val2 closures2) = Value (shiftInteger val1 val2) (Data.Map.union closures1 closures2)
+    (state1,value1) = eval state expr1
+    (state2,value2) = eval state1 expr2
 eval state (ExprLambda lambdaId expr1 expr2) = (state{stNextLambda=1+stNextLambda state},Value (stNextLambda state) (Data.Map.fromList [(stNextLambda state,(lambdaId,((expr1,expr2),state)))]))
 eval state (ExprInvokeLambda1 exprId lambda expr) = evalInvokeLambda exprId state lambda expr fst
 eval state (ExprInvokeLambda2 exprId lambda expr) = evalInvokeLambda exprId state lambda expr snd
@@ -702,13 +710,16 @@ shiftInteger a b
   | b < fromIntegral (minBound :: Int) = shiftInteger (shift a minBound) (b - fromIntegral (minBound :: Int))
   | otherwise = shift a (fromIntegral b)
 
-evalInvokeLambda :: ExprId -> State -> Expr -> Expr -> ((Expr,Expr) -> Expr) -> (State,Value)
-evalInvokeLambda exprId state lambdaExpr inputExpr chooseOutput = (state2{stNextLambda=stNextLambda state3},value3) -- undefined try getting outputs from stExprMemos, otherwise eval both outputs and save them in stExprMemos
+evalInvokeLambda :: ExprId -> State -> Expr -> Expr -> ((Value,Value) -> Value) -> (State,Value)
+evalInvokeLambda exprId state@State{stExprMemos=memos} lambdaExpr inputExpr chooseOutput-- = (state2{stNextLambda=stNextLambda state3},value3)
+  | exprId `Data.Map.member` memos = (state,chooseOutput ((memos Data.Map.! exprId) Data.Map.! S,(memos Data.Map.! exprId) Data.Map.! E))
+  | otherwise = (state2{stNextLambda=stNextLambda state4,stExprMemos=Data.Map.insert exprId (Data.Map.fromList [(S,output1Value),(E,output2Value)]) (stExprMemos state2)},chooseOutput (output1Value,output2Value))
   where
     (state1,Value lambdaValue lambdaClosures) = eval state lambdaExpr
     (state2,input) = eval state1 inputExpr
-    (lambdaId,(lambdaOutputs,lambdaState)) = lambdaClosures Data.Map.! lambdaValue
-    (state3,value3) = eval lambdaState{stNextLambda=stNextLambda state2,stLambdaArgs=Data.Map.insert lambdaId input (stLambdaArgs lambdaState)} (chooseOutput lambdaOutputs)
+    (lambdaId,((output1Expr,output2Expr),lambdaState)) = lambdaClosures Data.Map.! lambdaValue
+    (state3,output1Value) = eval lambdaState{stNextLambda=stNextLambda state2,stLambdaArgs=Data.Map.insert lambdaId input (stLambdaArgs lambdaState)} output1Expr
+    (state4,output2Value) = eval state3 output2Expr
 
 run :: [(String,String)] -> Integer -> [Integer]
 run prog inp = map (getVal . eval State{stStdin=inp,stNextLambda=1,stCallArgs=Data.Map.empty,stLambdaArgs=Data.Map.empty,stExprMemos=Data.Map.empty}) (parse prog)
@@ -724,6 +735,11 @@ decodeString :: Integer -> String
 decodeString n
   | n == 0 || n == -1 = ""
   | otherwise = chr (fromIntegral (n `mod` 2097152)) : decodeString (n `div` 2097152)
+
+funky :: [String] -> Integer -> IO [Integer]
+funky srcFiles input = do
+    srcs <- mapM readFile srcFiles
+    return (run (zip srcFiles srcs) input)
 
 funkytown :: [String] -> String -> IO [String]
 funkytown srcFiles input = do
@@ -744,7 +760,7 @@ tmp srcFiles = do
     let flows = resolveFlows (concatMap parseDeclarations (zip srcFiles srcs))
         subprograms = map (resolve lookupSubprogram) flows
         lookupSubprogram subprogramName = Data.Map.fromList subprograms Data.Map.! subprogramName
-    putStr (unlines (map (take 20000 . show) subprograms))
+    putStr (unlines (map (take 5000 . show . snd) subprograms))
 
 -- Example of an unresolvable function call:
 --          ┌──────┐
