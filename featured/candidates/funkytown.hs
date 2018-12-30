@@ -286,7 +286,7 @@ data Declaration = Declaration {
     declPrivate :: Bool,
     declInputs :: Set Dir,
     declOutputs :: Set Dir
-    } deriving (Eq,Show)
+    } deriving (Eq,Ord,Show)
 
 parseDeclarations :: (String,String) -> [(Declaration,Map (Int,Int) Box)]
 parseDeclarations (scope,src) =
@@ -350,7 +350,7 @@ data FlowBoxType =
   | FlowCall Declaration
   | FlowTee
   | FlowCross
-  | FlowLambda (String,(Int,Int)) -- (scope,boxId)
+  | FlowLambda
   | FlowInvokeLambda
   deriving (Eq,Show)
 
@@ -403,7 +403,7 @@ resolveFlows declarations = map resolveGraphFlows declarations
       | boxType == Box2Adj = FlowBox{flowBoxId=boxId,flowBoxType=FlowCall (signature scope boxContents),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
       | boxType == Box3 && Data.Map.size outs > 2 = error ("Lambda creation with more than 2 outputs:"++show boxId)
       | boxType == Box3 && Data.Map.size outs + Data.Map.size unknowns /= 4 = error ("Lambda creation without 4 connections:"++show boxId)
-      | boxType == Box3 = FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda (scope,boxId),flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
+      | boxType == Box3 = FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
       | boxType == Box4 = FlowBox{flowBoxId=boxId,flowBoxType=FlowConst (if null boxContents then Nothing else Just (read (supportWeirdUnicodeMinus boxContents))),flowIn=Data.Map.empty,flowOut=Data.Map.union outs (Data.Map.map (fmap Just) unknowns),flowUnknown=Data.Map.empty}
       | boxType == Tee && Data.Map.size outs == 2 && Data.Set.fromList (Data.Map.keys outs) /= Data.Set.fromList (map (rotate 2) (Data.Map.keys outs)) = error ("T with adjacent outputs:"++show boxId)
       | boxType == Tee = FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=Data.Map.empty,flowOut=outs,flowUnknown=unknowns}
@@ -472,7 +472,7 @@ resolveFlows declarations = map resolveGraphFlows declarations
 
         flowIsCross :: FlowBox -> Bool
         flowIsCross FlowBox{flowBoxType=FlowCross} = True
-        flowIsCross FlowBox{flowBoxType=FlowLambda _} = True
+        flowIsCross FlowBox{flowBoxType=FlowLambda} = True
         flowIsCross FlowBox{flowBoxType=FlowInvokeLambda} = True
         flowIsCross _ = False
         oppositeSideDetermined :: FlowBox -> [Dir] -> Bool
@@ -531,7 +531,7 @@ flowErrors (decl@Declaration{declScope=scope},flows) = concat [concatMap unknown
         inDir = head (Data.Map.keys ins)
         outDir = head (Data.Map.keys outs)
     invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowCross,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
-    invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda _,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
+    invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
     invalidOrientations FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=ins,flowOut=outs} = invalid4Orientation boxId ins outs
     invalidOrientations _ = []
     invalid4Orientation :: (Int,Int) -> (Map Dir ((Dir,(Int,Int)))) -> (Map Dir ((Dir,Maybe (Int,Int)))) -> [String]
@@ -546,108 +546,122 @@ flowErrors (decl@Declaration{declScope=scope},flows) = concat [concatMap unknown
       | otherwise = ["Ambiguous or invalid function call "++scope++show boxId]
     ambiguousOrInvalidCalls _ = []
 
+type ElementId = [(String,(Int,Int))]
+type ExprId = (Dir,ElementId)
+
 data Subprogram = Subprogram {
     decl :: Declaration,
-    outputs :: Map Dir Expr
+    outputs :: Map Dir ExprId,
+    exprs :: Map ExprId Expr
     }
 
 instance Show Subprogram where
-    show Subprogram{decl=Declaration{declName=name,declScope=scope},outputs=outputs} = unlines (map showOutput (Data.Map.assocs outputs))
-      where
-        showOutput (dir,expr) = scope ++ maybe "" ("/" ++) name ++ ":" ++ show dir ++ "=" ++ show expr
-
-type LambdaId = (String,(Int,Int))
-type ExprId = (String,(Int,Int))
+    show Subprogram{decl=Declaration{declName=name,declScope=scope,declInputs=inputs},outputs=outputs,exprs=exprs} = unlines ([maybe ("prog " ++ scope) ((++ show (Data.Set.elems inputs)) . ("fn " ++)) name ++ " {"] ++ map showItem (Data.Map.assocs outputs) ++ map showItem (Data.Map.assocs exprs) ++ ["}"])
+      where showItem (a,b) = "  " ++ show a ++ "=" ++ show b
 
 data Expr =
     ExprConst (Maybe Integer)
   | ExprInput Dir
-  | ExprCall ExprId Subprogram [(Dir,Expr)] Dir Int
-  | ExprNand Expr Expr
-  | ExprSplitter ExprId Expr
-  | ExprLessThan ExprId Expr Expr
-  | ExprShiftLeft ExprId Expr Expr
-  | ExprLambda LambdaId Expr Expr
-  | ExprLambdaInput LambdaId
-  | ExprInvokeLambda1 ExprId Expr Expr
-  | ExprInvokeLambda2 ExprId Expr Expr
+  | ExprCall ElementId Declaration (Map Dir ExprId) Dir Int
+  | ExprNand ElementId ExprId ExprId
+  | ExprExpr ElementId ExprId
+  | ExprLessThan ElementId ExprId ExprId
+  | ExprShiftLeft ElementId ExprId ExprId
+  | ExprLambda ElementId ExprId ExprId
+  | ExprLambdaInput ElementId
+  | ExprInvokeLambda1 ElementId ExprId ExprId
+  | ExprInvokeLambda2 ElementId ExprId ExprId
 
 instance Show Expr where
     show (ExprConst Nothing) = "stdin"
     show (ExprConst (Just n)) = show n
     show (ExprInput dir) = show dir
-    show (ExprCall exprId Subprogram{decl=Declaration{declName=Just name,declScope=scope}} args dir rot) = "call " ++ name ++ "," ++ show dir ++ show rot ++ show (snd exprId) ++ show args
-    show (ExprNand a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
-    show (ExprSplitter _ expr) = "splitter(" ++ show expr ++ ")"
+    show (ExprCall _ Declaration{declName=Just name} args dir rot) = "call " ++ show dir ++ show rot ++ " " ++ name ++ show (Data.Map.assocs args)
+    show (ExprNand _ a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
+    show (ExprExpr _ a) = "expr(" ++ show a ++ ")"
     show (ExprLessThan _ a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprShiftLeft _ a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
-    show (ExprLambda lambdaId _ _) = "lambda" ++ show lambdaId
+    show (ExprLambda lambdaId out1 out2) = "lambda" ++ show lambdaId ++ "(out1=" ++ show out1 ++ ",out2=" ++ show out2 ++ ")"
     show (ExprLambdaInput lambdaId) = "lambdainput" ++ show lambdaId
     show (ExprInvokeLambda1 _ lambda inp) = "invokelambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
     show (ExprInvokeLambda2 _ lambda inp) = "invokelambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
 
-resolve :: ((Maybe String,String) -> Subprogram) -> (Declaration,Map (Int,Int) FlowBox) -> ((Maybe String,String),Subprogram)
-resolve lookupFunction (decl@Declaration{declScope=scope},flowBoxes) = (subprogramName,Subprogram{decl=decl,outputs=Data.Map.fromList (map (fmap (exprs Data.Map.!)) subprogramOutputs)})
+resolve :: (Declaration,Map (Int,Int) FlowBox) -> Subprogram
+resolve (decl@Declaration{declScope=scope},flowBoxes) = Subprogram{decl=decl,outputs=Data.Map.fromList subprogramOutputs,exprs=exprs}
   where
     subprogramName :: (Maybe String,String)
     subprogramName = (if declPrivate decl then Just scope else Nothing,maybe "" id (declName decl))
 
-    exprs :: Map (Dir,(Int,Int)) Expr
+    exprs :: Map ExprId Expr
     exprs = Data.Map.fromList (concatMap makeBoxOutputExprs (Data.Map.elems flowBoxes))
 
-    makeBoxOutputExprs :: FlowBox -> [((Dir,(Int,Int)),Expr)]
-    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowOut=outs} = [((dir,boxId),ExprInput (rotate 2 dir)) | dir <- Data.Map.keys outs]
-    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowConst c,flowOut=outs} = [((dir,boxId),ExprConst c) | dir <- Data.Map.keys outs]
-    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall callee@Declaration{declInputs=callIns,declOutputs=callOuts},flowIn=ins,flowOut=outs} = [((dir,boxId),ExprCall (scope,boxId) (lookupFunction (if declPrivate callee then Just (declScope callee) else Nothing,maybe "" id (declName callee))) (map makeParam (Data.Set.elems callIns)) (rotate rot dir) rot) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs :: FlowBox -> [(ExprId,Expr)]
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowDecl,flowOut=outs} = [((dir,[(scope,boxId)]),ExprInput (rotate 2 dir)) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowConst c,flowOut=outs} = [((dir,[(scope,boxId)]),ExprConst c) | dir <- Data.Map.keys outs]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCall callee,flowIn=ins,flowOut=outs} = [((dir,[(scope,boxId)]),ExprCall [(scope,boxId)] callee (Data.Map.fromList (map makeParam (Data.Map.assocs ins))) (rotate rot dir) rot) | dir <- Data.Map.keys outs]
       where
         rot = head (flowValidCallRotations box)
-        makeParam paramDir = (paramDir,exprs Data.Map.! (ins Data.Map.! rotate (rot*3) paramDir))
+        makeParam (argDir,(argFromDir,boxId)) = (rotate rot argDir,(argFromDir,[(scope,boxId)]))
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=ins,flowOut=outs}
-      | Data.Map.size outs == 2 = [((dir,boxId),ExprSplitter (scope,boxId) (exprs Data.Map.! head (Data.Map.elems ins))) | dir <- Data.Map.keys outs]
-      | otherwise = [((outDir,boxId),ExprNand (exprs Data.Map.! (ins Data.Map.! rotate 3 outDir)) (exprs Data.Map.! (ins Data.Map.! rotate 1 outDir)))]
+      | Data.Map.size outs == 2 = [((dir,[(scope,boxId)]),ExprExpr [(scope,boxId)] (fmap ((:[]) . (,) scope) (head (Data.Map.elems ins)))) | dir <- Data.Map.keys outs]
+      | otherwise = [((outDir,[(scope,boxId)]),ExprNand [(scope,boxId)] (fmap ((:[]) . (,) scope) (ins Data.Map.! rotate 3 outDir)) (fmap ((:[]) . (,) scope) (ins Data.Map.! rotate 1 outDir)))]
       where outDir = head (Data.Map.keys outs)
     makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCross} =
-        [((output1Dir,boxId),ExprShiftLeft (scope,boxId) input1 input2),((output2Dir,boxId),ExprLessThan (scope,boxId) input1 input2)]
+        [((output1Dir,[(scope,boxId)]),ExprShiftLeft [(scope,boxId)] input1 input2),((output2Dir,[(scope,boxId)]),ExprLessThan [(scope,boxId)] input1 input2)]
       where (input1,input2,output1Dir,output2Dir) = box4Connections box
-    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda lambdaId} =
-        [((output1Dir,boxId),ExprLambda lambdaId input1 input2),((output2Dir,boxId),ExprLambdaInput lambdaId)]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowLambda} =
+        [((output1Dir,[(scope,boxId)]),ExprLambda [(scope,boxId)] input1 input2),((output2Dir,[(scope,boxId)]),ExprLambdaInput [(scope,boxId)])]
       where (input1,input2,output1Dir,output2Dir) = box4Connections box
-    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda,flowIn=ins,flowOut=outs} =
-        [((output1Dir,boxId),ExprInvokeLambda1 (scope,boxId) input1 input2),((output2Dir,boxId),ExprInvokeLambda2 (scope,boxId) input1 input2)]
+    makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowInvokeLambda} =
+        [((output1Dir,[(scope,boxId)]),ExprInvokeLambda1 [(scope,boxId)] input1 input2),((output2Dir,[(scope,boxId)]),ExprInvokeLambda2 [(scope,boxId)] input1 input2)]
       where (input1,input2,output1Dir,output2Dir) = box4Connections box
 
-    subprogramOutputs :: [(Dir,(Dir,(Int,Int)))]
+    subprogramOutputs :: [(Dir,ExprId)]
     subprogramOutputs = Data.Map.fold findSubprogramOutputs [] flowBoxes
       where
         findSubprogramOutputs FlowBox{flowBoxId=boxId,flowOut=outs} outputs =
             Data.Map.foldWithKey (findSubprogramOutput boxId) outputs outs
-        findSubprogramOutput boxId flowDir (outputDir,Nothing) outputs = (outputDir,(flowDir,boxId)) : outputs
+        findSubprogramOutput boxId flowDir (outputDir,Nothing) outputs = (outputDir,(flowDir,[(scope,boxId)])) : outputs
         findSubprogramOutput _ _ _ outputs = outputs
 
-    box4Connections :: FlowBox -> (Expr,Expr,Dir,Dir) -- (input1,input2,output1Dir,output2Dir)
+    box4Connections :: FlowBox -> (ExprId,ExprId,Dir,Dir) -- (input1,input2,output1Dir,output2Dir)
     box4Connections box@FlowBox{flowIn=ins}
-      | all (`Data.Map.member` ins) [N,W] = (getInExpr N,getInExpr W,S,E)
-      | all (`Data.Map.member` ins) [W,S] = (getInExpr W,getInExpr S,E,N)
-      | all (`Data.Map.member` ins) [S,E] = (getInExpr S,getInExpr E,N,W)
-      | all (`Data.Map.member` ins) [E,N] = (getInExpr E,getInExpr N,W,S)
+      | all (`Data.Map.member` ins) [N,W] = (getInExprId N,getInExprId W,S,E)
+      | all (`Data.Map.member` ins) [W,S] = (getInExprId W,getInExprId S,E,N)
+      | all (`Data.Map.member` ins) [S,E] = (getInExprId S,getInExprId E,N,W)
+      | all (`Data.Map.member` ins) [E,N] = (getInExprId E,getInExprId N,W,S)
       | otherwise = error ("wtf@"++show box)
-      where getInExpr dir = exprs Data.Map.! (ins Data.Map.! dir)
+      where getInExprId dir = fmap ((:[]) . (,) scope) (ins Data.Map.! dir)
 
-parse :: [(String,String)] -> [Expr]
+type Program = Map Declaration Subprogram
+
+removeUnreachableFunctions :: Program -> Program
+removeUnreachableFunctions program = program
+
+inliner :: Program -> Program
+inliner program = program
+-- undefined iteratively inline subprograms that do not call any subprograms
+
+optimizer :: Program -> Program
+optimizer program = program
+-- undefined remove ExprExpr exprs from splitters and inlined cross-NOP calls
+
+parse :: [(String,String)] -> ([Expr],Program)
 parse prog
   | not (null declErrs) = error (unlines declErrs)
   | not (null flowErrs) = error (unlines flowErrs)
-  | otherwise = concatMap findOutputs subprograms
+  | otherwise = (concatMap findOutputs (Data.Map.elems program),program)
   where
     declarations = concatMap parseDeclarations prog
     declErrs = declarationErrors (map fst declarations)
     flows = resolveFlows declarations
     flowErrs = concatMap flowErrors flows
-    subprograms = map (resolve lookupSubprogram) flows
-    lookupSubprogram subprogramName = Data.Map.fromList subprograms Data.Map.! subprogramName
-    findOutputs (_,Subprogram{decl=Declaration{declName=Nothing},outputs=outputs}) = Data.Map.elems outputs
+    subprograms = map resolve flows
+    program = inliner (Data.Map.fromList [(decl,subprogram) | subprogram@Subprogram{decl=decl} <- subprograms])
+    findOutputs Subprogram{decl=Declaration{declName=Nothing},outputs=outputs,exprs=exprs} = map (exprs Data.Map.!) (Data.Map.elems outputs)
     findOutputs _ = []
 
+{-
 data State = State {
     stStdin :: Integer,
     stNextLambda :: Integer,
@@ -750,17 +764,17 @@ main = do
     srcFiles <- getArgs
     srcs <- mapM readFile srcFiles
     interact (decodeString . head . run (zip srcFiles srcs) . encodeString)
+-}
 
 tmp srcFiles = do
     srcs <- mapM readFile srcFiles
     let flows = resolveFlows (concatMap parseDeclarations (zip srcFiles srcs))
-        subprograms = map (resolve lookupSubprogram) flows
-        lookupSubprogram subprogramName = Data.Map.fromList subprograms Data.Map.! subprogramName
-    putStr (unlines (map (take 5000 . show . snd) subprograms))
+    let subprograms = map resolve flows
+    mapM_ print subprograms
 
--- Example of an unresolvable function call:
---          ┌──────┐
--- ╓───╖  ┌─┴─╖  ┌─┴─╖
--- ║ f ╟──┤ · ╟─ │ f ║
--- ╙───╜  ╘═╤═╝  ╘═╤═╝
---          └──────┘
+-- Example of an ambiguous function call:
+--                        ┌──────┐
+-- ╓───╖ ┌───╖   ╔═══╗  ┌─┴─╖  ┌─┴─╖
+-- ║ @ ╟─┤ f ╟─  ║   ╟──┤ @ ╟─ │ f ║
+-- ╙─┬─╜ ╘═══╝   ╚═══╝  ╘═╤═╝  ╘═╤═╝
+--                        └──────┘
