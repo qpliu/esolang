@@ -284,6 +284,7 @@ data Declaration = Declaration {
     declName :: Maybe String,
     declScope :: String,
     declPrivate :: Bool,
+    declId :: (Int,Int),
     declInputs :: Set Dir,
     declOutputs :: Set Dir
     } deriving (Eq,Ord,Show)
@@ -311,17 +312,17 @@ parseDeclarations (scope,src) =
         collect (_:conns) graph = collect conns graph
 
     makeDeclaration :: Map (Int,Int) Box -> Declaration
-    makeDeclaration graph = Data.Map.fold buildDeclaration Declaration{declName=Nothing,declScope=scope,declPrivate=False,declInputs=Data.Set.empty,declOutputs=Data.Set.empty} graph
+    makeDeclaration graph = Data.Map.fold buildDeclaration Declaration{declName=Nothing,declScope=scope,declPrivate=False,declId=(0,0),declInputs=Data.Set.empty,declOutputs=Data.Set.empty} graph
 
     buildDeclaration :: Box -> Declaration -> Declaration
-    buildDeclaration Box{boxType=boxType,boxPrivate=boxPrivate,boxContents=boxContents,boxN=n,boxS=s,boxE=e,boxW=w} decl =
+    buildDeclaration Box{boxType=boxType,boxId=boxId,boxPrivate=boxPrivate,boxContents=boxContents,boxN=n,boxS=s,boxE=e,boxW=w} decl =
         checkHeader (foldl buildOutput decl [n,s,e,w])
       where
         buildOutput decl@Declaration{declOutputs=outputs,declInputs=inputs} (BoxConnExit dir)
           | Data.Set.member dir outputs = error "Invalid function: duplicate output"
           | Data.Set.member dir inputs = error "Invalid function: input-output overlap"
-          | otherwise = decl{declOutputs=Data.Set.insert dir outputs}
-        buildOutput decl dir = decl
+          | otherwise = decl{declId=boxId,declOutputs=Data.Set.insert dir outputs}
+        buildOutput decl dir = decl{declId=boxId}
         checkHeader decl
           | boxType == Box2Opp = maybe (buildHeader decl) (const (error "Multiple declaration headers")) (declName decl)
           | otherwise = decl
@@ -646,11 +647,11 @@ optimizer :: Program -> Program
 optimizer program = program
 -- undefined remove ExprExpr exprs from splitters and inlined cross-NOP calls
 
-parse :: [(String,String)] -> ([Expr],Program)
+parse :: [(String,String)] -> ([Subprogram],Program)
 parse prog
   | not (null declErrs) = error (unlines declErrs)
   | not (null flowErrs) = error (unlines flowErrs)
-  | otherwise = (concatMap findOutputs (Data.Map.elems program),program)
+  | otherwise = (filter isProgramOutput (Data.Map.elems program),Data.Map.filter (not . isProgramOutput) program)
   where
     declarations = concatMap parseDeclarations prog
     declErrs = declarationErrors (map fst declarations)
@@ -658,8 +659,28 @@ parse prog
     flowErrs = concatMap flowErrors flows
     subprograms = map resolve flows
     program = inliner (Data.Map.fromList [(decl,subprogram) | subprogram@Subprogram{decl=decl} <- subprograms])
-    findOutputs Subprogram{decl=Declaration{declName=Nothing},outputs=outputs,exprs=exprs} = map (exprs Data.Map.!) (Data.Map.elems outputs)
-    findOutputs _ = []
+    isProgramOutput Subprogram{decl=Declaration{declName=Nothing}} = True
+    isProgramOutput _ = False
+
+data Frame = Frame {
+    subprogram :: Subprogram,
+    inputs :: Map Dir LazyValue,
+    values :: Map ExprId LazyValue
+    }
+
+data LazyValue = LazyValue Value | LazyThunk ExprId | LazyInput LazyValue
+
+data Value = Value Integer (Map Integer Closure)
+
+data Closure = Closure ExprId (ExprId,ExprId) Frame
+
+data CallResult = CallResult Value | CallResultNeedsValue LazyValue
+
+eval :: Integer -> Frame -> ExprId -> (Integer,Frame,LazyValue)
+eval nextLambda frame exprId = undefined
+
+force :: Integer -> Frame -> LazyValue -> (Integer,Frame,Value)
+force nextLambda frame exprId = undefined
 
 {-
 data State = State {
