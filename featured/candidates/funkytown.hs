@@ -564,8 +564,8 @@ data Expr =
     ExprConst (Maybe Integer)
   | ExprInput Dir
   | ExprCall ElementId Declaration (Map Dir ExprId) Dir Int
-  | ExprNand ElementId ExprId ExprId
   | ExprExpr ElementId ExprId
+  | ExprNand ElementId ExprId ExprId
   | ExprLessThan ElementId ExprId ExprId
   | ExprShiftLeft ElementId ExprId ExprId
   | ExprLambda ElementId ExprId ExprId
@@ -578,8 +578,8 @@ instance Show Expr where
     show (ExprConst (Just n)) = show n
     show (ExprInput dir) = show dir
     show (ExprCall _ Declaration{declName=Just name} args dir rot) = "call " ++ show dir ++ show rot ++ " " ++ name ++ show (Data.Map.assocs args)
-    show (ExprNand _ a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprExpr _ a) = "expr(" ++ show a ++ ")"
+    show (ExprNand _ a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprLessThan _ a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprShiftLeft _ a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprLambda lambdaId out1 out2) = "lambda" ++ show lambdaId ++ "(out1=" ++ show out1 ++ ",out2=" ++ show out2 ++ ")"
@@ -665,22 +665,161 @@ parse prog
 data Frame = Frame {
     subprogram :: Subprogram,
     inputs :: Map Dir LazyValue,
-    values :: Map ExprId LazyValue
+    values :: Map ExprId Value,
+    lambdaInputs :: Map ElementId LazyValue,
+    calleeFrames :: Map ElementId Frame
     }
-
-data LazyValue = LazyValue Value | LazyThunk ExprId | LazyInput LazyValue
 
 data Value = Value Integer (Map Integer Closure)
 
 data Closure = Closure ExprId (ExprId,ExprId) Frame
 
-data CallResult = CallResult Value | CallResultNeedsValue LazyValue
+class ValueHolder a where
+    isValue :: a -> Bool
+    getValue :: a -> Value
 
-eval :: Integer -> Frame -> ExprId -> (Integer,Frame,LazyValue)
-eval nextLambda frame exprId = undefined
+instance ValueHolder Value where
+    isValue value = True
+    getValue value = value
 
-force :: Integer -> Frame -> LazyValue -> (Integer,Frame,Value)
-force nextLambda frame exprId = undefined
+data LazyValue = LazyValue Value | LazyThunk ExprId | LazyInput LazyValue
+
+instance ValueHolder LazyValue where
+    isValue (LazyValue _) = True
+    isValue (LazyInput input) = isValue input
+    isValue _ = False
+    getValue (LazyValue value) = value
+    getValue (LazyInput input) = getValue input
+    getValue _ = error "getValue thunk"
+
+data ForceResult = ForceValue Value | ForceNeeds LazyValue
+
+instance ValueHolder ForceResult where
+    isValue (ForceValue _) = True
+    isValue _ = False
+    getValue (ForceValue value) = value
+    getValue _ = error "getValue thunk"
+
+data State = State {
+    nextLambda :: Integer,
+    stdin :: Integer,
+    program :: Program,
+    frame :: Frame
+    }
+
+eval :: State -> ExprId -> (State,LazyValue)
+eval state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs},inputs=inputs,values=values}} exprId
+  | exprId `Data.Map.member` values = (state,LazyValue (values Data.Map.! exprId))
+  | otherwise = assign (evalExpr (exprs Data.Map.! exprId))
+  where
+    assign (state@State{frame=frame@Frame{values=values}},value)
+      | isValue value = (state{frame=frame{values=Data.Map.insert exprId (getValue value) values}},value)
+      | otherwise = (state,value)
+    evalExpr (ExprConst Nothing) = (state,LazyValue (Value (stdin state) Data.Map.empty))
+    evalExpr (ExprConst (Just n)) = (state,LazyValue (Value n Data.Map.empty))
+    evalExpr (ExprInput dir) = (state,inputs Data.Map.! dir)
+    evalExpr (ExprCall elementId decl params resultDir _) = (state,LazyThunk exprId)
+    evalExpr (ExprExpr elementId exprId) = eval state exprId -- should be removed by optimizer
+    evalExpr (ExprNand elementId aExprId bExprId)
+      | isValue a && aVal == 0 = (state1,LazyValue (Value (-1) aClosures))
+      | isValue a && isValue b = (state2,LazyValue (Value (complement (aVal .&. bVal)) (Data.Map.union aClosures bClosures)))
+      | otherwise = (state2,LazyThunk exprId)
+      where
+        (state1,a) = eval state aExprId
+        (state2,b) = eval state1 bExprId
+        Value aVal aClosures = getValue a
+        Value bVal bClosures = getValue b
+    evalExpr (ExprLessThan elementId aExprId bExprId)
+      | isValue a && isValue b = (state2,LazyValue (Value (if aVal < bVal then -1 else 0) Data.Map.empty))
+      | otherwise = (state2,LazyThunk exprId)
+      where
+        (state1,a) = eval state aExprId
+        (state2,b) = eval state1 bExprId
+        Value aVal aClosures = getValue a
+        Value bVal bClosures = getValue b
+    evalExpr (ExprShiftLeft elementId aExprId bExprId)
+      | isValue a && isValue b = (state2,LazyValue (Value (shiftInteger aVal bVal) (Data.Map.union aClosures bClosures)))
+      | otherwise = (state,LazyThunk exprId)
+      where
+        (state1,a) = eval state aExprId
+        (state2,b) = eval state1 bExprId
+        Value aVal aClosures = getValue a
+        Value bVal bClosures = getValue b
+    evalExpr (ExprLambda elementId output1ExprId output2ExprId) = (state,LazyThunk exprId)
+    evalExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = (state,LazyThunk exprId)
+
+force :: State -> LazyValue -> (State,Value)
+force state (LazyValue value) = (state,value)
+force state (LazyInput _) = error "force lazy input"
+force state value@(LazyThunk exprId)
+  | isValue result = (state2,getValue result)
+  | otherwise = force state3 value
+  where
+    (state2,result) = forceStep state exprId
+    (ForceNeeds neededValue) = result
+    (state3,_) = force state2 neededValue
+
+forceStep :: State -> ExprId -> (State,ForceResult)
+forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs},inputs=inputs,values=values,lambdaInputs=lambdaInputs,calleeFrames=calleeFrames}} exprId
+  | exprId `Data.Map.member` values = (state,ForceValue (values Data.Map.! exprId))
+  | otherwise = assign (forceExpr (exprs Data.Map.! exprId))
+  where
+    assign (state@State{frame=frame@Frame{values=values,calleeFrames=calleeFrames}},value)
+      | isValue value = (state{frame=frame{values=Data.Map.insert exprId (getValue value) values}},value)
+      | otherwise = (state,value)
+    forceExpr (ExprConst Nothing) = (state,ForceValue (Value (stdin state) Data.Map.empty))
+    forceExpr (ExprConst (Just n)) = (state,ForceValue (Value n Data.Map.empty))
+    forceExpr (ExprInput dir)
+      | isValue input = (state,ForceValue (getValue input))
+      | otherwise = (state,ForceNeeds input)
+      where input = inputs Data.Map.! dir
+    forceExpr (ExprCall elementId decl params resultDir _) = undefined
+      where
+        calleeFrame = maybe Frame{subprogram=program state Data.Map.! decl,inputs=args,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty} (\ frame -> frame{inputs=args}) (Data.Map.lookup elementId calleeFrames)
+        (state2,args) = Data.Map.foldWithKey evalArg (state,Data.Map.empty) params
+        evalArg dir exprId (state,args) = fmap ((flip (Data.Map.insert dir) args) . LazyInput) (eval state exprId)
+    forceExpr (ExprExpr elementId exprId) = forceStep state exprId
+    forceExpr (ExprNand elementId aExprId bExprId)
+      | not (isValue aForce) = (state1,aForce)
+      | aVal == 0 = (state1,ForceValue (Value (-1) aClosures))
+      | not (isValue bForce) = (state2,bForce)
+      | otherwise = (state2,ForceValue (Value (complement (aVal .&. bVal)) (Data.Map.union aClosures bClosures)))
+      where
+        (state1,aForce) = forceStep state aExprId
+        (state2,bForce) = forceStep state1 bExprId
+        ForceValue (Value aVal aClosures) = aForce
+        ForceValue (Value bVal bClosures) = bForce
+    forceExpr (ExprLessThan elementId aExprId bExprId)
+      | not (isValue aForce) = (state1,aForce)
+      | not (isValue bForce) = (state2,bForce)
+      | otherwise = (state2,ForceValue (Value (if aVal < bVal then -1 else 0) Data.Map.empty))
+      where
+        (state1,aForce) = forceStep state aExprId
+        (state2,bForce) = forceStep state1 bExprId
+        ForceValue (Value aVal aClosures) = aForce
+        ForceValue (Value bVal bClosures) = bForce
+    forceExpr (ExprShiftLeft elementId aExprId bExprId)
+      | not (isValue aForce) = (state1,aForce)
+      | not (isValue bForce) = (state2,bForce)
+      | otherwise = (state2,ForceValue (Value (shiftInteger aVal bVal) (Data.Map.union aClosures bClosures)))
+      where
+        (state1,aForce) = forceStep state aExprId
+        (state2,bForce) = forceStep state1 bExprId
+        ForceValue (Value aVal aClosures) = aForce
+        ForceValue (Value bVal bClosures) = bForce
+    forceExpr (ExprLambda elementId output1ExprId output2ExprId) = undefined
+    forceExpr (ExprLambdaInput elementId)
+      | isValue input = (state,ForceValue (getValue input))
+      | otherwise = (state,ForceNeeds input)
+      where input = lambdaInputs Data.Map.! elementId
+    forceExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = undefined
+    forceExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) = undefined
+
+shiftInteger :: Integer -> Integer -> Integer
+shiftInteger a b
+  | b > fromIntegral (maxBound :: Int) = shiftInteger (shift a maxBound) (b - fromIntegral (maxBound :: Int))
+  | b < fromIntegral (minBound :: Int) = shiftInteger (shift a minBound) (b - fromIntegral (minBound :: Int))
+  | otherwise = shift a (fromIntegral b)
 
 {-
 data State = State {
@@ -796,6 +935,6 @@ tmp srcFiles = do
 -- Example of an ambiguous function call:
 --                        ┌──────┐
 -- ╓───╖ ┌───╖   ╔═══╗  ┌─┴─╖  ┌─┴─╖
--- ║ @ ╟─┤ f ╟─  ║   ╟──┤ @ ╟─ │ f ║
--- ╙─┬─╜ ╘═══╝   ╚═══╝  ╘═╤═╝  ╘═╤═╝
---                        └──────┘
+-- ║ @ ╟─┤ f ╟─┐ ║   ╟──┤ @ ╟─ │ g ║
+-- ╙─┬─╜ ╘═══╝ │ ╚═══╝  ╘═╤═╝  ╘═╤═╝
+--   └─                   └──────┘
