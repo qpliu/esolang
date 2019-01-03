@@ -668,11 +668,18 @@ data Frame = Frame {
     values :: Map ExprId Value,
     lambdaInputs :: Map ElementId LazyValue,
     calleeFrames :: Map ElementId Frame
-    }
+    } deriving Show
+-- Note for when implementing lambdas:
+-- Add lambdaIds :: Map ElementId Integer to Frame, lambda ids of each
+-- lambda element in the frame when the frame is created (irrespective of
+-- whether the lambda is actually evaluated) so that if a lambda is created
+-- that returns a lambda and that lambda that is returned is split and
+-- returned by both outputs, both outputs will return the same lambda id, as
+-- each output will be its own Closure and cannot modify the other output.
 
-data Value = Value Integer (Map Integer Closure)
+data Value = Value Integer (Map Integer Closure) deriving Show
 
-data Closure = Closure ExprId (ExprId,ExprId) Frame
+data Closure = Closure ExprId (ExprId,ExprId) Frame deriving Show
 
 class ValueHolder a where
     isValue :: a -> Bool
@@ -682,7 +689,7 @@ instance ValueHolder Value where
     isValue value = True
     getValue value = value
 
-data LazyValue = LazyValue Value | LazyThunk ExprId | LazyInput LazyValue
+data LazyValue = LazyValue Value | LazyThunk ExprId | LazyInput LazyValue deriving Show
 
 instance ValueHolder LazyValue where
     isValue (LazyValue _) = True
@@ -692,7 +699,7 @@ instance ValueHolder LazyValue where
     getValue (LazyInput input) = getValue input
     getValue _ = error "getValue thunk"
 
-data ForceResult = ForceValue Value | ForceNeeds LazyValue
+data ForceResult = ForceValue Value | ForceNeeds LazyValue deriving Show
 
 instance ValueHolder ForceResult where
     isValue (ForceValue _) = True
@@ -773,17 +780,7 @@ forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=e
       | isValue input = (state,ForceValue (getValue input))
       | otherwise = (state,ForceNeeds input)
       where input = inputs Data.Map.! dir
-    forceExpr (ExprCall elementId decl params resultDir _)
-      | isValue returnResult = (resultState,ForceValue (getValue returnResult))
-      | otherwise = handleCallResult returnResult
-      where
-        calleeFrame@Frame{subprogram=Subprogram{outputs=calleeOutputs}} = maybe Frame{subprogram=program state Data.Map.! decl,inputs=args,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty} (\ frame -> frame{inputs=args}) (Data.Map.lookup elementId calleeFrames)
-        (state2@State{frame=frame2@Frame{calleeFrames=frame2CalleeFrames}},args) = Data.Map.foldWithKey evalArg (state,Data.Map.empty) params
-        evalArg dir exprId (state,args) = fmap ((flip (Data.Map.insert dir) args) . LazyInput) (eval state exprId)
-        (returnState@State{frame=calleeReturnFrame},returnResult) = forceStep state2{frame=calleeFrame} (calleeOutputs Data.Map.! resultDir)
-        resultState = returnState{frame=frame2{calleeFrames=Data.Map.insert elementId calleeReturnFrame frame2CalleeFrames}}
-        handleCallResult (ForceNeeds (LazyInput returnResultNeeds)) = (resultState,ForceNeeds returnResultNeeds)
-        handleCallResult (ForceNeeds (LazyThunk needExprId)) = undefined -- forceStep needExprId, then retry forceStep exprId
+    forceExpr expr@(ExprCall _ Declaration{declName=Just calleeName} _ _ _) = forceStepCall state expr
     forceExpr (ExprExpr elementId exprId) = forceStep state exprId
     forceExpr (ExprNand elementId aExprId bExprId)
       | not (isValue aForce) = (state1,aForce)
@@ -820,6 +817,31 @@ forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=e
       where input = lambdaInputs Data.Map.! elementId
     forceExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = undefined
     forceExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) = undefined
+
+forceStepCall :: State -> Expr -> (State,ForceResult)
+forceStepCall callerState expr@(ExprCall elementId calleeDecl params resultDir _) =
+    handleCallResult (forceStep callerStateAfterEvalArgs{frame=initialCalleeFrame} (outputs (subprogram initialCalleeFrame) Data.Map.! resultDir))
+  where
+    initialCalleeFrame = maybe Frame{subprogram=program callerStateAfterEvalArgs Data.Map.! calleeDecl,inputs=args,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty} (\ frame -> frame{inputs=args}) (Data.Map.lookup elementId (calleeFrames (frame callerStateAfterEvalArgs)))
+    (callerStateAfterEvalArgs,args) = Data.Map.foldWithKey evalArg (callerState,Data.Map.empty) params
+    evalArg paramDir paramExprId (callerStateEvalArg,args) = fmap ((flip (Data.Map.insert paramDir) args) . LazyInput) (eval callerStateEvalArg paramExprId) 
+
+    -- replace callee frame with caller frame with callee frame in calleeFrames Map
+    finalCallerState :: State -> State
+    finalCallerState calleeReturnedState@State{frame=calleeReturnedFrame} = calleeReturnedState{frame=(frame callerStateAfterEvalArgs){calleeFrames=Data.Map.insert elementId calleeReturnedFrame (calleeFrames (frame callerStateAfterEvalArgs))}}
+
+    handleCallResult :: (State,ForceResult) -> (State,ForceResult)
+    handleCallResult (calleeReturnedState,callResult@(ForceValue _)) = (finalCallerState calleeReturnedState,callResult)
+    handleCallResult (calleeReturnedState,ForceNeeds (LazyInput neededInput)) = (finalCallerState calleeReturnedState,ForceNeeds neededInput)
+    handleCallResult (calleeReturnedState,ForceNeeds (LazyThunk calleeExprId)) = forceStepCall (finalCallerState calleeReturnedState2) expr
+      where
+        (calleeReturnedState2,_) = recursiveForceStep calleeReturnedState calleeExprId
+
+recursiveForceStep :: State -> ExprId -> (State,ForceResult)
+recursiveForceStep state exprId = handleResult (forceStep state exprId)
+  where
+    handleResult (state,ForceNeeds (LazyThunk exprId)) = recursiveForceStep state exprId
+    handleResult (state,result) = (state,result)
 
 shiftInteger :: Integer -> Integer -> Integer
 shiftInteger a b
