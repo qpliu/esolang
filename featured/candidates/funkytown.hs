@@ -637,7 +637,7 @@ resolve (decl@Declaration{declScope=scope},flowBoxes) = Subprogram{decl=decl,out
 type Program = Map Declaration Subprogram
 
 removeUnreachableFunctions :: Program -> Program
-removeUnreachableFunctions program = program
+removeUnreachableFunctions program = program -- undefined
 
 inliner :: Program -> Program
 inliner program = program
@@ -676,6 +676,12 @@ data Frame = Frame {
 -- that returns a lambda and that lambda that is returned is split and
 -- returned by both outputs, both outputs will return the same lambda id, as
 -- each output will be its own Closure and cannot modify the other output.
+--
+-- Also, force evaluation of all frame inputs when creating a lambda because
+-- there is no way to find the caller frame to force them when the lambda is
+-- invoked.  This will probably result in this implementation having stack
+-- overflows or infinite loops for valid programs that would work if the
+-- frame inputs were lazily evaluated.
 
 data Value = Value Integer (Map Integer Closure) deriving Show
 
@@ -755,17 +761,6 @@ eval state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs}
     evalExpr (ExprLambda elementId output1ExprId output2ExprId) = (state,LazyThunk exprId)
     evalExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = (state,LazyThunk exprId)
 
-force :: State -> LazyValue -> (State,Value)
-force state (LazyValue value) = (state,value)
-force state (LazyInput _) = error "force lazy input"
-force state value@(LazyThunk exprId)
-  | isValue result = (state2,getValue result)
-  | otherwise = force state3 value
-  where
-    (state2,result) = forceStep state exprId
-    (ForceNeeds neededValue) = result
-    (state3,_) = force state2 neededValue
-
 forceStep :: State -> ExprId -> (State,ForceResult)
 forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs},inputs=inputs,values=values,lambdaInputs=lambdaInputs,calleeFrames=calleeFrames}} exprId
   | exprId `Data.Map.member` values = (state,ForceValue (values Data.Map.! exprId))
@@ -833,15 +828,20 @@ forceStepCall callerState expr@(ExprCall elementId calleeDecl params resultDir _
     handleCallResult :: (State,ForceResult) -> (State,ForceResult)
     handleCallResult (calleeReturnedState,callResult@(ForceValue _)) = (finalCallerState calleeReturnedState,callResult)
     handleCallResult (calleeReturnedState,ForceNeeds (LazyInput neededInput)) = (finalCallerState calleeReturnedState,ForceNeeds neededInput)
-    handleCallResult (calleeReturnedState,ForceNeeds (LazyThunk calleeExprId)) = forceStepCall (finalCallerState calleeReturnedState2) expr
+    handleCallResult (calleeReturnedState,ForceNeeds (LazyThunk calleeExprId))
+      | isValue recursiveResult = forceStepCall (finalCallerState calleeReturnedState2) expr
+      | otherwise = handleCallResult (calleeReturnedState2,recursiveResult)
       where
-        (calleeReturnedState2,_) = recursiveForceStep calleeReturnedState calleeExprId
+        (calleeReturnedState2,recursiveResult) = recursiveForceStep calleeReturnedState calleeExprId
 
 recursiveForceStep :: State -> ExprId -> (State,ForceResult)
 recursiveForceStep state exprId = handleResult (forceStep state exprId)
   where
-    handleResult (state,ForceNeeds (LazyThunk exprId)) = recursiveForceStep state exprId
+    handleResult (state,ForceNeeds (LazyThunk nextExprId)) = retry (recursiveForceStep state nextExprId)
     handleResult (state,result) = (state,result)
+    retry (nextState,result)
+      | isValue result = recursiveForceStep nextState exprId
+      | otherwise = (nextState,result)
 
 shiftInteger :: Integer -> Integer -> Integer
 shiftInteger a b
@@ -857,8 +857,7 @@ run prog inp = concatMap evalMainOutputs mains
         map (evalMain subprogram) (Data.Map.elems outputs)
     evalMain subprogram exprId = result
       where
-        (_,Value result _) = force state value
-        (state,value) = eval State{nextLambda=1,stdin=inp,program=program,frame=Frame{subprogram=subprogram,inputs=Data.Map.empty,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty}} exprId
+        (_,ForceValue (Value result _)) = recursiveForceStep State{nextLambda=1,stdin=inp,program=program,frame=Frame{subprogram=subprogram,inputs=Data.Map.empty,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty}} exprId
 
 encodeString :: String -> Integer
 encodeString str = enc 1 0 str
