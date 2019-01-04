@@ -1,5 +1,18 @@
 -- https://esolangs.org/wiki/Funciton
 
+-- Minimal implementation.  Invalid code will result in unhelpful error
+-- messages, stack overflows, infinite loops, or other unexpected results.
+--
+-- Usage: funkytown SRC-FILE [SRC-FILE ...]
+-- Build: ghc --make funkytown
+--
+-- Possible limitation:
+-- Valid usage of lambdas may result in stack overflows or infinite loops
+-- due to implementing closures as a stack frame without any caller stack
+-- frames, which requires forcing the evaluation of the function inputs
+-- at the time of the lambda creation rather than lazily evaluating them
+-- possibly not until after the time of the lambda invocation.
+
 import Data.Array(Array,array,assocs,bounds,inRange,(!))
 import Data.Bits(complement,shift,(.&.))
 import Data.Char(chr,ord)
@@ -666,26 +679,14 @@ data Frame = Frame {
     subprogram :: Subprogram,
     inputs :: Map Dir LazyValue,
     values :: Map ExprId Value,
+    lambdaIds :: Map ElementId Integer,
     lambdaInputs :: Map ElementId LazyValue,
     calleeFrames :: Map ElementId Frame
     } deriving Show
--- Note for when implementing lambdas:
--- Add lambdaIds :: Map ElementId Integer to Frame, lambda ids of each
--- lambda element in the frame when the frame is created (irrespective of
--- whether the lambda is actually evaluated) so that if a lambda is created
--- that returns a lambda and that lambda that is returned is split and
--- returned by both outputs, both outputs will return the same lambda id, as
--- each output will be its own Closure and cannot modify the other output.
---
--- Also, force evaluation of all frame inputs when creating a lambda because
--- there is no way to find the caller frame to force them when the lambda is
--- invoked.  This will probably result in this implementation having stack
--- overflows or infinite loops for valid programs that would work if the
--- frame inputs were lazily evaluated.
 
 data Value = Value Integer (Map Integer Closure) deriving Show
 
-data Closure = Closure ExprId (ExprId,ExprId) Frame deriving Show
+data Closure = Closure ElementId (ExprId,ExprId) Frame deriving Show
 
 class ValueHolder a where
     isValue :: a -> Bool
@@ -775,7 +776,7 @@ forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=e
       | isValue input = (state,ForceValue (getValue input))
       | otherwise = (state,ForceNeeds input)
       where input = inputs Data.Map.! dir
-    forceExpr expr@(ExprCall _ Declaration{declName=Just calleeName} _ _ _) = forceStepCall state expr
+    forceExpr expr@(ExprCall _ _ _ _ _) = forceStepCall state expr
     forceExpr (ExprExpr elementId exprId) = forceStep state exprId
     forceExpr (ExprNand elementId aExprId bExprId)
       | not (isValue aForce) = (state1,aForce)
@@ -805,25 +806,27 @@ forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=e
         (state2,bForce) = forceStep state1 bExprId
         ForceValue (Value aVal aClosures) = aForce
         ForceValue (Value bVal bClosures) = bForce
-    forceExpr (ExprLambda elementId output1ExprId output2ExprId) = undefined
+    forceExpr expr@(ExprLambda _ _ _) = forceStepLambda state expr
     forceExpr (ExprLambdaInput elementId)
       | isValue input = (state,ForceValue (getValue input))
       | otherwise = (state,ForceNeeds input)
       where input = lambdaInputs Data.Map.! elementId
-    forceExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = undefined
-    forceExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) = undefined
+    forceExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) =
+        forceStepInvokeLambda state lambdaExprId inputExprId fst
+    forceExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) =
+        forceStepInvokeLambda state lambdaExprId inputExprId snd
 
 forceStepCall :: State -> Expr -> (State,ForceResult)
 forceStepCall callerState expr@(ExprCall elementId calleeDecl params resultDir _) =
-    handleCallResult (forceStep callerStateAfterEvalArgs{frame=initialCalleeFrame} (outputs (subprogram initialCalleeFrame) Data.Map.! resultDir))
+    handleCallResult (forceStep callerStateBeforeCall{frame=initialCalleeFrame} (outputs (subprogram initialCalleeFrame) Data.Map.! resultDir))
   where
-    initialCalleeFrame = maybe Frame{subprogram=program callerStateAfterEvalArgs Data.Map.! calleeDecl,inputs=args,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty} (\ frame -> frame{inputs=args}) (Data.Map.lookup elementId (calleeFrames (frame callerStateAfterEvalArgs)))
+    (callerStateBeforeCall,initialCalleeFrame) = maybe (newFrame callerStateAfterEvalArgs (program callerStateAfterEvalArgs Data.Map.! calleeDecl) args) (\ frame -> (callerStateAfterEvalArgs,frame{inputs=args})) (Data.Map.lookup elementId (calleeFrames (frame callerStateAfterEvalArgs)))
     (callerStateAfterEvalArgs,args) = Data.Map.foldWithKey evalArg (callerState,Data.Map.empty) params
     evalArg paramDir paramExprId (callerStateEvalArg,args) = fmap ((flip (Data.Map.insert paramDir) args) . LazyInput) (eval callerStateEvalArg paramExprId) 
 
     -- replace callee frame with caller frame with callee frame in calleeFrames Map
     finalCallerState :: State -> State
-    finalCallerState calleeReturnedState@State{frame=calleeReturnedFrame} = calleeReturnedState{frame=(frame callerStateAfterEvalArgs){calleeFrames=Data.Map.insert elementId calleeReturnedFrame (calleeFrames (frame callerStateAfterEvalArgs))}}
+    finalCallerState calleeReturnedState@State{frame=calleeReturnedFrame} = calleeReturnedState{frame=(frame callerStateBeforeCall){calleeFrames=Data.Map.insert elementId calleeReturnedFrame (calleeFrames (frame callerStateBeforeCall))}}
 
     handleCallResult :: (State,ForceResult) -> (State,ForceResult)
     handleCallResult (calleeReturnedState,callResult@(ForceValue _)) = (finalCallerState calleeReturnedState,callResult)
@@ -843,11 +846,37 @@ recursiveForceStep state exprId = handleResult (forceStep state exprId)
       | isValue result = recursiveForceStep nextState exprId
       | otherwise = (nextState,result)
 
+forceStepLambda :: State -> Expr -> (State,ForceResult)
+forceStepLambda state@State{frame=frame@Frame{inputs=inputs,lambdaIds=lambdaIds}} expr@(ExprLambda elementId output1ExprId output2ExprId) = checkInputs (filter (not . isValue) (Data.Map.elems inputs))
+  where
+    checkInputs (arg:_) = (state,ForceNeeds arg)
+    checkInputs [] = (state,ForceValue (Value lambdaId (Data.Map.fromList [(lambdaId,Closure elementId (output1ExprId,output2ExprId) frame)])))
+    lambdaId = lambdaIds Data.Map.! elementId
+
+forceStepInvokeLambda :: State -> ExprId -> ExprId -> ((a,a) -> a) -> (State,ForceResult)
+forceStepInvokeLambda state lambdaExprId inputExprId chooseOutput
+  | not (isValue lambdaResult) = (stateAfterEvalLambda,lambdaResult)
+  | otherwise = undefined
+  where
+    (stateAfterEvalLambda,lambdaResult) = recursiveForceStep state lambdaExprId
+    ForceValue (Value lambdaId closures) = lambdaResult
+    Closure elementId outputExprIds closureFrame = closures Data.Map.! lambdaId
+    lambdaFrame = maybe closureFrame id (Data.Map.lookup elementId (calleeFrames (frame stateAfterEvalLambda)))
+
+    (stateAfterEvalArg,arg) = eval stateAfterEvalLambda inputExprId
+
 shiftInteger :: Integer -> Integer -> Integer
 shiftInteger a b
   | b > fromIntegral (maxBound :: Int) = shiftInteger (shift a maxBound) (b - fromIntegral (maxBound :: Int))
   | b < fromIntegral (minBound :: Int) = shiftInteger (shift a minBound) (b - fromIntegral (minBound :: Int))
   | otherwise = shift a (fromIntegral b)
+
+newFrame :: State -> Subprogram -> Map Dir LazyValue -> (State,Frame)
+newFrame state@State{nextLambda=initialLambda} subprogram@Subprogram{exprs=exprs} args = (state{nextLambda=finalLambda},Frame{subprogram=subprogram,inputs=args,values=Data.Map.empty,lambdaIds=lambdaIds,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty})
+  where
+    (finalLambda,lambdaIds) = Data.Map.fold enumerateLambdas (initialLambda,Data.Map.empty) exprs
+    enumerateLambdas (ExprLambda elementId _ _) (nextLambda,lambdaIds) = (nextLambda+1,Data.Map.insert elementId nextLambda lambdaIds)
+    enumerateLambdas _ (nextLambda,lambdaIds) = (nextLambda,lambdaIds)
 
 run :: [(String,String)] -> Integer -> [Integer]
 run prog inp = concatMap evalMainOutputs mains
@@ -857,7 +886,9 @@ run prog inp = concatMap evalMainOutputs mains
         map (evalMain subprogram) (Data.Map.elems outputs)
     evalMain subprogram exprId = result
       where
-        (_,ForceValue (Value result _)) = recursiveForceStep State{nextLambda=1,stdin=inp,program=program,frame=Frame{subprogram=subprogram,inputs=Data.Map.empty,values=Data.Map.empty,lambdaInputs=Data.Map.empty,calleeFrames=Data.Map.empty}} exprId
+        uninitializedState = State{nextLambda=1,stdin=inp,program=program,frame=undefined}
+        (initialState,initialFrame) = newFrame uninitializedState subprogram Data.Map.empty
+        (_,ForceValue (Value result _)) = recursiveForceStep initialState{frame=initialFrame} exprId
 
 encodeString :: String -> Integer
 encodeString str = enc 1 0 str
@@ -889,7 +920,8 @@ main = do
     srcs <- mapM readFile srcFiles
     interact (decodeString . head . run (zip srcFiles srcs) . encodeString)
 
-tmp srcFiles = do
+dumpParse :: [String] -> IO ()
+dumpParse srcFiles = do
     srcs <- mapM readFile srcFiles
     let flows = resolveFlows (concatMap parseDeclarations (zip srcFiles srcs))
     let subprograms = map resolve flows
