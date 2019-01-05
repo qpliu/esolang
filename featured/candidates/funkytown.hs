@@ -756,11 +756,8 @@ data State = State {
 eval :: State -> ExprId -> (State,LazyValue)
 eval state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs},inputs=inputs,values=values}} exprId
   | exprId `Data.Map.member` values = (state,LazyValue (values Data.Map.! exprId))
-  | otherwise = assign (evalExpr (exprs Data.Map.! exprId))
+  | otherwise = assign exprId (evalExpr (exprs Data.Map.! exprId))
   where
-    assign (state@State{frame=frame@Frame{values=values}},value)
-      | isValue value = (state{frame=frame{values=Data.Map.insert exprId (getValue value) values}},value)
-      | otherwise = (state,value)
     evalExpr (ExprConst Nothing) = (state,LazyValue (Value (stdin state) Data.Map.empty))
     evalExpr (ExprConst (Just n)) = (state,LazyValue (Value n Data.Map.empty))
     evalExpr (ExprInput dir) = (state,inputs Data.Map.! dir)
@@ -795,14 +792,21 @@ eval state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs}
     evalExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = (state,LazyThunk exprId)
     evalExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) = (state,LazyThunk exprId)
 
+assign :: ValueHolder value => ExprId -> (State,value) -> (State,value)
+assign exprId (state@State{frame=frame@Frame{values=values}},value)
+  | not (isValue value) = (state,value)
+  | otherwise = (state{frame=gc frame{values=Data.Map.insert exprId (getValue value) values}},value)
+  where
+    -- clear calleeFrames if all outputs are fully evaluated
+    gc frame@Frame{values=values,subprogram=Subprogram{outputs=outputs}}
+      | all (maybe False isValue . (`Data.Map.lookup` values)) (Data.Map.elems outputs) = frame{calleeFrames=undefined}
+      | otherwise = frame
+
 forceStep :: State -> ExprId -> (State,ForceResult)
 forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs},inputs=inputs,values=values,lambdaInputs=lambdaInputs,calleeFrames=calleeFrames}} exprId
   | exprId `Data.Map.member` values = (state,ForceValue (values Data.Map.! exprId))
-  | otherwise = assign (forceExpr (exprs Data.Map.! exprId))
+  | otherwise = assign exprId (forceExpr (exprs Data.Map.! exprId))
   where
-    assign (state@State{frame=frame@Frame{values=values}},value)
-      | isValue value = (state{frame=frame{values=Data.Map.insert exprId (getValue value) values}},value)
-      | otherwise = (state,value)
     forceExpr (ExprConst Nothing) = (state,ForceValue (Value (stdin state) Data.Map.empty))
     forceExpr (ExprConst (Just n)) = (state,ForceValue (Value n Data.Map.empty))
     forceExpr (ExprInput dir)
