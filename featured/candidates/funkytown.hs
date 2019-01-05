@@ -601,6 +601,17 @@ instance Show Expr where
     show (ExprInvokeLambda1 _ lambda inp) = "invokelambda1(" ++ show lambda ++ "," ++ show inp ++ ")"
     show (ExprInvokeLambda2 _ lambda inp) = "invokelambda2(" ++ show lambda ++ "," ++ show inp ++ ")"
 
+mapExprIds :: (ExprId -> ExprId) -> Expr -> Expr
+mapExprIds f (ExprCall elementId decl params dir rot) = ExprCall elementId decl (Data.Map.map f params) dir rot
+mapExprIds f (ExprExpr elementId exprId) = ExprExpr elementId (f exprId)
+mapExprIds f (ExprNand elementId aExprId bExprId) = ExprNand elementId (f aExprId) (f bExprId)
+mapExprIds f (ExprLessThan elementId aExprId bExprId) = ExprLessThan elementId (f aExprId) (f bExprId)
+mapExprIds f (ExprShiftLeft elementId aExprId bExprId) = ExprShiftLeft elementId (f aExprId) (f bExprId)
+mapExprIds f (ExprLambda elementId aExprId bExprId) = ExprLambda elementId (f aExprId) (f bExprId)
+mapExprIds f (ExprInvokeLambda1 elementId aExprId bExprId) = ExprInvokeLambda1 elementId (f aExprId) (f bExprId)
+mapExprIds f (ExprInvokeLambda2 elementId aExprId bExprId) = ExprInvokeLambda2 elementId (f aExprId) (f bExprId)
+mapExprIds f expr = expr
+
 resolve :: (Declaration,Map (Int,Int) FlowBox) -> Subprogram
 resolve (decl@Declaration{declScope=scope},flowBoxes) = Subprogram{decl=decl,outputs=Data.Map.fromList subprogramOutputs,exprs=exprs}
   where
@@ -668,8 +679,16 @@ inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunct
 -- undefined iteratively inline subprograms that do not call any subprograms
 
 optimizer :: Subprogram -> Subprogram
-optimizer subprogram = subprogram
--- undefined remove ExprExprs (due to splitters and inlined cross-NOP calls)
+optimizer subprogram@Subprogram{exprs=exprs} = subprogram{exprs=optimizedExprs}
+  where
+    exprIdMap = Data.Map.foldWithKey findExprIdsToMap Data.Map.empty exprs
+    findExprIdsToMap oldExprId (ExprExpr _ newExprId) exprIdMap = Data.Map.insert oldExprId newExprId exprIdMap
+    findExprIdsToMap _ _ exprIdMap = exprIdMap
+
+    optimizedExprId exprId = maybe exprId optimizedExprId (Data.Map.lookup exprId exprIdMap)
+    optimizedExprs = Data.Map.map (mapExprIds optimizedExprId) (Data.Map.filter notExprExpr exprs)
+    notExprExpr (ExprExpr _ _) = False
+    notExprExpr _ = True
 
 parse :: [(String,String)] -> ([Subprogram],Program)
 parse prog
