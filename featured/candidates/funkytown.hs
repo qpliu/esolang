@@ -16,6 +16,7 @@
 import Data.Array(Array,array,assocs,bounds,inRange,(!))
 import Data.Bits(complement,shift,(.&.))
 import Data.Char(chr,ord)
+import Data.List(partition)
 import Data.Map(Map)
 import qualified Data.Map
 import Data.Set(Set)
@@ -649,29 +650,41 @@ resolve (decl@Declaration{declScope=scope},flowBoxes) = Subprogram{decl=decl,out
 
 type Program = Map Declaration Subprogram
 
-removeUnreachableFunctions :: Program -> Program
-removeUnreachableFunctions program = program -- undefined
+removeUnreachableFunctions :: ([Subprogram],Program) -> Program
+removeUnreachableFunctions (initialMains,initialSubprograms) = Data.Map.filter ((`Data.Set.member` reachable) . decl) initialSubprograms
+  where
+    (_,initialReachable) = foldl markReachable (Data.Set.empty,[]) initialMains
+    reachable = walkReachables (Data.Set.empty,initialReachable)
+    walkReachables (walked,[]) = walked
+    walkReachables (walked,listToWalk) = walkReachables (foldl markReachable (walked,[]) listToWalk)
+    markReachable (walked,listToWalk) subprogram@Subprogram{decl=decl,exprs=exprs}
+      | decl `Data.Set.member` walked = (walked,listToWalk)
+      | otherwise = (Data.Set.insert decl walked,map (initialSubprograms Data.Map.!) (Data.Map.fold listCallees [] exprs) ++ listToWalk)
+    listCallees (ExprCall _ decl _ _ _) callees = decl:callees
+    listCallees _ callees = callees
 
-inliner :: Program -> Program
-inliner program = program
+inliner :: ([Subprogram],Program) -> ([Subprogram],Program)
+inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunctions (initialMains,initialSubprograms))
 -- undefined iteratively inline subprograms that do not call any subprograms
 
-optimizer :: Program -> Program
-optimizer program = program
--- undefined remove ExprExpr exprs from splitters and inlined cross-NOP calls
+optimizer :: Subprogram -> Subprogram
+optimizer subprogram = subprogram
+-- undefined remove ExprExprs (due to splitters and inlined cross-NOP calls)
 
 parse :: [(String,String)] -> ([Subprogram],Program)
 parse prog
   | not (null declErrs) = error (unlines declErrs)
   | not (null flowErrs) = error (unlines flowErrs)
-  | otherwise = (filter isProgramOutput (Data.Map.elems program),Data.Map.filter (not . isProgramOutput) program)
+  | otherwise = (optimizedMains,optimizedSubprograms)
   where
     declarations = concatMap parseDeclarations prog
     declErrs = declarationErrors (map fst declarations)
     flows = resolveFlows declarations
     flowErrs = concatMap flowErrors flows
-    subprograms = map resolve flows
-    program = inliner (Data.Map.fromList [(decl,subprogram) | subprogram@Subprogram{decl=decl} <- subprograms])
+    (mains,subprograms) = partition isProgramOutput (map resolve flows)
+    (inlinedMains,inlinedSubprograms) = inliner (mains,Data.Map.fromList [(decl,subprogram) | subprogram@Subprogram{decl=decl} <- subprograms])
+    (optimizedMains,optimizedSubprograms) = (map optimizer inlinedMains,Data.Map.map optimizer inlinedSubprograms)
+
     isProgramOutput Subprogram{decl=Declaration{declName=Nothing}} = True
     isProgramOutput _ = False
 
@@ -761,6 +774,7 @@ eval state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs}
         Value bVal bClosures = getValue b
     evalExpr (ExprLambda elementId output1ExprId output2ExprId) = (state,LazyThunk exprId)
     evalExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) = (state,LazyThunk exprId)
+    evalExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) = (state,LazyThunk exprId)
 
 forceStep :: State -> ExprId -> (State,ForceResult)
 forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs},inputs=inputs,values=values,lambdaInputs=lambdaInputs,calleeFrames=calleeFrames}} exprId
@@ -812,9 +826,9 @@ forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=e
       | otherwise = (state,ForceNeeds input)
       where input = lambdaInputs Data.Map.! elementId
     forceExpr (ExprInvokeLambda1 elementId lambdaExprId inputExprId) =
-        forceStepInvokeLambda state lambdaExprId inputExprId fst
+        forceStepInvokeLambda state elementId lambdaExprId inputExprId fst
     forceExpr (ExprInvokeLambda2 elementId lambdaExprId inputExprId) =
-        forceStepInvokeLambda state lambdaExprId inputExprId snd
+        forceStepInvokeLambda state elementId lambdaExprId inputExprId snd
 
 forceStepCall :: State -> Expr -> (State,ForceResult)
 forceStepCall callerState expr@(ExprCall elementId calleeDecl params resultDir _) =
@@ -853,17 +867,30 @@ forceStepLambda state@State{frame=frame@Frame{inputs=inputs,lambdaIds=lambdaIds}
     checkInputs [] = (state,ForceValue (Value lambdaId (Data.Map.fromList [(lambdaId,Closure elementId (output1ExprId,output2ExprId) frame)])))
     lambdaId = lambdaIds Data.Map.! elementId
 
-forceStepInvokeLambda :: State -> ExprId -> ExprId -> ((a,a) -> a) -> (State,ForceResult)
-forceStepInvokeLambda state lambdaExprId inputExprId chooseOutput
+forceStepInvokeLambda :: State -> ElementId -> ExprId -> ExprId -> ((ExprId,ExprId) -> ExprId) -> (State,ForceResult)
+forceStepInvokeLambda state invokeElementId lambdaExprId inputExprId chooseOutput
   | not (isValue lambdaResult) = (stateAfterEvalLambda,lambdaResult)
-  | otherwise = undefined
+  | otherwise = handleCallResult (forceStep stateAfterEvalArg{frame=lambdaFrame} (chooseOutput outputExprIds))
   where
     (stateAfterEvalLambda,lambdaResult) = recursiveForceStep state lambdaExprId
     ForceValue (Value lambdaId closures) = lambdaResult
-    Closure elementId outputExprIds closureFrame = closures Data.Map.! lambdaId
-    lambdaFrame = maybe closureFrame id (Data.Map.lookup elementId (calleeFrames (frame stateAfterEvalLambda)))
 
     (stateAfterEvalArg,arg) = eval stateAfterEvalLambda inputExprId
+    Closure closureElementId outputExprIds closureFrame = closures Data.Map.! lambdaId
+    initialLambdaFrame = maybe closureFrame id (Data.Map.lookup invokeElementId (calleeFrames (frame stateAfterEvalLambda)))
+    lambdaFrame = initialLambdaFrame{lambdaInputs=Data.Map.insert closureElementId arg (lambdaInputs initialLambdaFrame)}
+
+    finalCallerState :: State -> State
+    finalCallerState calleeReturnedState@State{frame=calleeReturnedFrame} = calleeReturnedState{frame=(frame stateAfterEvalArg){calleeFrames=Data.Map.insert invokeElementId calleeReturnedFrame (calleeFrames (frame stateAfterEvalArg))}}
+
+    handleCallResult :: (State,ForceResult) -> (State,ForceResult)
+    handleCallResult (calleeReturnedState,callResult@(ForceValue _)) = (finalCallerState calleeReturnedState,callResult)
+    handleCallResult (calleeReturnedState,ForceNeeds (LazyInput neededInput)) = (finalCallerState calleeReturnedState,ForceNeeds neededInput)
+    handleCallResult (calleeReturnedState,ForceNeeds (LazyThunk calleeExprId))
+      | isValue recursiveResult = forceStepInvokeLambda (finalCallerState calleeReturnedState2) invokeElementId lambdaExprId inputExprId chooseOutput
+      | otherwise = handleCallResult (calleeReturnedState2,recursiveResult)
+      where
+        (calleeReturnedState2,recursiveResult) = recursiveForceStep calleeReturnedState calleeExprId
 
 shiftInteger :: Integer -> Integer -> Integer
 shiftInteger a b
@@ -924,12 +951,6 @@ dumpParse :: [String] -> IO ()
 dumpParse srcFiles = do
     srcs <- mapM readFile srcFiles
     let flows = resolveFlows (concatMap parseDeclarations (zip srcFiles srcs))
-    let subprograms = map resolve flows
+    let (mains,subprograms) = parse (zip srcFiles srcs)
+    mapM_ print mains
     mapM_ print subprograms
-
--- Example of an ambiguous function call:
---                        ┌──────┐
--- ╓───╖ ┌───╖   ╔═══╗  ┌─┴─╖  ┌─┴─╖
--- ║ @ ╟─┤ f ╟─┐ ║   ╟──┤ @ ╟─ │ g ║
--- ╙─┬─╜ ╘═══╝ │ ╚═══╝  ╘═╤═╝  ╘═╤═╝
---   └─                   └──────┘
