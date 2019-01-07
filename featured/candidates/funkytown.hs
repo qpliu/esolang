@@ -578,7 +578,7 @@ data Expr =
     ExprConst (Maybe Integer)
   | ExprInput Dir
   | ExprCall ElementId Declaration (Map Dir ExprId) Dir Int
-  | ExprExpr ElementId ExprId
+  | ExprExpr ExprId
   | ExprNand ElementId ExprId ExprId
   | ExprLessThan ElementId ExprId ExprId
   | ExprShiftLeft ElementId ExprId ExprId
@@ -592,7 +592,7 @@ instance Show Expr where
     show (ExprConst (Just n)) = show n
     show (ExprInput dir) = show dir
     show (ExprCall _ Declaration{declName=Just name} args dir rot) = "call " ++ show dir ++ show rot ++ " " ++ name ++ show (Data.Map.assocs args)
-    show (ExprExpr _ a) = "expr(" ++ show a ++ ")"
+    show (ExprExpr a) = "expr(" ++ show a ++ ")"
     show (ExprNand _ a b) = "nand(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprLessThan _ a b) = "lt(" ++ show a ++ "," ++ show b ++ ")"
     show (ExprShiftLeft _ a b) = "shl(" ++ show a ++ "," ++ show b ++ ")"
@@ -603,7 +603,7 @@ instance Show Expr where
 
 mapExprIds :: (ExprId -> ExprId) -> Expr -> Expr
 mapExprIds f (ExprCall elementId decl params dir rot) = ExprCall elementId decl (Data.Map.map f params) dir rot
-mapExprIds f (ExprExpr elementId exprId) = ExprExpr elementId (f exprId)
+mapExprIds f (ExprExpr exprId) = ExprExpr (f exprId)
 mapExprIds f (ExprNand elementId aExprId bExprId) = ExprNand elementId (f aExprId) (f bExprId)
 mapExprIds f (ExprLessThan elementId aExprId bExprId) = ExprLessThan elementId (f aExprId) (f bExprId)
 mapExprIds f (ExprShiftLeft elementId aExprId bExprId) = ExprShiftLeft elementId (f aExprId) (f bExprId)
@@ -614,7 +614,6 @@ mapExprIds f expr = expr
 
 mapElementIds :: (ElementId -> ElementId) -> Expr -> Expr
 mapElementIds f (ExprCall elementId decl params dir rot) = ExprCall (f elementId) decl params dir rot
-mapElementIds f (ExprExpr elementId exprId) = ExprExpr (f elementId) exprId
 mapElementIds f (ExprNand elementId aExprId bExprId) = ExprNand (f elementId) aExprId bExprId
 mapElementIds f (ExprLessThan elementId aExprId bExprId) = ExprLessThan (f elementId) aExprId bExprId
 mapElementIds f (ExprShiftLeft elementId aExprId bExprId) = ExprShiftLeft (f elementId) aExprId bExprId
@@ -640,7 +639,7 @@ resolve (decl@Declaration{declScope=scope},flowBoxes) = Subprogram{decl=decl,out
         rot = head (flowValidCallRotations box)
         makeParam (argDir,(argFromDir,boxId)) = (rotate rot argDir,(argFromDir,[(scope,boxId)]))
     makeBoxOutputExprs FlowBox{flowBoxId=boxId,flowBoxType=FlowTee,flowIn=ins,flowOut=outs}
-      | Data.Map.size outs == 2 = [((dir,[(scope,boxId)]),ExprExpr [(scope,boxId)] (fmap ((:[]) . (,) scope) (head (Data.Map.elems ins)))) | dir <- Data.Map.keys outs]
+      | Data.Map.size outs == 2 = [((dir,[(scope,boxId)]),ExprExpr (fmap ((:[]) . (,) scope) (head (Data.Map.elems ins)))) | dir <- Data.Map.keys outs]
       | otherwise = [((outDir,[(scope,boxId)]),ExprNand [(scope,boxId)] (fmap ((:[]) . (,) scope) (ins Data.Map.! rotate 3 outDir)) (fmap ((:[]) . (,) scope) (ins Data.Map.! rotate 1 outDir)))]
       where outDir = head (Data.Map.keys outs)
     makeBoxOutputExprs box@FlowBox{flowBoxId=boxId,flowBoxType=FlowCross} =
@@ -702,10 +701,10 @@ inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunct
           where
             inlineExprId = fmap (elementId++)
           -- insert exprId ExprExpr to output!dir elementId++ExprId
-            exprs2 = Data.Map.insert exprId (ExprExpr elementId (inlineExprId (inlineOutputs Data.Map.! dir))) exprs
+            exprs2 = Data.Map.insert exprId (ExprExpr (inlineExprId (inlineOutputs Data.Map.! dir))) exprs
           -- insert inlineExprs with mapping (elementId++) to exprIds, except changing ExprInput to ExprExpr to params!inputDir
             exprs3 = Data.Map.foldWithKey inlineCalledExpr exprs2 inlineExprs
-            inlineCalledExpr calledExprId (ExprInput inputDir) exprs = Data.Map.insert (inlineExprId calledExprId) (ExprExpr elementId (params Data.Map.! inputDir)) exprs
+            inlineCalledExpr calledExprId (ExprInput inputDir) exprs = Data.Map.insert (inlineExprId calledExprId) (ExprExpr (params Data.Map.! inputDir)) exprs
             inlineCalledExpr calledExprId calledExpr exprs = Data.Map.insert (inlineExprId calledExprId) (mapElementIds (elementId++) (mapExprIds inlineExprId calledExpr)) exprs
 
         inlineExpr exprId expr exprs = Data.Map.insert exprId expr exprs
@@ -714,12 +713,12 @@ optimizer :: Subprogram -> Subprogram
 optimizer subprogram@Subprogram{exprs=exprs} = subprogram{exprs=optimizedExprs}
   where
     exprIdMap = Data.Map.foldWithKey findExprIdsToMap Data.Map.empty exprs
-    findExprIdsToMap oldExprId (ExprExpr _ newExprId) exprIdMap = Data.Map.insert oldExprId newExprId exprIdMap
+    findExprIdsToMap oldExprId (ExprExpr newExprId) exprIdMap = Data.Map.insert oldExprId newExprId exprIdMap
     findExprIdsToMap _ _ exprIdMap = exprIdMap
 
     optimizedExprId exprId = maybe exprId optimizedExprId (Data.Map.lookup exprId exprIdMap)
     optimizedExprs = Data.Map.map (mapExprIds optimizedExprId) (Data.Map.filter notExprExpr exprs)
-    notExprExpr (ExprExpr _ _) = False
+    notExprExpr (ExprExpr _) = False
     notExprExpr _ = True
 
 parse :: [(String,String)] -> ([Subprogram],Program)
@@ -794,7 +793,7 @@ eval state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=exprs}
     evalExpr (ExprConst (Just n)) = (state,LazyValue (Value n Data.Map.empty))
     evalExpr (ExprInput dir) = (state,inputs Data.Map.! dir)
     evalExpr (ExprCall elementId decl params resultDir _) = (state,LazyThunk exprId)
-    evalExpr (ExprExpr elementId exprId) = eval state exprId -- should be removed by optimizer
+    evalExpr (ExprExpr exprId) = eval state exprId -- should be removed by optimizer
     evalExpr (ExprNand elementId aExprId bExprId)
       | isValue a && aVal == 0 = (state1,LazyValue (Value (-1) aClosures))
       | isValue a && isValue b = (state2,LazyValue (Value (complement (aVal .&. bVal)) (Data.Map.union aClosures bClosures)))
@@ -846,7 +845,7 @@ forceStep state@State{frame=frame@Frame{subprogram=subprogram@Subprogram{exprs=e
       | otherwise = (state,ForceNeeds input)
       where input = inputs Data.Map.! dir
     forceExpr expr@(ExprCall _ _ _ _ _) = forceStepCall state expr
-    forceExpr (ExprExpr elementId exprId) = forceStep state exprId
+    forceExpr (ExprExpr exprId) = forceStep state exprId
     forceExpr (ExprNand elementId aExprId bExprId)
       | not (isValue aForce) = (state1,aForce)
       | aVal == 0 = (state1,ForceValue (Value (-1) aClosures))
