@@ -612,6 +612,17 @@ mapExprIds f (ExprInvokeLambda1 elementId aExprId bExprId) = ExprInvokeLambda1 e
 mapExprIds f (ExprInvokeLambda2 elementId aExprId bExprId) = ExprInvokeLambda2 elementId (f aExprId) (f bExprId)
 mapExprIds f expr = expr
 
+mapElementIds :: (ElementId -> ElementId) -> Expr -> Expr
+mapElementIds f (ExprCall elementId decl params dir rot) = ExprCall (f elementId) decl params dir rot
+mapElementIds f (ExprExpr elementId exprId) = ExprExpr (f elementId) exprId
+mapElementIds f (ExprNand elementId aExprId bExprId) = ExprNand (f elementId) aExprId bExprId
+mapElementIds f (ExprLessThan elementId aExprId bExprId) = ExprLessThan (f elementId) aExprId bExprId
+mapElementIds f (ExprShiftLeft elementId aExprId bExprId) = ExprShiftLeft (f elementId) aExprId bExprId
+mapElementIds f (ExprLambda elementId aExprId bExprId) = ExprLambda (f elementId) aExprId bExprId
+mapElementIds f (ExprInvokeLambda1 elementId aExprId bExprId) = ExprInvokeLambda1 (f elementId) aExprId bExprId
+mapElementIds f (ExprInvokeLambda2 elementId aExprId bExprId) = ExprInvokeLambda2 (f elementId) aExprId bExprId
+mapElementIds f expr = expr
+
 resolve :: (Declaration,Map (Int,Int) FlowBox) -> Subprogram
 resolve (decl@Declaration{declScope=scope},flowBoxes) = Subprogram{decl=decl,outputs=Data.Map.fromList subprogramOutputs,exprs=exprs}
   where
@@ -674,9 +685,30 @@ removeUnreachableFunctions (initialMains,initialSubprograms) = Data.Map.filter (
     listCallees (ExprCall _ decl _ _ _) callees = decl:callees
     listCallees _ callees = callees
 
-inliner :: ([Subprogram],Program) -> ([Subprogram],Program)
-inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunctions (initialMains,initialSubprograms))
 -- undefined iteratively inline subprograms that do not call any subprograms
+inliner :: ([Subprogram],Program) -> ([Subprogram],Program)
+inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunctions (initialMains,initialSubprograms)) -- iterativeInline (filter isInlineable (Data.Map.elems subprograms))
+  where
+    subprograms = removeUnreachableFunctions (initialMains,initialSubprograms)
+    isInlineable Subprogram{exprs=exprs} = any isCallExpr exprs
+    isCallExpr (ExprCall _ _ _ _ _) = True
+    isCallExpr _ = False
+    iterativeInline [] = (initialMains,subprograms)
+    iterativeInline (subprogram:_) = inliner (map (inline subprogram) initialMains,fmap (inline subprogram) subprograms)
+    inline Subprogram{decl=inlineDecl,outputs=inlineOutputs,exprs=inlineExprs} subprogram@Subprogram{exprs=exprs} = subprogram{exprs=exprsWithInlinedCalls}
+      where
+        exprsWithInlinedCalls = Data.Map.foldWithKey inlineExpr Data.Map.empty exprs
+        inlineExpr exprId (ExprCall elementId decl params dir _) exprs | decl == inlineDecl = exprs3
+          where
+            inlineExprId = fmap (elementId++)
+          -- insert exprId ExprExpr to output!dir elementId++ExprId
+            exprs2 = Data.Map.insert exprId (ExprExpr elementId (inlineExprId (inlineOutputs Data.Map.! dir))) exprs
+          -- insert inlineExprs with mapping (elementId++) to exprIds, except changing ExprInput to ExprExpr to params!inputDir
+            exprs3 = Data.Map.foldWithKey inlineCalledExpr exprs2 inlineExprs
+            inlineCalledExpr calledExprId (ExprInput inputDir) exprs = Data.Map.insert (inlineExprId calledExprId) (ExprExpr elementId (params Data.Map.! inputDir)) exprs
+            inlineCalledExpr calledExprId calledExpr exprs = Data.Map.insert (inlineExprId calledExprId) (mapElementIds (elementId++) (mapExprIds inlineExprId calledExpr)) exprs
+
+        inlineExpr exprId expr exprs = Data.Map.insert exprId expr exprs
 
 optimizer :: Subprogram -> Subprogram
 optimizer subprogram@Subprogram{exprs=exprs} = subprogram{exprs=optimizedExprs}
@@ -973,7 +1005,6 @@ main = do
 dumpParse :: [String] -> IO ()
 dumpParse srcFiles = do
     srcs <- mapM readFile srcFiles
-    let flows = resolveFlows (concatMap parseDeclarations (zip srcFiles srcs))
     let (mains,subprograms) = parse (zip srcFiles srcs)
     mapM_ print mains
     mapM_ print subprograms
