@@ -684,12 +684,12 @@ removeUnreachableFunctions (initialMains,initialSubprograms) = Data.Map.filter (
     listCallees (ExprCall _ decl _ _ _) callees = decl:callees
     listCallees _ callees = callees
 
--- undefined iteratively inline subprograms that do not call any subprograms
+-- iteratively inline subprograms that do not call any subprograms
 inliner :: ([Subprogram],Program) -> ([Subprogram],Program)
-inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunctions (initialMains,initialSubprograms)) -- iterativeInline (filter isInlineable (Data.Map.elems subprograms))
+inliner (initialMains,initialSubprograms) = iterativeInline (filter isInlineable (Data.Map.elems subprograms))
   where
     subprograms = removeUnreachableFunctions (initialMains,initialSubprograms)
-    isInlineable Subprogram{exprs=exprs} = any isCallExpr exprs
+    isInlineable Subprogram{exprs=exprs} = not (any isCallExpr exprs)
     isCallExpr (ExprCall _ _ _ _ _) = True
     isCallExpr _ = False
     iterativeInline [] = (initialMains,subprograms)
@@ -700,9 +700,9 @@ inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunct
         inlineExpr exprId (ExprCall elementId decl params dir _) exprs | decl == inlineDecl = exprs3
           where
             inlineExprId = fmap (elementId++)
-          -- insert exprId ExprExpr to output!dir elementId++ExprId
+            -- insert exprId ExprExpr to output!dir elementId++ExprId
             exprs2 = Data.Map.insert exprId (ExprExpr (inlineExprId (inlineOutputs Data.Map.! dir))) exprs
-          -- insert inlineExprs with mapping (elementId++) to exprIds, except changing ExprInput to ExprExpr to params!inputDir
+            -- insert inlineExprs with mapping (elementId++) to exprIds, except changing ExprInput to ExprExpr to params!inputDir
             exprs3 = Data.Map.foldWithKey inlineCalledExpr exprs2 inlineExprs
             inlineCalledExpr calledExprId (ExprInput inputDir) exprs = Data.Map.insert (inlineExprId calledExprId) (ExprExpr (params Data.Map.! inputDir)) exprs
             inlineCalledExpr calledExprId calledExpr exprs = Data.Map.insert (inlineExprId calledExprId) (mapElementIds (elementId++) (mapExprIds inlineExprId calledExpr)) exprs
@@ -710,7 +710,7 @@ inliner (initialMains,initialSubprograms) = (initialMains,removeUnreachableFunct
         inlineExpr exprId expr exprs = Data.Map.insert exprId expr exprs
 
 optimizer :: Subprogram -> Subprogram
-optimizer subprogram@Subprogram{exprs=exprs} = subprogram{exprs=optimizedExprs}
+optimizer subprogram@Subprogram{outputs=outputs,exprs=exprs} = subprogram{outputs=optimizedOutputs,exprs=optimizedExprs}
   where
     exprIdMap = Data.Map.foldWithKey findExprIdsToMap Data.Map.empty exprs
     findExprIdsToMap oldExprId (ExprExpr newExprId) exprIdMap = Data.Map.insert oldExprId newExprId exprIdMap
@@ -718,6 +718,7 @@ optimizer subprogram@Subprogram{exprs=exprs} = subprogram{exprs=optimizedExprs}
 
     optimizedExprId exprId = maybe exprId optimizedExprId (Data.Map.lookup exprId exprIdMap)
     optimizedExprs = Data.Map.map (mapExprIds optimizedExprId) (Data.Map.filter notExprExpr exprs)
+    optimizedOutputs = Data.Map.map optimizedExprId outputs
     notExprExpr (ExprExpr _) = False
     notExprExpr _ = True
 
