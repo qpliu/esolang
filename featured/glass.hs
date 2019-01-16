@@ -1,4 +1,7 @@
--- http://esolangs.org/wiki/Glass
+-- https://esolangs.org/wiki/Glass
+
+-- Build: ghc --make glass
+-- Usage: glass SRC-FILE
 
 import Data.Array(Array)
 import qualified Data.Array as A
@@ -8,6 +11,7 @@ import Data.Map(Map)
 import qualified Data.Map as M
 import Data.Set(Set)
 import qualified Data.Set as S
+import System.Environment(getArgs)
 
 
 
@@ -529,3 +533,6 @@ initialState prog = State{
 
 glass :: String -> IO ()
 glass prog = (interact . runMain . initialState) prog
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= glass

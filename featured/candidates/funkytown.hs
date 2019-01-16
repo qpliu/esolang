@@ -1,10 +1,10 @@
 -- https://esolangs.org/wiki/Funciton
 
+-- Build: ghc --make funkytown
+-- Usage: funkytown SRC-FILE [SRC-FILE ...]
+
 -- Minimal implementation.  Invalid code will result in unhelpful error
 -- messages, stack overflows, infinite loops, or other unexpected results.
---
--- Usage: funkytown SRC-FILE [SRC-FILE ...]
--- Build: ghc --make funkytown
 --
 -- Possible limitation:
 -- Valid usage of lambdas may result in stack overflows or infinite loops
@@ -12,6 +12,11 @@
 -- frames, which requires forcing the evaluation of the function inputs
 -- at the time of the lambda creation rather than lazily evaluating them
 -- possibly not until after the time of the lambda invocation.
+--
+-- This limitation could be fixed by having a table of call frames that
+-- are garbage collected so that they live as long as the closures live.
+-- The frames are referred to by id so that multiple closures and stacks
+-- can refer to and modify the same frame.
 
 import Data.Array(Array,array,assocs,bounds,inRange,(!))
 import Data.Bits(complement,shift,(.&.))

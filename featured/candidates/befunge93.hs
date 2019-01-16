@@ -1,5 +1,8 @@
 -- https://esolangs.org/wiki/Befunge
 
+-- Build: ghc --make befunge93
+-- Usage: befunge93 SRC-FILE
+
 import Data.Array(Array,array,(!),(//))
 import Data.Char(chr,ord)
 import System.Environment(getArgs)
@@ -110,3 +113,6 @@ run state@State{halted = halted}
 
 befunge93 :: String -> IO ()
 befunge93 prog = newStdGen >>= run . parse prog
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= befunge93

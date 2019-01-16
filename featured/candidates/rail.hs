@@ -1,9 +1,13 @@
 -- https://esolangs.org/wiki/Rail
 
+-- Build: ghc --make rail
+-- Usage: rail SRC-FILE
+
 import Data.Array(Array,array,assocs,bounds,inRange)
 import qualified Data.Array
 import Data.Char(isDigit)
 import Data.Map(Map,empty,fold,insert,member,size,(!))
+import System.Environment(getArgs)
 
 data Program = Program (Map String Location) (Array Location Char)
 type Location = (Int,Int)
@@ -208,3 +212,6 @@ run prog input = call (parse prog) empty [] [] "main" input
 
 rail :: String -> IO ()
 rail prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= rail

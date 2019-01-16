@@ -1,5 +1,10 @@
 -- https://esolangs.org/wiki/Underload
 
+-- Build: ghc --make underload
+-- Usage: underload SRC-FILE
+
+import System.Environment(getArgs)
+
 str :: String -> (String,String)
 str "" = error "Unmatched ("
 str ('(':src) =
@@ -23,3 +28,6 @@ interp stack (c:src) = error ("Invalid command: " ++ [c])
 
 underload :: String -> IO ()
 underload prog = putStr (interp [] prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= underload

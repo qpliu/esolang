@@ -1,9 +1,13 @@
 -- https://esolangs.org/wiki/Eodermdrome
 
+-- Build: ghc --make eodermdrome
+-- Usage: eodermdrome SRC-FILE
+
 import Data.Char(ord)
 import Data.List(permutations)
 import Data.Set(Set,difference,elems,empty,findMin,fromList,isSubsetOf,member,size,union)
 import qualified Data.Set as S
+import System.Environment(getArgs)
 
 data Command = Command {
     input :: Set Char,
@@ -99,3 +103,6 @@ run prog inp = interp cmds ((fst . fst . parseGraph) "thequickbrownfoxjumpsovert
 
 eodermdrome :: String -> IO ()
 eodermdrome prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= eodermdrome

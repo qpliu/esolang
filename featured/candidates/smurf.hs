@@ -1,5 +1,8 @@
 -- https://esolangs.org/wiki/Smurf
 
+-- Build: ghc --make smurf
+-- Usage: smurf SRC-FILE
+
 -- Notes:
 -- The specification says o outputs the top of the stack.  It does not say
 -- that the top of the stack is popped off.  The perl implementation pops
@@ -8,6 +11,7 @@
 import Data.Char(isSpace)
 import Data.Map(Map,empty,insert,lookup)
 import Prelude hiding (lookup)
+import System.Environment(getArgs)
 
 interp :: String -> [String] -> Map String String -> [String] -> String
 interp code stack vars input = exec code
@@ -64,3 +68,6 @@ run prog input = interp prog [] empty (lines input)
 
 smurf :: String -> IO ()
 smurf prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= smurf

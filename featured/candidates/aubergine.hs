@@ -1,7 +1,11 @@
 -- https://esolangs.org/wiki/Aubergine
 
+-- Build: ghc --make aubergine
+-- Usage: aubergine SRC-FILE
+
 import Data.Array(Array,array,bounds,inRange,(!),(//))
 import Data.Char(chr,ord)
+import System.Environment(getArgs)
 
 data State = State {
     a :: Int,
@@ -54,3 +58,6 @@ interp s@State{a = a, b = b, i = i, cells = cells} inp =
 
 aubergine :: String -> IO ()
 aubergine prog = interact (interp (parse prog))
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= aubergine

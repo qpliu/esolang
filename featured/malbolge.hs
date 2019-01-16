@@ -1,7 +1,11 @@
--- http://esolangs.org/wiki/Malbolge
+-- https://esolangs.org/wiki/Malbolge
+
+-- Build: ghc --make malbolge
+-- Usage: malbolge SRC-FILE
 
 import Data.Array(Array,listArray,(!),(//))
 import Data.Char(chr,isSpace,ord)
+import System.Environment(getArgs)
 
 op :: Int -> Int -> Int
 op a b = toInt (zipWith tritOp (fromInt a) (fromInt b))
@@ -85,3 +89,6 @@ initMem prog = State 0 0 0 (listArray (0,3^10-1) (fillMem 0 0 0 prog))
 
 malbolge :: String -> IO ()
 malbolge prog = (interact . exec . initMem) prog
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= malbolge

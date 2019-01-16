@@ -1,6 +1,10 @@
--- http://esolangs.org/wiki/Brainfuck
+-- https://esolangs.org/wiki/Brainfuck
+
+-- Build: ghc --make brainfuck
+-- Usage: brainfuck SRC-FILE
 
 import Data.Char(chr,ord)
+import System.Environment(getArgs)
 
 bf :: Integral cell => (String,String) -> [cell] -> [cell] -> Maybe cell -> String -> String
 bf ([],_) _ _ _ _ = []
@@ -38,3 +42,6 @@ jumpback p = p
 
 brainfuck :: String -> IO ()
 brainfuck prog = interact (bf (prog,"") (replicate 30000 0) [] Nothing)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= brainfuck

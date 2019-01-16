@@ -1,4 +1,7 @@
--- http://esolangs.org/wiki/Deadfish
+-- https://esolangs.org/wiki/Deadfish
+
+-- Build: ghc --make deadfish
+-- Usage: deadfish
 
 df :: Integer -> String -> String
 df x s
@@ -12,3 +15,6 @@ df x s
 
 deadfish :: IO ()
 deadfish = putStr ">> " >> interact (df 0)
+
+main :: IO ()
+main = deadfish

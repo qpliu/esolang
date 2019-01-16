@@ -1,5 +1,10 @@
 -- https://esolangs.org/wiki/Unlambda
 
+-- Build: ghc --make unlambda
+-- Usage: unlambda SRC-FILE
+
+import System.Environment(getArgs)
+
 data F = Ap F F | S | K | I | V | Ch Char | D | C | E | In | Test Char | Print
        | ApK F | ApS F | ApApS F F | ApD F
        | ApC (String -> Maybe Char -> F -> String)
@@ -72,3 +77,6 @@ run prog inp = eval inp Nothing (parse prog) (const (const (const "")))
 
 unlambda :: String -> IO ()
 unlambda prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= unlambda

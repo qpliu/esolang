@@ -1,7 +1,11 @@
 -- https://esolangs.org/wiki/Kipple
 
+-- Build: ghc --make kipple
+-- Usage: kipple SRC-FILE
+
 import Data.Char(chr,ord,toLower)
 import Data.Map(Map,adjust,fromList,(!))
+import System.Environment(getArgs)
 
 type Id = Char
 type State = Map Id [Int]
@@ -109,3 +113,6 @@ run prog inp = map chr (state!'o')
 
 kipple :: String -> IO ()
 kipple prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= kipple

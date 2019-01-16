@@ -1,5 +1,10 @@
 -- https://esolangs.org/wiki/Thue
 
+-- Build: ghc --make thue
+-- Usage: thue SRC-FILE
+
+import System.Environment(getArgs)
+
 data Rule = S String String | I String | O String String
 
 search :: String -> String -> Maybe (String,String)
@@ -44,3 +49,6 @@ run (rules,state) inp = interp (lines inp) rules [] state
 
 thue :: String -> IO ()
 thue prog = interact (run (parse prog))
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= thue

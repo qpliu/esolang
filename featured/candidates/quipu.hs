@@ -1,5 +1,8 @@
 -- https://esolangs.org/wiki/Quipu
 
+-- Build: ghc --make quipu
+-- Usage: quipu SRC-FILE
+
 -- Notes:
 -- The specification is unclear how input is handled.
 -- The cat example suggests that it sucks the entire input into a string
@@ -29,6 +32,7 @@
 
 import Data.Array(Array,array,bounds,inRange,(!),(//))
 import Data.Char(isDigit)
+import System.Environment(getArgs)
 
 type Value = Either String Integer
 
@@ -142,3 +146,6 @@ run prog input = evalThread threads (fmap (const (Right 0)) threads) 0 (lines in
 
 quipu :: String -> IO ()
 quipu prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= quipu

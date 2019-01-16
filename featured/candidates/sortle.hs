@@ -1,5 +1,8 @@
 -- https://esolangs.org/wiki/Sortle
 
+-- Build: ghc --make sortle
+-- Usage: sortle SRC-FILE
+
 -- Notes:
 
 -- The pdf specification is at
@@ -49,6 +52,7 @@
 
 import Data.Char(chr,isAlpha,isDigit,isSpace)
 import Data.Word(Word32)
+import System.Environment(getArgs)
 
 data Expr = ExprLiteral String | ExprOperator ([String] -> String -> String -> String)
 
@@ -213,3 +217,6 @@ run prog = interp [] (parse prog)
 
 sortle :: String -> IO ()
 sortle prog = putStr (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= sortle

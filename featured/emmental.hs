@@ -1,7 +1,11 @@
--- http://esolangs.org/wiki/Emmental
+-- https://esolangs.org/wiki/Emmental
+
+-- Build: ghc --make emmental
+-- Usage: emmental SRC-FILE
 
 import Data.Char(chr,ord)
 import Data.Map(Map,findWithDefault,fromList,insert)
+import System.Environment(getArgs)
 
 data State = State [Char] [Char] (Map Char Insn)
 type Insn = (State -> String -> String) -> State -> String -> String
@@ -96,3 +100,6 @@ interp (c:prog) state@(State _ _ defs) input =
 
 emmental :: String -> IO ()
 emmental prog = interact (interp prog initialState)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= emmental

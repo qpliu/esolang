@@ -1,4 +1,9 @@
--- http://esolangs.org/wiki////
+-- https://esolangs.org/wiki////
+
+-- Build: ghc --make subst
+-- Usage: subst SRC-FILE
+
+import System.Environment(getArgs)
 
 execute :: String -> String
 execute [] = []
@@ -27,3 +32,6 @@ substitution pat rep leader rest
 
 subst :: String -> IO ()
 subst = putStr . execute
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= subst

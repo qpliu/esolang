@@ -1,7 +1,11 @@
 -- https://esolangs.org/wiki/Hollow
 
+-- Build: ghc --make hollow
+-- Usage: hollow SRC-FILE
+
 import Data.Array(Array,array,bounds,inRange,(!))
 import Data.Char(isSpace)
+import System.Environment(getArgs)
 
 data Line = Line {
     dataPart :: [DataPart],
@@ -101,3 +105,6 @@ run prog = interp (parse prog) 1 []
 
 hollow :: String -> IO ()
 hollow prog = interact (run prog)
+
+main :: IO ()
+main = getArgs >>= readFile . head >>= hollow
