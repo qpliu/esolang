@@ -14,6 +14,10 @@ type Token struct {
 	Line, Column int
 }
 
+func (t Token) IsToken(tok string) bool {
+	return !t.Identifier && tok == t.Value
+}
+
 type Tokenizer struct {
 	filename string
 	r        io.RuneReader
@@ -50,7 +54,7 @@ func (t *Tokenizer) Next() (Token, error) {
 		case ' ', '\t', '\f', '\v', '\r':
 			t.eatBuffer(1)
 			t.column++
-		case '+', '-', '=', '<', '>', '(', ')', '{', '}':
+		case '+', '-', '=', '<', '>', '(', ')', '{', '}', '.', ',':
 			tok := string(t.buffer[0])
 			line := t.line
 			column := t.column
@@ -124,7 +128,11 @@ func (t *Tokenizer) Next() (Token, error) {
 				if t.atEOF {
 					return Token{}, fmt.Errorf("%s:%d:%d: Unterminated identifier", t.filename, t.line, t.column)
 				}
-				if t.buffer[len(t.buffer)-1] == '"' {
+				if escaped {
+					escaped = false
+				} else if t.buffer[len(t.buffer)-1] == '\\' {
+					escaped = true
+				} else if t.buffer[len(t.buffer)-1] == '"' {
 					return t.quotedIdentifier(len(t.buffer) - 1), nil
 				}
 			}

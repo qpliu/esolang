@@ -18,12 +18,14 @@ reconstructs the values.
 
 Grammar
 -------
-  program = statement*
-  block = '{' statement* 'return'? expr '}'
-  statement = (assignment | define-function | expr | block) '.'
+```
+  program = statements? '.'?
+  statements = statement ('.' statement)*
+  statement = assignment | define-function | block | expr
   assignment = identifier ':=' expr
   define-function = identifier '(' (identifier ( ',' identifier)*)? ')'
       ':=' (block | identifier)
+  block = '{' (statements '.')? 'return'? expr '}'
   expr = '0' | identifier | push-expr | pop-expr | gt-expr | lt-expr |
       eq-expr | call-function | '(' expr ')'
   push-expr = expr '+' expr block?
@@ -32,40 +34,42 @@ Grammar
   lt-expr = expr '<' expr block?
   eq-expr = expr '=' expr block?
   call-function = identifier '(' (expr (',' expr)*)? ')'
+```
 
-Comments start with '//' and extend to the end of the line.
+Comments start with `//` and extend to the end of the line.
 
-Identifiers are sequences of alphanumeric or '_' characters, or
+Identifiers are sequences of alphanumeric or `_` characters, or
 sequences of any character between double quotes, with backslash
 escaping for backslash or double quote characters.  The only reserved
-words are 'return' and '0', and identifiers named 'return' or '0' are
-possible when using double quotes.
+words are `return` and `0`, and identifiers named `return` or `0` are
+possible when using double quotes, as `"return"` or `"0"`.
 
 Whitespace may be used between tokens and is otherwise ignored.
-Whitespace must be used to separate the 'return' token and an
-identifier that is not in double quotes or '0'.
+Whitespace must be used to separate the `return` token and an
+identifier that is not in double quotes or `0`.
 
 Expressions
 -----------
-push-expr: a+b evaluates to a with b pushed on top, crushing anything
-< b.  a+b{block}, if b can be pushed on top of a without crushing
-anything, evaluates to a with b pushed on top, otherwise, b is not
-pushed onto a and evaluates to block.
+push-expr: `a+b` evaluates to `a` with `b` pushed on top, crushing
+anything < `b`.  `a+b{block}`, if `b` can be pushed on top of `a`
+without crushing anything, evaluates to `a` with `b` pushed on top,
+otherwise, `b` is not pushed onto `a` and evaluates to `block`.
 
-pop-expr: a- evaluates to a with the top of a popped.  if a is empty,
-then a- evaluates to a.  a-{block} evaluates to block with top of a
-popped.  if a is empty, a-{block} evaluates to a.  a-b{block}
-evaluates to block with top of a popped and with the popped value
-assigned to b.  the scope of b is limited to block.
+pop-expr: `a-` evaluates to `a` with the top of `a` popped.  if `a` is
+empty, then `a-` evaluates to `a`.  `a-{block}` evaluates to `block`
+with top of `a` popped.  if `a` is empty, `a-{block}` evaluates to
+`a`.  `a-b{block}` evaluates to `block` with top of `a` popped and
+with the popped value assigned to `b`.  the scope of `b` is limited to
+`block`.
 
-gt-expr: a>b with no block evaluates to a if a>b, else b.  a>b{block}
-evaluates to block if a>b, else b.
+gt-expr: `a>b` with no block evaluates to `a` if `a`>`b`, else `b`.
+`a>b{block}` evaluates to block if `a`>`b`, else `b`.
 
-lt-expr: a<b with no block evaluates to a if a<b, else b.  a<b{block}
-evaluates to block if a<b, else b.
+lt-expr: `a<b` with no block evaluates to `a` if `a`<`b`, else `b`.
+`a<b{block}` evaluates to `block` if `a`<`b`, else `b`.
 
-eq-expr: a=b with no block evaluates to a if a=b, else b.  a=b{block}
-evaluates to block if a=b, else b.
+eq-expr: `a=b` with no block evaluates to `a` if `a=b`, else `b`.
+`a=b{block}` evaluates to `block` if `a=b`, else `b`.
 
 Scoping
 -------
@@ -84,9 +88,9 @@ statement not in a function causes the program to terminate.
 Library Functions
 -----------------
 To use a library function, define a function with a name.
-
+```
   f() := name_of_library_function.
-
+```
 Library functions are implementation defined.
 
 A library function may be overloaded with respect to the number of
@@ -101,6 +105,7 @@ functions.
 Examples
 --------
 cat:
+```
   cat() := {
     // read and write are library functions
     read() := "read". // returns 0 for EOF, otherwise the top of the result is the next value read
@@ -109,9 +114,10 @@ cat:
       write(a).
       cat()
     }
-  }
-
+  }.
+```
 structural equality:
+```
   // return 0 if equal, 0+0 if not
   eq(a,b) := {
     z := 0.
@@ -134,8 +140,8 @@ structural equality:
       }
     }.
     z+0
-  }
-
+  }.
+```
 Implementation Notes
 --------------------
 Should have tail call elimination.
