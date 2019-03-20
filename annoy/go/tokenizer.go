@@ -227,3 +227,11 @@ func (t *Tokenizer) quotedIdentifier(i int) Token {
 func isIdentifierChar(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
+
+func (t *Tokenizer) Append(tokens []Token) ([]Token, error) {
+	token, err := t.Next()
+	if err != nil {
+		return tokens, err
+	}
+	return append(tokens, token), nil
+}
