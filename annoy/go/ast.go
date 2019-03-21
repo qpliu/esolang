@@ -42,16 +42,14 @@ func (s *StmtExpr) StmtFirstToken() Token {
 }
 
 type StmtBlock struct {
+	Token  Token
 	Stmts  []Stmt
 	Expr   Expr
 	Return bool
 }
 
 func (s *StmtBlock) StmtFirstToken() Token {
-	if len(s.Stmts) > 0 {
-		return s.Stmts[0].StmtFirstToken()
-	}
-	return s.Expr.ExprFirstToken()
+	return s.Token
 }
 
 type Expr interface {

@@ -32,7 +32,7 @@ func Parse(t *Tokenizer) ([]Stmt, error) {
 		if tokens[0].IsToken(".") {
 			tokens = tokens[1:]
 		} else {
-			return nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+			return nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 		}
 	}
 }
@@ -47,9 +47,9 @@ func parseStmt(t *Tokenizer, tokens []Token) (Stmt, []Token, error) {
 	}
 	if tokens[0].IsToken("{") {
 		var stmtBlock *StmtBlock
-		stmtBlock, tokens, err = parseBlock(t, tokens[1:])
+		stmtBlock, tokens, err = parseBlock(t, tokens)
 		return stmtBlock, tokens, err
-	} else if tokens[0].IsToken("(") {
+	} else if tokens[0].IsToken("(") || tokens[0].IsToken("0") {
 		var expr Expr
 		expr, tokens, err = parseExpr(t, tokens)
 		if err != nil {
@@ -57,16 +57,22 @@ func parseStmt(t *Tokenizer, tokens []Token) (Stmt, []Token, error) {
 		}
 		return &StmtExpr{Expr: expr}, tokens, nil
 	} else if !tokens[0].Identifier {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 	}
 	if len(tokens) < 2 {
 		tokens, err = t.Append(tokens)
-		if err != nil {
+		if err == io.EOF {
+			return &StmtExpr{
+				Expr: &ExprIdentifier{
+					Name: tokens[0],
+				},
+			}, tokens[1:], nil
+		} else if err != nil {
 			return nil, nil, err
 		}
 	}
 	if tokens[1].Identifier {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[1].Filename, tokens[1].Line, tokens[1].Column)
+		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[1].Filename, tokens[1].Line, tokens[1].Column, tokens[1].Value)
 	} else if tokens[1].IsToken(":=") {
 		// assignment
 		name := tokens[0]
@@ -103,9 +109,20 @@ func parseStmt(t *Tokenizer, tokens []Token) (Stmt, []Token, error) {
 }
 
 func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
+	var err error
+	if len(tokens) == 0 {
+		tokens, err = t.Append(tokens)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if !tokens[0].IsToken("{") {
+		panic("parseBlock")
+	}
+	token := tokens[0]
+	tokens = tokens[1:]
 	stmts := []Stmt{}
 	for {
-		var err error
 		if len(tokens) == 0 {
 			tokens, err = t.Append(tokens)
 			if err != nil {
@@ -114,12 +131,13 @@ func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
 		}
 		if tokens[0].IsToken("}") {
 			if len(stmts) == 0 {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 			}
 			if stmtExpr, ok := stmts[len(stmts)-1].(*StmtExpr); !ok {
 				return nil, nil, fmt.Errorf("%s:%d:%d: Invalid block", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
 			} else {
 				return &StmtBlock{
+					Token:  token,
 					Stmts:  stmts[:len(stmts)-1],
 					Expr:   stmtExpr.Expr,
 					Return: false,
@@ -138,9 +156,10 @@ func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
 				}
 			}
 			if !tokens[0].IsToken("}") {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 			}
 			return &StmtBlock{
+				Token:  token,
 				Stmts:  stmts,
 				Expr:   expr,
 				Return: true,
@@ -167,10 +186,10 @@ func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
 				}
 			}
 			if tokens[0].IsToken("}") {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 			}
 		} else if !tokens[0].IsToken("}") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 		}
 	}
 }
@@ -195,21 +214,21 @@ func parseExpr(t *Tokenizer, tokens []Token) (Expr, []Token, error) {
 				return nil, nil, err
 			}
 		}
-		if !tokens[0].IsToken("(") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+		if !tokens[0].IsToken(")") {
+			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 		}
 		tokens = tokens[1:]
 	} else if tokens[0].IsToken("0") {
 		expr = &Expr0{Token: tokens[0]}
 		tokens = tokens[1:]
 	} else if !tokens[0].Identifier {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 	} else {
 		// identifier or function-call
-		for len(tokens) < 2 {
+		if len(tokens) < 2 {
 			tokens, err = t.Append(tokens)
 			if err == io.EOF {
-				return expr, tokens, nil
+				return &ExprIdentifier{Name: tokens[0]}, tokens[1:], nil
 			} else if err != nil {
 				return nil, nil, err
 			}
@@ -251,102 +270,107 @@ func parseExpr(t *Tokenizer, tokens []Token) (Expr, []Token, error) {
 				} else if tokens[0].IsToken(",") {
 					tokens = tokens[1:]
 				} else {
-					return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+					return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 				}
 			}
-			return &ExprCallFunction{Name: name, Args: args}, tokens, nil
+			expr = &ExprCallFunction{Name: name, Args: args}
 		}
 	}
 
-	if len(tokens) == 0 {
-		tokens, err = t.Append(tokens)
-		if err == io.EOF {
-			return expr, tokens, nil
-		} else if err != nil {
-			return nil, nil, err
-		}
-	}
-	if tokens[0].IsToken("+") || tokens[0].IsToken(">") || tokens[0].IsToken("<") || tokens[0].IsToken("=") {
-		op := tokens[0]
-		var expr2 Expr
-		expr2, tokens, err = parseExpr(t, tokens[1:])
-		if err != nil {
-			return nil, nil, err
-		}
+	for {
 		if len(tokens) == 0 {
 			tokens, err = t.Append(tokens)
 			if err == io.EOF {
-				return &ExprBinary{
+				return expr, tokens, nil
+			} else if err != nil {
+				return nil, nil, err
+			}
+		}
+		if tokens[0].IsToken("+") || tokens[0].IsToken(">") || tokens[0].IsToken("<") || tokens[0].IsToken("=") {
+			op := tokens[0]
+			var expr2 Expr
+			expr2, tokens, err = parseExpr(t, tokens[1:])
+			if err != nil {
+				return nil, nil, err
+			}
+			if len(tokens) == 0 {
+				tokens, err = t.Append(tokens)
+				if err == io.EOF {
+					return &ExprBinary{
+						Left:  expr,
+						Right: expr2,
+						Op:    op,
+						Block: nil,
+					}, tokens, nil
+				} else if err != nil {
+					return nil, nil, err
+				}
+			}
+			if !tokens[0].IsToken("{") {
+				expr = &ExprBinary{
 					Left:  expr,
 					Right: expr2,
 					Op:    op,
 					Block: nil,
-				}, tokens, nil
-			} else if err != nil {
-				return nil, nil, err
+				}
+				continue
 			}
-		}
-		if !tokens[0].IsToken("{") {
-			return &ExprBinary{
-				Left:  expr,
-				Right: expr2,
-				Op:    op,
-				Block: nil,
-			}, tokens, nil
-		}
-		var stmtBlock *StmtBlock
-		stmtBlock, tokens, err = parseBlock(t, tokens[1:])
-		if err != nil {
-			return nil, nil, err
-		}
-		return &ExprBinary{
-			Left:  expr,
-			Right: expr2,
-			Op:    op,
-			Block: stmtBlock,
-		}, tokens, nil
-	} else if tokens[0].IsToken("-") {
-		tokens = tokens[1:]
-		if len(tokens) == 0 {
-			tokens, err = t.Append(tokens)
-			if err == io.EOF {
-				return &ExprPop{Expr: expr, Block: nil}, tokens, nil
-			} else if err != nil {
-				return nil, nil, err
-			}
-		}
-		if !tokens[0].Identifier {
-			return &ExprPop{Expr: expr, Block: nil}, tokens, nil
-		}
-		name := tokens[0]
-		tokens = tokens[1:]
-		if len(tokens) == 0 {
-			tokens, err = t.Append(tokens)
+			var stmtBlock *StmtBlock
+			stmtBlock, tokens, err = parseBlock(t, tokens)
 			if err != nil {
 				return nil, nil, err
 			}
+			expr = &ExprBinary{
+				Left:  expr,
+				Right: expr2,
+				Op:    op,
+				Block: stmtBlock,
+			}
+			continue
+		} else if tokens[0].IsToken("-") {
+			tokens = tokens[1:]
+			if len(tokens) == 0 {
+				tokens, err = t.Append(tokens)
+				if err == io.EOF {
+					return &ExprPop{Expr: expr, Block: nil}, tokens, nil
+				} else if err != nil {
+					return nil, nil, err
+				}
+			}
+			if !tokens[0].Identifier {
+				expr = &ExprPop{Expr: expr, Block: nil}
+				continue
+			}
+			name := tokens[0]
+			tokens = tokens[1:]
+			if len(tokens) == 0 {
+				tokens, err = t.Append(tokens)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			if !tokens[0].IsToken("{") {
+				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+			}
+			var stmtBlock *StmtBlock
+			stmtBlock, tokens, err = parseBlock(t, tokens)
+			if err != nil {
+				return nil, nil, err
+			}
+			expr = &ExprPop{
+				Expr: expr,
+				Block: &struct {
+					Name  Token
+					Block StmtBlock
+				}{
+					Name:  name,
+					Block: *stmtBlock,
+				},
+			}
+			continue
+		} else {
+			return expr, tokens, nil
 		}
-		if !tokens[0].IsToken("{") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
-		}
-		tokens = tokens[1:]
-		var stmtBlock *StmtBlock
-		stmtBlock, tokens, err = parseBlock(t, tokens[1:])
-		if err != nil {
-			return nil, nil, err
-		}
-		return &ExprPop{
-			Expr: expr,
-			Block: &struct {
-				Name  Token
-				Block StmtBlock
-			}{
-				Name:  name,
-				Block: *stmtBlock,
-			},
-		}, tokens, nil
-	} else {
-		return expr, tokens, nil
 	}
 }
 
@@ -388,19 +412,19 @@ func parseDefineFunction(t *Tokenizer, tokens []Token, closeIndex int) (Stmt, []
 	params := []Token{}
 	paramSet := make(map[string]bool)
 	for i := 2; i < closeIndex; i += 2 {
-		if i > 2 && tokens[i-1].IsToken(",") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[i-1].Filename, tokens[i-1].Line, tokens[i-1].Column)
+		if i > 2 && !tokens[i-1].IsToken(",") {
+			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[i-1].Filename, tokens[i-1].Line, tokens[i-1].Column, tokens[i-1].Value)
 		}
 		if !tokens[i].Identifier {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[i].Filename, tokens[i].Line, tokens[i].Column)
+			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[i].Filename, tokens[i].Line, tokens[i].Column, tokens[i].Value)
 		}
 		if paramSet[tokens[i].Value] {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Duplicate parameter name", tokens[i].Filename, tokens[i].Line, tokens[i].Column)
+			return nil, nil, fmt.Errorf("%s:%d:%d: Duplicate parameter name: %s", tokens[i].Filename, tokens[i].Line, tokens[i].Column, tokens[i].Value)
 		}
 		params = append(params, tokens[i])
 		paramSet[tokens[i].Value] = true
 	}
-	tokens = tokens[closeIndex+1:]
+	tokens = tokens[closeIndex+2:]
 	if len(tokens) == 0 {
 		var err error
 		tokens, err = t.Append(tokens)
@@ -415,11 +439,11 @@ func parseDefineFunction(t *Tokenizer, tokens []Token, closeIndex int) (Stmt, []
 			Lib:    tokens[0],
 		}, tokens[1:], nil
 	} else if !tokens[0].IsToken("{") {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
 	}
 	var stmtBlock *StmtBlock
 	var err error
-	stmtBlock, tokens, err = parseBlock(t, tokens[1:])
+	stmtBlock, tokens, err = parseBlock(t, tokens)
 	if err != nil {
 		return nil, nil, err
 	}
