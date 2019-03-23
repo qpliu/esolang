@@ -16,6 +16,13 @@ language only allows direct comparison of sizes.  A test of structural
 equality is possible with a recursive function that deconstructs and
 reconstructs the values.
 
+A value that is pushed onto another value is not directly accessible.
+An implementation must fail with a compile-time or a run-time error if
+an inacessible value is accessed.  An inaccessible value becomes
+accessible once it is popped.  An inaccessible value that is destroyed
+due to a larger sized value being pushed on top of it will forever
+remain inaccessible.
+
 Grammar
 -------
 ```
@@ -161,3 +168,19 @@ Since no references are allowed to pushed values, cyclical references
 are impossible, so reference counting is sufficient for garbage
 collection, and all values recursively contained in a garbage
 collected value can be garbage collected.
+
+Should be aware that function arguments could alias each other as well
+as well as the values of other identifiers in the scope that encloses
+the function, so it's probably too difficult to statically determine
+the lifetimes of identifiers.
+
+It might have to be a run-time error to refer to a value that has been
+pushed.  But then, what if an identifier refers to a value that then
+gets pushed and then gets popped?  That can be solved by using a
+version number that is incremented when pushed, so if an identifier's
+version number does not match the value's version number, it's
+invalid.
+
+Still, want to implement as much static analysis as possible to flag
+anything that is statically determined to refer to values that have
+been pushed errors.
