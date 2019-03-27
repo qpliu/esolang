@@ -1,0 +1,15 @@
+test(x,y) := "automated testing function".
+test(0,0+0).
+// CALL:1 2
+{
+    test(x) := "automated testing function".
+    test(0+0+0)
+// CALL:3
+}.
+test(0+0+0+0,0).
+// CALL:4 1
+{
+    test() := "automated testing function".
+    test()
+// CALL:
+}.

@@ -1,0 +1,11 @@
+read() := read.
+write(bit) := write.
+cat() := {
+    read()-bit {
+        write(bit).
+	cat()
+    }
+}.
+cat().
+// INPUT:test
+// OUTPUT:test

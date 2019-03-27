@@ -36,7 +36,7 @@ Grammar
   expr = '0' | identifier | push-expr | pop-expr | gt-expr | lt-expr |
       eq-expr | call-function | '(' expr ')'
   push-expr = expr '+' expr block?
-  pop-expr = expr '-' (identifier? block)?
+  pop-expr = expr '-' (identifier block)?
   gt-expr = expr '>' expr block?
   lt-expr = expr '<' expr block?
   eq-expr = expr '=' expr block?
@@ -63,11 +63,10 @@ without crushing anything, evaluates to `a` with `b` pushed on top,
 otherwise, `b` is not pushed onto `a` and evaluates to `block`.
 
 pop-expr: `a-` evaluates to `a` with the top of `a` popped.  if `a` is
-empty, then `a-` evaluates to `a`.  `a-{block}` evaluates to `block`
-with top of `a` popped.  if `a` is empty, `a-{block}` evaluates to
-`a`.  `a-b{block}` evaluates to `block` with top of `a` popped and
-with the popped value assigned to `b`.  the scope of `b` is limited to
-`block`.
+empty, then `a-` evaluates to `a`.  `a-b{block}` evaluates to `block`
+with top of `a` popped and with the popped value assigned to `b`.  the
+scope of `b` is limited to `block`.  If `a` is empty, `a-b{block}`
+evaluates to `a`.
 
 gt-expr: `a>b` with no block evaluates to `a` if `a`>`b`, else `b`.
 `a>b{block}` evaluates to block if `a`>`b`, else `b`.
