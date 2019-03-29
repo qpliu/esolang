@@ -1,0 +1,4 @@
+test(x) := "automated testing function".
+a := 0.
+test(a).
+// CALL:1

@@ -37,8 +37,8 @@ func testSrcFile(t *testing.T, filename string) {
 		t.Errorf("%s: Did not get expected error=%s", filename, expectedErrMsg)
 	}
 
-	expectedOutput = strings.Trim(expectedOutput, " \r\n")
-	output := strings.Trim(outputBuffer.String(), " \r\n")
+	expectedOutput = strings.Trim(expectedOutput, " \t\r\n")
+	output := strings.Trim(outputBuffer.String(), " \t\r\n")
 	if expectedOutput != output {
 		t.Errorf("%s: Expected output=%s, got output=%s", filename, expectedOutput, output)
 	}
@@ -51,12 +51,13 @@ func testSrcFile(t *testing.T, filename string) {
 	for i, call := range testingCalls {
 		expectedCall := expectedTestingCalls[i]
 		if len(expectedCall) != len(call) {
-			t.Errorf("%s: Expected %d arguments to testing call %d, got %d", filename, len(expectedCall), i+1, len(call))
-			continue
+			t.Errorf("%s: Expected %d testing call(s), got %d testing call(s)", filename, expectedTestingCalls, testingCalls)
+			return
 		}
 		for j := range call {
 			if expectedCall[j] != call[j] {
-				t.Errorf("%s: Expected %d for argument %d of testing call %d, got %d", filename, expectedCall[j], j+1, i+1, call[j])
+				t.Errorf("%s: Expected %d testing call(s), got %d testing call(s)", filename, expectedTestingCalls, testingCalls)
+				return
 			}
 		}
 	}
@@ -92,7 +93,7 @@ func getExpectedTestingCalls(filename string) ([][]int, string, string, string, 
 			}
 			testingCalls = append(testingCalls, call)
 		} else if strings.HasPrefix(line, "// ERR:") {
-			errMsg = line[7:]
+			errMsg = strings.Trim(line[7:], " \t\r\n")
 		} else if strings.HasPrefix(line, "// INPUT:") {
 			input += line[9:]
 		} else if strings.HasPrefix(line, "// OUTPUT:") {

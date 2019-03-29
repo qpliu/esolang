@@ -1,0 +1,14 @@
+test(x) := "automated testing function".
+a := 0+0+0.
+b := 0+0.
+f() := {
+    test(b + a { test(b) }).
+// CALL:2
+// CALL:2
+    test(b + a { return test(b) }).
+// CALL:2
+    test(0)
+}.
+f().
+test(b + a).
+// CALL:4

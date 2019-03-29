@@ -1,0 +1,19 @@
+test(x) := "automated testing function".
+f(x,y) := {
+    test((x = 0 { return y }) = test(0) { 0+0+0+0+0+0 }).
+    test(test(0) = (x > (0+0) { return y }) { 0+0+0+0+0 })
+}.
+y := 0+0+0+0.
+test(f(0,y)).
+// CALL:4
+test(f(0+0,y)).
+// CALL:1
+// CALL:6
+// CALL:1
+// CALL:2
+// CALL:2
+test(f(0+0+0,y)).
+// CALL:1
+// CALL:6
+// CALL:1
+// CALL:4

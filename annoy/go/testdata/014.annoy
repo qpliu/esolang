@@ -1,0 +1,13 @@
+test(x) := "automated testing function".
+f(x) := {
+    test(x)
+}.
+g(x) := {
+    f(x).
+// CALL:2
+    f(test(x)).
+// CALL:2
+// CALL:2
+    f(0 = 0 { return 0 })
+}.
+g(0+0)

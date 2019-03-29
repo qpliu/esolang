@@ -1,0 +1,6 @@
+test(x) := "automated testing function".
+test(0+0).
+// CALL:2
+0 = 0 { test(0+0+0). return 0+0 }.
+// CALL:3
+test(0+0).

@@ -10,11 +10,10 @@ import (
 )
 
 type scope struct {
-	parent     *scope
-	caller     *scope
-	idents     map[string]ident
-	functions  map[string]function
-	isFuncBody bool
+	parent    *scope
+	caller    *scope
+	idents    map[string]ident
+	functions map[string]function
 
 	stmts []Stmt
 	expr  Expr
@@ -27,22 +26,22 @@ type ident struct {
 }
 
 type function struct {
+	token         Token
 	definingScope *scope
 	params        []string
 	body          *StmtBlock
-	lib           func(io.Reader, io.Writer, []*Value) (*Value, bool, error)
+	lib           LibFunc
 }
 
 func Interp(r io.Reader, w io.Writer, stmts []Stmt) error {
 	_, _, err := interp(r, w, &scope{
-		parent:     nil,
-		caller:     nil,
-		idents:     make(map[string]ident),
-		functions:  make(map[string]function),
-		isFuncBody: false,
-		stmts:      stmts,
-		expr:       nil,
-		index:      0,
+		parent:    nil,
+		caller:    nil,
+		idents:    make(map[string]ident),
+		functions: make(map[string]function),
+		stmts:     stmts,
+		expr:      nil,
+		index:     0,
 	})
 	return err
 }
@@ -67,9 +66,9 @@ func interp(r io.Reader, w io.Writer, s *scope) (*Value, bool, error) {
 			for _, param := range stmt.Params {
 				params = append(params, param.Value)
 			}
-			s.functions[stmt.Name.Value] = function{definingScope: s, params: params, body: &stmt.Body, lib: nil}
+			s.functions[stmt.Name.Value] = function{token: stmt.StmtFirstToken(), definingScope: s, params: params, body: &stmt.Body, lib: nil}
 		case *StmtDefineLibFunc:
-			libFunction, err := libFunc(stmt.Lib, len(stmt.Params))
+			libFunc, err := GetLibFunc(stmt.Lib, len(stmt.Params))
 			if err != nil {
 				return nil, false, err
 			}
@@ -77,7 +76,7 @@ func interp(r io.Reader, w io.Writer, s *scope) (*Value, bool, error) {
 			for _, param := range stmt.Params {
 				params = append(params, param.Value)
 			}
-			s.functions[stmt.Name.Value] = function{definingScope: s, params: params, body: nil, lib: libFunction}
+			s.functions[stmt.Name.Value] = function{token: stmt.StmtFirstToken(), definingScope: s, params: params, body: nil, lib: libFunc}
 		case *StmtExpr:
 			val, isReturn, err := eval(r, w, s, stmt.Expr)
 			if isReturn || err != nil {
@@ -85,17 +84,16 @@ func interp(r io.Reader, w io.Writer, s *scope) (*Value, bool, error) {
 			}
 		case *StmtBlock:
 			val, isReturn, err := interp(r, w, &scope{
-				parent:     s,
-				caller:     s.caller,
-				idents:     make(map[string]ident),
-				functions:  make(map[string]function),
-				isFuncBody: false,
-				stmts:      stmt.Stmts,
-				expr:       stmt.Expr,
-				index:      0,
+				parent:    s,
+				caller:    s.caller,
+				idents:    make(map[string]ident),
+				functions: make(map[string]function),
+				stmts:     stmt.Stmts,
+				expr:      stmt.Expr,
+				index:     0,
 			})
-			if isReturn || s.isFuncBody || err != nil {
-				return val, isReturn || s.isFuncBody, err
+			if isReturn || stmt.Return || err != nil {
+				return val, isReturn || stmt.Return, err
 			}
 		default:
 			panic("Unknown statement")
@@ -142,14 +140,13 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 		}
 		if fn.body != nil {
 			sc = &scope{
-				parent:     fn.definingScope,
-				caller:     s,
-				idents:     make(map[string]ident),
-				functions:  make(map[string]function),
-				isFuncBody: true,
-				stmts:      fn.body.Stmts,
-				expr:       fn.body.Expr,
-				index:      0,
+				parent:    fn.definingScope,
+				caller:    s,
+				idents:    make(map[string]ident),
+				functions: make(map[string]function),
+				stmts:     fn.body.Stmts,
+				expr:      fn.body.Expr,
+				index:     0,
 			}
 			for i, arg := range ex.Args {
 				val, isReturn, err := eval(r, w, s, arg)
@@ -176,7 +173,7 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 				}
 				vals = append(vals, arg.value)
 			}
-			return fn.lib(r, w, vals)
+			return fn.lib.Call(fn.token, r, w, vals)
 		} else {
 			panic("Unknown function definition")
 		}
@@ -221,16 +218,16 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 		} else if ex.Block == nil {
 			return left, false, nil
 		}
-		return interp(r, w, &scope{
-			parent:     s,
-			caller:     s.caller,
-			idents:     make(map[string]ident),
-			functions:  make(map[string]function),
-			isFuncBody: false,
-			stmts:      ex.Block.Stmts,
-			expr:       ex.Block.Expr,
-			index:      0,
+		val, isReturn, err := interp(r, w, &scope{
+			parent:    s,
+			caller:    s.caller,
+			idents:    make(map[string]ident),
+			functions: make(map[string]function),
+			stmts:     ex.Block.Stmts,
+			expr:      ex.Block.Expr,
+			index:     0,
 		})
+		return val, isReturn || ex.Block.Return, err
 	case *ExprPop:
 		val, isReturn, err := eval(r, w, s, ex.Expr)
 		if isReturn || err != nil {
@@ -241,91 +238,17 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 			return val, false, nil
 		}
 		sc := &scope{
-			parent:     s,
-			caller:     s.caller,
-			idents:     make(map[string]ident),
-			functions:  make(map[string]function),
-			isFuncBody: false,
-			stmts:      ex.Block.Block.Stmts,
-			expr:       ex.Block.Block.Expr,
-			index:      0,
+			parent:    s,
+			caller:    s.caller,
+			idents:    make(map[string]ident),
+			functions: make(map[string]function),
+			stmts:     ex.Block.Block.Stmts,
+			expr:      ex.Block.Block.Expr,
+			index:     0,
 		}
 		sc.idents[ex.Block.Name.Value] = ident{version: popped.Version(), value: popped}
 		return interp(r, w, sc)
 	default:
 		panic("Unknown expression")
 	}
-}
-
-func libFunc(lib Token, nParams int) (func(io.Reader, io.Writer, []*Value) (*Value, bool, error), error) {
-	if lib.Value == "read" && nParams == 0 {
-		bitIndex := byte(0)
-		byteBuffer := []byte{0}
-		return func(r io.Reader, w io.Writer, args []*Value) (*Value, bool, error) {
-			bitIndex <<= 1
-			if bitIndex == 0 {
-				n, err := r.Read(byteBuffer)
-				if n == 0 {
-					if err == io.EOF {
-						return &Value{}, false, nil
-					} else {
-						return nil, false, err
-					}
-				}
-				bitIndex = 1
-			}
-			zero := &Value{}
-			zero.Push(&Value{})
-			if byteBuffer[0]&bitIndex == 0 {
-				return zero, false, nil
-			}
-			one := &Value{}
-			one.Push(zero)
-			return one, false, nil
-		}, nil
-	} else if lib.Value == "write" && nParams == 1 {
-		bitIndex := byte(1)
-		byteBuffer := []byte{0}
-		return func(r io.Reader, w io.Writer, args []*Value) (*Value, bool, error) {
-			if len(args) != 1 || args[0] == nil {
-				panic("lib:write")
-			}
-			if args[0].Size() > 1 {
-				byteBuffer[0] |= bitIndex
-			}
-			bitIndex <<= 1
-			if bitIndex == 0 {
-				_, err := w.Write(byteBuffer)
-				if err != nil {
-					return nil, false, err
-				}
-				bitIndex = 1
-				byteBuffer[0] = 0
-			}
-			return args[0], false, nil
-		}, nil
-	} else if lib.Value == "automated testing function" {
-		return automatedTestingFunction, nil
-	}
-	return nil, fmt.Errorf("%s:%d:%d: Undefined %d-argument library function %s", lib.Filename, lib.Line, lib.Column, nParams, lib.Value)
-}
-
-var automatedTestingFunctionCalls [][]int
-
-func AutomatedTestingFunctionCalls() [][]int {
-	calls := automatedTestingFunctionCalls
-	automatedTestingFunctionCalls = [][]int{}
-	return calls
-}
-
-func automatedTestingFunction(r io.Reader, w io.Writer, args []*Value) (*Value, bool, error) {
-	call := []int{}
-	for _, arg := range args {
-		call = append(call, arg.Size())
-	}
-	automatedTestingFunctionCalls = append(automatedTestingFunctionCalls, call)
-	if len(args) == 0 {
-		return &Value{}, false, nil
-	}
-	return args[0], false, nil
 }

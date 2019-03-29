@@ -1,0 +1,2 @@
+f().
+// ERR:testdata/011.annoy:1:1: Undefined function f
