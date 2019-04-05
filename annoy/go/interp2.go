@@ -490,13 +490,138 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 			fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.ExprFirstToken())})
 		}
 	case *ExprCallFunction:
-		panic("Not implemented")
+		var calledFn *analyzeFn2
+		enclosingLevel := 0
+		for s := scope; s != nil; {
+			calledFn = s.fns[expr.Name.Value]
+			if calledFn != nil {
+				break
+			}
+			if s.parent != nil {
+				s = s.parent
+			} else {
+				enclosingLevel++
+				s = s.enclosing
+			}
+		}
+		if calledFn == nil {
+			return expr.Name.Errorf("Undefined identifier %s", expr.Name.Value)
+		}
+		for _, arg := range expr.Args {
+			if err := compileExpr2(fn, scope, arg, false); err != nil {
+				return err
+			}
+		}
+		if calledFn.libFunc != nil {
+			fn.insns = append(fn.insns, &insn2CallLibFunc{insn2Token(expr.Name), calledFn.libFunc})
+			if isReturn {
+				fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.Name)})
+			}
+		} else if isReturn && (enclosingLevel > 0 || !tailCallImpossible(calledFn.fn)) {
+			fn.insns = append(fn.insns, &insn2TailCall{insn2Token(expr.Name), enclosingLevel, calledFn.fn})
+		} else if isReturn {
+			fn.insns = append(fn.insns, &insn2Call{insn2Token(expr.Name), enclosingLevel, calledFn.fn}, &insn2Ret{insn2Token(expr.Name)})
+		} else {
+			fn.insns = append(fn.insns, &insn2Call{insn2Token(expr.Name), enclosingLevel, calledFn.fn})
+		}
 	case *ExprBinary:
-		panic("Not implemented")
+		if err := compileExpr2(fn, scope, expr.Left, false); err != nil {
+			return err
+		}
+		if err := compileExpr2(fn, scope, expr.Right, false); err != nil {
+			return err
+		}
+		var insnIndex *int
+		switch expr.Op.Value {
+		case "+":
+			if expr.Block == nil {
+				fn.insns = append(fn.insns, &insn2PushExpr{insn2Token(expr.Op)})
+			} else {
+				insn := &insn2TryPushExpr{insn2Token(expr.Op), -1}
+				fn.insns = append(fn.insns, insn)
+				insnIndex = &insn.insnIndex
+			}
+		case "<":
+			insn := &insn2LtExpr{insn2Token(expr.Op), -1}
+			fn.insns = append(fn.insns, insn)
+			insnIndex = &insn.insnIndex
+		case ">":
+			insn := &insn2GtExpr{insn2Token(expr.Op), -1}
+			fn.insns = append(fn.insns, insn)
+			insnIndex = &insn.insnIndex
+		case "=":
+			insn := &insn2EqExpr{insn2Token(expr.Op), -1}
+			fn.insns = append(fn.insns, insn)
+			insnIndex = &insn.insnIndex
+		default:
+			panic("Unknown binary operator")
+		}
+		if insnIndex != nil {
+			if expr.Block != nil {
+				fn.insns = append(fn.insns, &insn2Pop{insn2Token(expr.Block.Token)})
+				blockScope := &analyzeScope2{
+					parent:         scope,
+					enclosing:      nil,
+					idents:         make(map[string]*analyzeIdent2),
+					fns:            make(map[string]*analyzeFn2),
+					nextIdentIndex: scope.nextIdentIndex,
+				}
+				for _, blockStmt := range expr.Block.Stmts {
+					if err := compileStmt2(fn, blockScope, blockStmt); err != nil {
+						return err
+					}
+				}
+				if err := compileExpr2(fn, blockScope, expr.Block.Expr, expr.Block.Return); err != nil {
+					return err
+				}
+				scope.nextIdentIndex = blockScope.nextIdentIndex
+			}
+			*insnIndex = len(fn.insns)
+		}
 	case *ExprPop:
-		panic("Not implemented")
+		if err := compileExpr2(fn, scope, expr.Expr, false); err != nil {
+			return err
+		}
+		identIndex := scope.nextIdentIndex
+		scope.nextIdentIndex++
+		insn := &insn2PopExpr{
+			insn2Token: insn2Token(expr.ExprFirstToken()),
+			identIndex: identIndex,
+			insnIndex:  -1,
+		}
+		fn.insns = append(fn.insns, insn)
+		if expr.Block != nil {
+			fn.insns = append(fn.insns, &insn2Pop{insn2Token(expr.Block.Block.StmtFirstToken())})
+			blockScope := &analyzeScope2{
+				parent:         scope,
+				enclosing:      nil,
+				idents:         make(map[string]*analyzeIdent2),
+				fns:            make(map[string]*analyzeFn2),
+				nextIdentIndex: scope.nextIdentIndex,
+			}
+			blockScope.idents[expr.Block.Name.Value] = &analyzeIdent2{
+				name:  expr.Block.Name,
+				index: identIndex,
+			}
+			for _, blockStmt := range expr.Block.Block.Stmts {
+				if err := compileStmt2(fn, blockScope, blockStmt); err != nil {
+					return err
+				}
+			}
+			if err := compileExpr2(fn, blockScope, expr.Block.Block.Expr, expr.Block.Block.Return); err != nil {
+				return err
+			}
+			scope.nextIdentIndex = blockScope.nextIdentIndex
+		}
+		insn.insnIndex = len(fn.insns)
 	default:
 		panic("Unknown expression")
 	}
 	return nil
+}
+
+func tailCallImpossible(fn *fn2) bool {
+	// tail calls are not possible if indentifiers in the calling frame
+	// are referenced
+	panic("Not implemented")
 }
