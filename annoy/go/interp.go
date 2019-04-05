@@ -5,7 +5,6 @@ package main
 // Does not do tail call elimination
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -112,13 +111,13 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 			ident, ok := sc.idents[ex.Name.Value]
 			if ok {
 				if ident.version != ident.value.Version() {
-					return nil, false, fmt.Errorf("%s:%d:%d: Identifier %s refers to an unaccessible value", ex.Name.Filename, ex.Name.Line, ex.Name.Column, ex.Name.Value)
+					return nil, false, ex.Name.Errorf("Identifier %s refers to an unaccessible value", ex.Name.Value)
 				}
 				return ident.value, false, nil
 			}
 			sc = sc.parent
 			if sc == nil {
-				return nil, false, fmt.Errorf("%s:%d:%d: Undefined identifier %s", ex.Name.Filename, ex.Name.Line, ex.Name.Column, ex.Name.Value)
+				return nil, false, ex.Name.Errorf("Undefined identifier %s", ex.Name.Value)
 			}
 		}
 	case *ExprCallFunction:
@@ -129,13 +128,13 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 			fn, ok = sc.functions[ex.Name.Value]
 			if ok {
 				if len(fn.params) != len(ex.Args) {
-					return nil, false, fmt.Errorf("%s:%d:%d: Function %s called with %d argument(s), expected %d argument(s)", ex.Name.Filename, ex.Name.Line, ex.Name.Column, ex.Name.Value, len(ex.Args), len(fn.params))
+					return nil, false, ex.Name.Errorf("Function %s called with %d argument(s), expected %d argument(s)", ex.Name.Value, len(ex.Args), len(fn.params))
 				}
 				break
 			}
 			sc = sc.parent
 			if sc == nil {
-				return nil, false, fmt.Errorf("%s:%d:%d: Undefined function %s", ex.Name.Filename, ex.Name.Line, ex.Name.Column, ex.Name.Value)
+				return nil, false, ex.Name.Errorf("Undefined function %s", ex.Name.Value)
 			}
 		}
 		if fn.body != nil {
@@ -169,7 +168,7 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 			vals := []*Value{}
 			for i, arg := range args {
 				if arg.version != arg.value.Version() {
-					return nil, false, fmt.Errorf("%s:%d:%d: Expression refers to an unaccessible value", ex.Args[i].ExprFirstToken().Filename, ex.Args[i].ExprFirstToken().Line, ex.Args[i].ExprFirstToken().Column)
+					return nil, false, ex.Args[i].ExprFirstToken().Errorf("Expression refers to an unaccessible value")
 				}
 				vals = append(vals, arg.value)
 			}
@@ -188,13 +187,13 @@ func eval(r io.Reader, w io.Writer, s *scope, expr Expr) (*Value, bool, error) {
 			return right, isReturn, err
 		}
 		if leftVersion != left.Version() {
-			return nil, false, fmt.Errorf("%s:%d:%d: Expression refers to an unaccessible value", ex.Left.ExprFirstToken().Filename, ex.Left.ExprFirstToken().Line, ex.Left.ExprFirstToken().Column)
+			return nil, false, ex.Left.ExprFirstToken().Errorf("Expression refers to an unaccessible value")
 		}
 		result := false
 		switch ex.Op.Value {
 		case "+":
 			if left == right {
-				return nil, false, fmt.Errorf("%s:%d:%d: Expression pushes a value onto itself", ex.Op.Filename, ex.Op.Line, ex.Op.Column)
+				return nil, false, ex.Op.Errorf("Expression pushes a value onto itself")
 			}
 			if ex.Block == nil {
 				left.Push(right)

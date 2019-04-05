@@ -32,7 +32,7 @@ func Parse(t *Tokenizer) ([]Stmt, error) {
 		if tokens[0].IsToken(".") {
 			tokens = tokens[1:]
 		} else {
-			return nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+			return nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 		}
 	}
 }
@@ -57,7 +57,7 @@ func parseStmt(t *Tokenizer, tokens []Token) (Stmt, []Token, error) {
 		}
 		return &StmtExpr{Expr: expr}, tokens, nil
 	} else if !tokens[0].Identifier {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+		return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 	}
 	if len(tokens) < 2 {
 		tokens, err = t.Append(tokens)
@@ -72,7 +72,7 @@ func parseStmt(t *Tokenizer, tokens []Token) (Stmt, []Token, error) {
 		}
 	}
 	if tokens[1].Identifier {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[1].Filename, tokens[1].Line, tokens[1].Column, tokens[1].Value)
+		return nil, nil, tokens[1].Errorf("Unexpected token: %s", tokens[1].Value)
 	} else if tokens[1].IsToken(":=") {
 		// assignment
 		name := tokens[0]
@@ -131,10 +131,10 @@ func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
 		}
 		if tokens[0].IsToken("}") {
 			if len(stmts) == 0 {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+				return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 			}
 			if stmtExpr, ok := stmts[len(stmts)-1].(*StmtExpr); !ok {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Invalid block", tokens[0].Filename, tokens[0].Line, tokens[0].Column)
+				return nil, nil, tokens[0].Errorf("Invalid block")
 			} else {
 				return &StmtBlock{
 					Token:  token,
@@ -156,7 +156,7 @@ func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
 				}
 			}
 			if !tokens[0].IsToken("}") {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+				return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 			}
 			return &StmtBlock{
 				Token:  token,
@@ -186,10 +186,10 @@ func parseBlock(t *Tokenizer, tokens []Token) (*StmtBlock, []Token, error) {
 				}
 			}
 			if tokens[0].IsToken("}") {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+				return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 			}
 		} else if !tokens[0].IsToken("}") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+			return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 		}
 	}
 }
@@ -215,14 +215,14 @@ func parseExpr(t *Tokenizer, tokens []Token) (Expr, []Token, error) {
 			}
 		}
 		if !tokens[0].IsToken(")") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+			return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 		}
 		tokens = tokens[1:]
 	} else if tokens[0].IsToken("0") {
 		expr = &Expr0{Token: tokens[0]}
 		tokens = tokens[1:]
 	} else if !tokens[0].Identifier {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+		return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 	} else {
 		// identifier or function-call
 		if len(tokens) < 2 {
@@ -270,7 +270,7 @@ func parseExpr(t *Tokenizer, tokens []Token) (Expr, []Token, error) {
 				} else if tokens[0].IsToken(",") {
 					tokens = tokens[1:]
 				} else {
-					return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+					return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 				}
 			}
 			expr = &ExprCallFunction{Name: name, Args: args}
@@ -350,7 +350,7 @@ func parseExpr(t *Tokenizer, tokens []Token) (Expr, []Token, error) {
 				}
 			}
 			if !tokens[0].IsToken("{") {
-				return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+				return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 			}
 			var stmtBlock *StmtBlock
 			stmtBlock, tokens, err = parseBlock(t, tokens)
@@ -413,13 +413,13 @@ func parseDefineFunction(t *Tokenizer, tokens []Token, closeIndex int) (Stmt, []
 	paramSet := make(map[string]bool)
 	for i := 2; i < closeIndex; i += 2 {
 		if i > 2 && !tokens[i-1].IsToken(",") {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[i-1].Filename, tokens[i-1].Line, tokens[i-1].Column, tokens[i-1].Value)
+			return nil, nil, tokens[i-1].Errorf("Unexpected token: %s", tokens[i-1].Value)
 		}
 		if !tokens[i].Identifier {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[i].Filename, tokens[i].Line, tokens[i].Column, tokens[i].Value)
+			return nil, nil, tokens[i].Errorf("Unexpected token: %s", tokens[i].Value)
 		}
 		if paramSet[tokens[i].Value] {
-			return nil, nil, fmt.Errorf("%s:%d:%d: Duplicate parameter name: %s", tokens[i].Filename, tokens[i].Line, tokens[i].Column, tokens[i].Value)
+			return nil, nil, tokens[i].Errorf("Duplicate parameter name: %s", tokens[i].Value)
 		}
 		params = append(params, tokens[i])
 		paramSet[tokens[i].Value] = true
@@ -439,7 +439,7 @@ func parseDefineFunction(t *Tokenizer, tokens []Token, closeIndex int) (Stmt, []
 			Lib:    tokens[0],
 		}, tokens[1:], nil
 	} else if !tokens[0].IsToken("{") {
-		return nil, nil, fmt.Errorf("%s:%d:%d: Unexpected token: %s", tokens[0].Filename, tokens[0].Line, tokens[0].Column, tokens[0].Value)
+		return nil, nil, tokens[0].Errorf("Unexpected token: %s", tokens[0].Value)
 	}
 	var stmtBlock *StmtBlock
 	var err error

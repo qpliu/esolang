@@ -18,6 +18,10 @@ func (t Token) IsToken(tok string) bool {
 	return !t.Identifier && tok == t.Value
 }
 
+func (t Token) Errorf(format string, a ...interface{}) error {
+	return fmt.Errorf("%s:%d:%d: %s", t.Filename, t.Line, t.Column, fmt.Sprintf(format, a...))
+}
+
 type Tokenizer struct {
 	filename string
 	r        io.RuneReader

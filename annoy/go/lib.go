@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -26,7 +25,7 @@ func GetLibFunc(lib Token, nParams int) (LibFunc, error) {
 	} else if lib.Value == "automated testing function" {
 		return libFuncAutomatedTestingFunction(nParams), nil
 	}
-	return nil, fmt.Errorf("%s:%d:%d: Undefined %d-argument library function %s", lib.Filename, lib.Line, lib.Column, nParams, lib.Value)
+	return nil, lib.Errorf("Undefined %d-argument library function %s", nParams, lib.Value)
 }
 
 type libFuncRead struct {
