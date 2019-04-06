@@ -1,2 +1,3 @@
 x.
 // ERR:testdata/010.annoy:1:1: Undefined identifier x
+// ERR2:testdata/010.annoy:1:1: Undefined identifier x

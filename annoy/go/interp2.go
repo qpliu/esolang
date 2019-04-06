@@ -9,8 +9,12 @@ import (
 
 func Interp2(r io.Reader, w io.Writer, stmts []Stmt) error {
 	var enclosing *analyzeScope2 = nil
-	var returnExpr Expr = nil
-	f, err := compile2(enclosing, []Token{}, stmts, returnExpr)
+	f, err := compile2(enclosing, []Token{}, &StmtBlock{
+		Token:  Token{},
+		Stmts:  stmts,
+		Expr:   nil,
+		Return: true,
+	})
 	if err != nil {
 		return err
 	}
@@ -57,21 +61,20 @@ type insn2 interface {
 	insnSrcToken() Token
 }
 
-// insn2s:                                  stack:
-// - jmp [insnIndex]                        -  - : -
-// - val0                                   -  - : val
-// - valIdent [enclosingLevel] [identIndex] -  - : val
-// - call [enclosingLevel] [*fn2]           -  args... : result
-// - tailCall [enclosingLevel] [*fn2]       -  args... : result (caller stack)
-// - callLibFunc [LibFunc]                  -  args... : result
-// - pushExpr                               -  left right : result
-// - tryPushExpr [insnIndex]                -  left right : result on branch or - on no branch
-// - popExpr [identIndex] [insnIndex]       -  arg : result on branch or - on no branch
-// - gtExpr [insnIndex]                     -  left right : result on branch or - on no branch
-// - ltExpr [insnIndex]                     -  left right : result on branch or - on no branch
-// - eqExpr [insnIndex]                     -  left right : result on branch or - on no branch
-// - pop                                    -  val : -
-// - ret                                    -  result : result (caller stack)
+// insn2s:                                   stack:
+// - jmp [insnIndex]                         -  - : -
+// - val0                                    -  - : val
+// - valIdent [enclosingLevel] [identIndex]  -  - : val
+// - call [tailCall] [enclosingLevel] [*fn2] -  args... : result
+// - callLibFunc [LibFunc]                   -  args... : result
+// - pushExpr                                -  left right : result
+// - tryPushExpr [insnIndex]                 -  left right : result on branch or - on no branch
+// - popExpr [identIndex] [insnIndex]        -  arg : result on branch or - on no branch
+// - gtExpr [insnIndex]                      -  left right : result on branch or - on no branch
+// - ltExpr [insnIndex]                      -  left right : result on branch or - on no branch
+// - eqExpr [insnIndex]                      -  left right : result on branch or - on no branch
+// - pop                                     -  val : -
+// - ret                                     -  result : result (caller stack)
 
 type insn2Token Token
 
@@ -105,12 +108,7 @@ type insn2Assign struct {
 
 type insn2Call struct {
 	insn2Token
-	enclosingLevel int
-	fn             *fn2
-}
-
-type insn2TailCall struct {
-	insn2Token
+	tailCall       bool
 	enclosingLevel int
 	fn             *fn2
 }
@@ -193,8 +191,12 @@ func interp2(r io.Reader, w io.Writer, frame *frame2) error {
 			for i := 0; i < insn.enclosingLevel; i++ {
 				enclosing = enclosing.enclosing
 			}
+			caller := frame
+			if insn.tailCall {
+				caller = frame.caller
+			}
 			newFrame := &frame2{
-				caller:    frame,
+				caller:    caller,
 				enclosing: enclosing,
 				idents:    make([]ident2, insn.fn.nIdents),
 				insnIndex: 0,
@@ -203,21 +205,6 @@ func interp2(r io.Reader, w io.Writer, frame *frame2) error {
 				newFrame.idents[i] = frame.stack[len(frame.stack)-insn.fn.nArgs+i]
 			}
 			frame.stack = frame.stack[:len(frame.stack)-insn.fn.nArgs]
-			frame = newFrame
-		case *insn2TailCall:
-			enclosing := frame
-			for i := 0; i < insn.enclosingLevel; i++ {
-				enclosing = enclosing.enclosing
-			}
-			newFrame := &frame2{
-				caller:    frame.caller,
-				enclosing: enclosing,
-				idents:    make([]ident2, insn.fn.nIdents),
-				insnIndex: 0,
-			}
-			for i := 0; i < insn.fn.nArgs; i++ {
-				newFrame.idents[i] = frame.stack[len(frame.stack)-insn.fn.nArgs+i]
-			}
 			frame = newFrame
 		case *insn2CallLibFunc:
 			args := make([]*Value, insn.fn.ArgCount())
@@ -367,7 +354,7 @@ type analyzeScope2 struct {
 	nextIdentIndex int
 }
 
-func compile2(enclosing *analyzeScope2, args []Token, stmts []Stmt, resultExpr Expr) (*fn2, error) {
+func compile2(enclosing *analyzeScope2, args []Token, block *StmtBlock) (*fn2, error) {
 	fn := &fn2{nArgs: len(args)}
 	scope := &analyzeScope2{
 		parent:         nil,
@@ -383,18 +370,26 @@ func compile2(enclosing *analyzeScope2, args []Token, stmts []Stmt, resultExpr E
 		}
 		scope.nextIdentIndex++
 	}
-	for _, stmt := range stmts {
-		if err := compileStmt2(fn, scope, stmt); err != nil {
-			return nil, err
-		}
-	}
-	if resultExpr != nil {
-		if err := compileExpr2(fn, scope, resultExpr, true); err != nil {
-			return nil, err
-		}
+	if err := compileBlock2(fn, scope, block, true); err != nil {
+		return nil, err
 	}
 	fn.nIdents = scope.nextIdentIndex
 	return fn, nil
+}
+
+func compileBlock2(fn *fn2, scope *analyzeScope2, block *StmtBlock, isFnBody bool) error {
+	// add pass to resolve forward and recursive function defines
+	for _, stmt := range block.Stmts {
+		if err := compileStmt2(fn, scope, stmt); err != nil {
+			return err
+		}
+	}
+	if block.Expr != nil {
+		if err := compileExpr2(fn, scope, block.Expr, block.Return || isFnBody); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func compileStmt2(fn *fn2, scope *analyzeScope2, statement Stmt) error {
@@ -414,7 +409,7 @@ func compileStmt2(fn *fn2, scope *analyzeScope2, statement Stmt) error {
 			identIndex: identIndex,
 		})
 	case *StmtDefineFunc:
-		definedFn, err := compile2(scope, stmt.Params, stmt.Body.Stmts, stmt.Body.Expr)
+		definedFn, err := compile2(scope, stmt.Params, &stmt.Body)
 		if err != nil {
 			return err
 		}
@@ -438,13 +433,8 @@ func compileStmt2(fn *fn2, scope *analyzeScope2, statement Stmt) error {
 			fns:            make(map[string]*analyzeFn2),
 			nextIdentIndex: scope.nextIdentIndex,
 		}
-		for _, blockStmt := range stmt.Stmts {
-			if err := compileStmt2(fn, blockScope, blockStmt); err != nil {
-				return err
-			}
-		}
-		if err := compileExpr2(fn, blockScope, stmt.Expr, stmt.Return); err != nil {
-			return err
+		if err := compileBlock2(fn, blockScope, stmt, false); err != nil {
+			return nil
 		}
 		if !stmt.Return {
 			fn.insns = append(fn.insns, &insn2Pop{insn2Token(stmt.Expr.ExprFirstToken())})
@@ -505,7 +495,7 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 			}
 		}
 		if calledFn == nil {
-			return expr.Name.Errorf("Undefined identifier %s", expr.Name.Value)
+			return expr.Name.Errorf("Undefined function %s", expr.Name.Value)
 		}
 		for _, arg := range expr.Args {
 			if err := compileExpr2(fn, scope, arg, false); err != nil {
@@ -513,16 +503,21 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 			}
 		}
 		if calledFn.libFunc != nil {
+			if len(expr.Args) != calledFn.libFunc.ArgCount() {
+				return expr.Name.Errorf("Function %s called with %d argument(s), expected %d argument(s)", expr.Name.Value, len(expr.Args), calledFn.libFunc.ArgCount())
+			}
 			fn.insns = append(fn.insns, &insn2CallLibFunc{insn2Token(expr.Name), calledFn.libFunc})
 			if isReturn {
 				fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.Name)})
 			}
-		} else if isReturn && (enclosingLevel > 0 || !tailCallImpossible(calledFn.fn)) {
-			fn.insns = append(fn.insns, &insn2TailCall{insn2Token(expr.Name), enclosingLevel, calledFn.fn})
-		} else if isReturn {
-			fn.insns = append(fn.insns, &insn2Call{insn2Token(expr.Name), enclosingLevel, calledFn.fn}, &insn2Ret{insn2Token(expr.Name)})
 		} else {
-			fn.insns = append(fn.insns, &insn2Call{insn2Token(expr.Name), enclosingLevel, calledFn.fn})
+			if len(expr.Args) != calledFn.fn.nArgs {
+				return expr.Name.Errorf("Function %s called with %d argument(s), expected %d argument(s)", expr.Name.Value, len(expr.Args), calledFn.fn.nArgs)
+			}
+			fn.insns = append(fn.insns, &insn2Call{insn2Token(expr.Name), isReturn, enclosingLevel, calledFn.fn})
+			if isReturn {
+				fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.Name)})
+			}
 		}
 	case *ExprBinary:
 		if err := compileExpr2(fn, scope, expr.Left, false); err != nil {
@@ -566,17 +561,15 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 					fns:            make(map[string]*analyzeFn2),
 					nextIdentIndex: scope.nextIdentIndex,
 				}
-				for _, blockStmt := range expr.Block.Stmts {
-					if err := compileStmt2(fn, blockScope, blockStmt); err != nil {
-						return err
-					}
-				}
-				if err := compileExpr2(fn, blockScope, expr.Block.Expr, expr.Block.Return); err != nil {
+				if err := compileBlock2(fn, blockScope, expr.Block, false); err != nil {
 					return err
 				}
 				scope.nextIdentIndex = blockScope.nextIdentIndex
 			}
 			*insnIndex = len(fn.insns)
+		}
+		if isReturn {
+			fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.ExprFirstToken())})
 		}
 	case *ExprPop:
 		if err := compileExpr2(fn, scope, expr.Expr, false); err != nil {
@@ -614,14 +607,11 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 			scope.nextIdentIndex = blockScope.nextIdentIndex
 		}
 		insn.insnIndex = len(fn.insns)
+		if isReturn {
+			fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.ExprFirstToken())})
+		}
 	default:
 		panic("Unknown expression")
 	}
 	return nil
-}
-
-func tailCallImpossible(fn *fn2) bool {
-	// tail calls are not possible if indentifiers in the calling frame
-	// are referenced
-	panic("Not implemented")
 }

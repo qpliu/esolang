@@ -24,6 +24,8 @@ func GetLibFunc(lib Token, nParams int) (LibFunc, error) {
 		}, nil
 	} else if lib.Value == "automated testing function" {
 		return libFuncAutomatedTestingFunction(nParams), nil
+	} else if lib.Value == "automated testing value inspector" && nParams == 1 {
+		return libFuncAutomatedTestingValueInspector{}, nil
 	}
 	return nil, lib.Errorf("Undefined %d-argument library function %s", nParams, lib.Value)
 }
@@ -74,7 +76,7 @@ type libFuncWrite struct {
 }
 
 func (f *libFuncWrite) ArgCount() int {
-	return 0
+	return 1
 }
 
 func (f *libFuncWrite) ArgPushed(index int) bool {
@@ -136,4 +138,46 @@ func AutomatedTestingFunctionCalls() [][]int {
 	calls := automatedTestingFunctionCalls
 	automatedTestingFunctionCalls = [][]int{}
 	return calls
+}
+
+type libFuncAutomatedTestingValueInspector struct{}
+
+func (libFuncAutomatedTestingValueInspector) ArgCount() int {
+	return 1
+}
+
+func (libFuncAutomatedTestingValueInspector) ArgPushed(index int) bool {
+	return false
+}
+
+func (libFuncAutomatedTestingValueInspector) ResultAliasesArg(index int) bool {
+	return true
+}
+
+func (libFuncAutomatedTestingValueInspector) Call(callToken Token, r io.Reader, w io.Writer, args []*Value) (*Value, bool, error) {
+	if len(args) != 1 || args[0] == nil {
+		panic("lib:automated testing value inspector")
+	}
+	var writeVal func(*Value) error
+	writeVal = func(val *Value) error {
+		if _, err := w.Write([]byte{'['}); err != nil {
+			return err
+		}
+		for _, v := range val.stack {
+			if err := writeVal(v); err != nil {
+				return err
+			}
+		}
+		if _, err := w.Write([]byte{']'}); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := writeVal(args[0]); err != nil {
+		return args[0], false, err
+	}
+	if _, err := w.Write([]byte{'\n'}); err != nil {
+		return args[0], false, err
+	}
+	return args[0], false, nil
 }

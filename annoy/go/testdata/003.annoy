@@ -1,2 +1,3 @@
 test() := bogus.
 // ERR:testdata/003.annoy:1:11: Undefined 0-argument library function bogus
+// ERR2:testdata/003.annoy:1:11: Undefined 0-argument library function bogus

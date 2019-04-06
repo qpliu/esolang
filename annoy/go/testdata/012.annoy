@@ -1,3 +1,4 @@
 f() := { 0 }.
 f(0)
 // ERR:testdata/012.annoy:2:1: Function f called with 1 argument(s), expected 0 argument(s)
+// ERR2:testdata/012.annoy:2:1: Function f called with 1 argument(s), expected 0 argument(s)
