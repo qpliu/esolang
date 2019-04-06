@@ -4,6 +4,7 @@ package main
 // Converts AST to stack-based VM to enable tail-call elimination
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -62,7 +63,6 @@ type insn2 interface {
 }
 
 // insn2s:                                   stack:
-// - jmp [insnIndex]                         -  - : -
 // - val0                                    -  - : val
 // - valIdent [enclosingLevel] [identIndex]  -  - : val
 // - call [tailCall] [enclosingLevel] [*fn2] -  args... : result
@@ -84,11 +84,6 @@ func (insn *insn2Token) insnSrcToken() Token {
 
 func (insn *insn2Token) errorf(format string, a ...interface{}) error {
 	return Token(*insn).Errorf(format, a...)
-}
-
-type insn2Jump struct {
-	insn2Token
-	insnIndex int
 }
 
 type insn2Val0 struct {
@@ -162,8 +157,6 @@ func interp2(r io.Reader, w io.Writer, frame *frame2) error {
 			return nil
 		}
 		switch insn := frame.insns[frame.insnIndex].(type) {
-		case *insn2Jump:
-			frame.insnIndex = insn.insnIndex
 		case *insn2Val0:
 			frame.stack = append(frame.stack, newIdent2(&Value{}))
 			frame.insnIndex++
@@ -199,6 +192,8 @@ func interp2(r io.Reader, w io.Writer, frame *frame2) error {
 				caller:    caller,
 				enclosing: enclosing,
 				idents:    make([]ident2, insn.fn.nIdents),
+				stack:     []ident2{},
+				insns:     insn.fn.insns,
 				insnIndex: 0,
 			}
 			for i := 0; i < insn.fn.nArgs; i++ {
@@ -614,4 +609,80 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 		panic("Unknown expression")
 	}
 	return nil
+}
+
+func Compile2(stmts []Stmt) ([]string, error) {
+	var enclosing *analyzeScope2 = nil
+	f, err := compile2(enclosing, []Token{}, &StmtBlock{
+		Token:  Token{},
+		Stmts:  stmts,
+		Expr:   nil,
+		Return: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	fns := []*fn2{f}
+	findFnIndex := func(fn *fn2) (int, bool) {
+		for i := range fns {
+			if fn == fns[i] {
+				return i, true
+			}
+		}
+		fns = append(fns, fn)
+		return len(fns) - 1, false
+	}
+	var collectFns func(fn *fn2)
+	collectFns = func(fn *fn2) {
+		for _, instruction := range fn.insns {
+			if insn, ok := instruction.(*insn2Call); ok {
+				if _, known := findFnIndex(insn.fn); !known {
+					collectFns(insn.fn)
+				}
+			}
+		}
+	}
+	collectFns(f)
+	asm := []string{}
+	for i, fn := range fns {
+		asm = append(asm, fmt.Sprintf("fn%d nArgs:%d nIdents:%d", i, fn.nArgs, fn.nIdents))
+		for insnIndex, instruction := range fn.insns {
+			switch insn := instruction.(type) {
+			case *insn2Val0:
+				asm = append(asm, fmt.Sprintf("<%d>: val0", insnIndex))
+			case *insn2ValIdent:
+				asm = append(asm, fmt.Sprintf("<%d>: valIdent [%d]%d", insnIndex, insn.enclosingLevel, insn.identIndex))
+			case *insn2Assign:
+				asm = append(asm, fmt.Sprintf("<%d>: assign %d", insnIndex, insn.identIndex))
+			case *insn2Call:
+				tail := ""
+				if insn.tailCall {
+					tail = "tail"
+				}
+				fnIndex, _ := findFnIndex(insn.fn)
+				asm = append(asm, fmt.Sprintf("<%d>: %scall[%d] fn%d nArgs:%d", insnIndex, tail, insn.enclosingLevel, fnIndex, insn.fn.nArgs))
+			case *insn2CallLibFunc:
+				asm = append(asm, fmt.Sprintf("<%d>: call lib %s nArgs:%d", insnIndex, Token(insn.insn2Token).Value, insn.fn.ArgCount()))
+			case *insn2PushExpr:
+				asm = append(asm, fmt.Sprintf("<%d>: pushexpr", insnIndex))
+			case *insn2TryPushExpr:
+				asm = append(asm, fmt.Sprintf("<%d>: trypushexpr %d", insnIndex, insn.insnIndex))
+			case *insn2PopExpr:
+				asm = append(asm, fmt.Sprintf("<%d>: popexpr <%d>", insnIndex, insn.insnIndex))
+			case *insn2GtExpr:
+				asm = append(asm, fmt.Sprintf("<%d>: gtexpr <%d>", insnIndex, insn.insnIndex))
+			case *insn2LtExpr:
+				asm = append(asm, fmt.Sprintf("<%d>: ltexpr <%d>", insnIndex, insn.insnIndex))
+			case *insn2EqExpr:
+				asm = append(asm, fmt.Sprintf("<%d>: eqexpr <%d>", insnIndex, insn.insnIndex))
+			case *insn2Pop:
+				asm = append(asm, fmt.Sprintf("<%d>: pop", insnIndex))
+			case *insn2Ret:
+				asm = append(asm, fmt.Sprintf("<%d>: ret", insnIndex))
+			default:
+				panic("Unknown insn2")
+			}
+		}
+	}
+	return asm, nil
 }

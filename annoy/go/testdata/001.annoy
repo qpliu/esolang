@@ -1,3 +1,7 @@
 test(x) := "automated testing function".
 test(0)
 // CALL:1
+// ASM:fn0 nArgs:0 nIdents:0
+// ASM:<0>: val0
+// ASM:<1>: call lib test nArgs:1
+// ASM:<2>: pop

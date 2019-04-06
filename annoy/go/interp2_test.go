@@ -126,10 +126,96 @@ func TestInterp2(t *testing.T) {
 		t.Error(err.Error())
 		return
 	}
-	_ = names // 005.annoy 013.annoy 014.annoy 015.annoy 017.annoy cat.annoy fail
-	for _, name := range []string{"001.annoy", "002.annoy", "003.annoy", "004.annoy", "006.annoy", "007.annoy", "008.annoy", "009.annoy", "010.annoy", "011.annoy", "012.annoy", "016.annoy", "hello.annoy"} {
+	for _, name := range names {
+		// 013.annoy cat.annoy fail
+		if name == "013.annoy" || name == "cat.annoy" {
+			continue
+		}
 		if filepath.Ext(name) == ".annoy" {
 			testSrcFile2(t, name)
+		}
+	}
+}
+
+func getExpectedAsm2(filename string) ([]string, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := bufio.NewReader(f)
+	asm := []string{}
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return asm, err
+		}
+		if strings.HasPrefix(line, "// ASM:") {
+			asm = append(asm, strings.Trim(line[7:], " \t\r\n"))
+		}
+		if err == io.EOF {
+			return asm, nil
+		}
+	}
+}
+
+func testCompile2(t *testing.T, filename string) {
+	fn := filepath.Join("testdata", filename)
+	expectedAsm, err := getExpectedAsm2(fn)
+	if err != nil {
+		t.Errorf("%s: %s", fn, err.Error())
+		return
+	}
+	if len(expectedAsm) == 0 {
+		return
+	}
+
+	stmts, err := parseSrcFile2(fn)
+	if err != nil {
+		t.Errorf("%s: %s", fn, err.Error())
+		return
+	}
+
+	asm, err := Compile2(stmts)
+	if err != nil {
+		t.Errorf("%s: %s", fn, err.Error())
+		return
+	}
+
+	fail := true
+	if len(asm) == len(expectedAsm) {
+		fail = false
+		for i, line := range asm {
+			if line != expectedAsm[i] {
+				fail = true
+				break
+			}
+		}
+	}
+	if fail {
+		t.Errorf("%s: asm does not match expected", fn)
+		for _, line := range asm {
+			t.Log(line)
+		}
+	}
+}
+
+func TestCompile2(t *testing.T) {
+	f, err := os.Open("testdata")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	defer f.Close()
+	names, err := f.Readdirnames(0)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	for _, name := range names {
+		if filepath.Ext(name) == ".annoy" {
+			testCompile2(t, name)
 		}
 	}
 }

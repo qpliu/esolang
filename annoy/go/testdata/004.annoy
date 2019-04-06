@@ -2,3 +2,9 @@ test(x) := "automated testing function".
 a := 0.
 test(a).
 // CALL:1
+// ASM:fn0 nArgs:0 nIdents:1
+// ASM:<0>: val0
+// ASM:<1>: assign 0
+// ASM:<2>: valIdent [0]0
+// ASM:<3>: call lib test nArgs:1
+// ASM:<4>: pop

@@ -7,3 +7,32 @@ f(x) := {
     test(a)
 }.
 f(0+0).
+// ASM:fn0 nArgs:0 nIdents:0
+// ASM:<0>: val0
+// ASM:<1>: val0
+// ASM:<2>: pushexpr
+// ASM:<3>: call[0] fn1 nArgs:1
+// ASM:<4>: pop
+// ASM:fn1 nArgs:1 nIdents:2
+// ASM:<0>: valIdent [0]0
+// ASM:<1>: call lib test nArgs:1
+// ASM:<2>: pop
+// ASM:<3>: val0
+// ASM:<4>: val0
+// ASM:<5>: eqexpr <18>
+// ASM:<6>: pop
+// ASM:<7>: val0
+// ASM:<8>: val0
+// ASM:<9>: val0
+// ASM:<10>: pushexpr
+// ASM:<11>: pushexpr
+// ASM:<12>: call lib test nArgs:1
+// ASM:<13>: pop
+// ASM:<14>: val0
+// ASM:<15>: val0
+// ASM:<16>: pushexpr
+// ASM:<17>: ret
+// ASM:<18>: assign 1
+// ASM:<19>: valIdent [0]1
+// ASM:<20>: call lib test nArgs:1
+// ASM:<21>: ret
