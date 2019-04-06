@@ -127,8 +127,8 @@ func TestInterp2(t *testing.T) {
 		return
 	}
 	for _, name := range names {
-		// 013.annoy cat.annoy fail
-		if name == "013.annoy" || name == "cat.annoy" {
+		// 013.annoy fails
+		if name == "013.annoy" {
 			continue
 		}
 		if filepath.Ext(name) == ".annoy" {

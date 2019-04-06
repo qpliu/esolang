@@ -3,9 +3,20 @@ write(bit) := write.
 cat() := {
     read()-bit {
         write(bit).
-	cat()
+        return cat()
     }
 }.
 cat().
 // INPUT:test
 // OUTPUT:test
+// ASM:fn0 nArgs:0 nIdents:0
+// ASM:<0>: call[0] fn1 nArgs:0
+// ASM:<1>: pop
+// ASM:fn1 nArgs:0 nIdents:1
+// ASM:<0>: call lib read nArgs:0
+// ASM:<1>: popexpr 0 <6>
+// ASM:<2>: valIdent [0]0
+// ASM:<3>: call lib write nArgs:1
+// ASM:<4>: pop
+// ASM:<5>: tailcall[1] fn1 nArgs:0
+// ASM:<6>: ret

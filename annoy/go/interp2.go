@@ -10,21 +10,21 @@ import (
 
 func Interp2(r io.Reader, w io.Writer, stmts []Stmt) error {
 	var enclosing *analyzeScope2 = nil
-	f, err := compile2(enclosing, []Token{}, &StmtBlock{
+	main := &fn2{}
+	if err := compile2(main, enclosing, []Token{}, &StmtBlock{
 		Token:  Token{},
 		Stmts:  stmts,
 		Expr:   nil,
 		Return: true,
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	return interp2(r, w, &frame2{
 		caller:    nil,
 		enclosing: nil,
-		idents:    make([]ident2, f.nIdents),
+		idents:    make([]ident2, main.nIdents),
 		stack:     []ident2{},
-		insns:     f.insns,
+		insns:     main.insns,
 		insnIndex: 0,
 	})
 }
@@ -337,6 +337,7 @@ type analyzeIdent2 struct {
 }
 
 type analyzeFn2 struct {
+	name    Token
 	fn      *fn2
 	libFunc LibFunc
 }
@@ -349,8 +350,8 @@ type analyzeScope2 struct {
 	nextIdentIndex int
 }
 
-func compile2(enclosing *analyzeScope2, args []Token, block *StmtBlock) (*fn2, error) {
-	fn := &fn2{nArgs: len(args)}
+func compile2(fn *fn2, enclosing *analyzeScope2, args []Token, block *StmtBlock) error {
+	fn.nArgs = len(args)
 	scope := &analyzeScope2{
 		parent:         nil,
 		enclosing:      enclosing,
@@ -366,14 +367,31 @@ func compile2(enclosing *analyzeScope2, args []Token, block *StmtBlock) (*fn2, e
 		scope.nextIdentIndex++
 	}
 	if err := compileBlock2(fn, scope, block, true); err != nil {
-		return nil, err
+		return err
 	}
 	fn.nIdents = scope.nextIdentIndex
-	return fn, nil
+	return nil
 }
 
 func compileBlock2(fn *fn2, scope *analyzeScope2, block *StmtBlock, isFnBody bool) error {
-	// add pass to resolve forward and recursive function defines
+	for _, statement := range block.Stmts {
+		switch stmt := statement.(type) {
+		case *StmtDefineFunc:
+			if shadowedFn, ok := scope.fns[stmt.Name.Value]; ok {
+				return stmt.Name.Errorf("Function definition of %s shadows definition at %s:%d:%d", stmt.Name.Value, shadowedFn.name.Filename, shadowedFn.name.Line, shadowedFn.name.Column)
+			}
+			scope.fns[stmt.Name.Value] = &analyzeFn2{name: stmt.Name, fn: &fn2{nArgs: len(stmt.Params)}}
+		case *StmtDefineLibFunc:
+			if shadowedFn, ok := scope.fns[stmt.Name.Value]; ok {
+				return stmt.Name.Errorf("Function definition of %s shadows definition at %s:%d:%d", stmt.Name.Value, shadowedFn.name.Filename, shadowedFn.name.Line, shadowedFn.name.Column)
+			}
+			libFunc, err := GetLibFunc(stmt.Lib, len(stmt.Params))
+			if err != nil {
+				return err
+			}
+			scope.fns[stmt.Name.Value] = &analyzeFn2{name: stmt.Name, libFunc: libFunc}
+		}
+	}
 	for _, stmt := range block.Stmts {
 		if err := compileStmt2(fn, scope, stmt); err != nil {
 			return err
@@ -404,11 +422,9 @@ func compileStmt2(fn *fn2, scope *analyzeScope2, statement Stmt) error {
 			identIndex: identIndex,
 		})
 	case *StmtDefineFunc:
-		definedFn, err := compile2(scope, stmt.Params, &stmt.Body)
-		if err != nil {
+		if err := compile2(scope.fns[stmt.Name.Value].fn, scope, stmt.Params, &stmt.Body); err != nil {
 			return err
 		}
-		scope.fns[stmt.Name.Value] = &analyzeFn2{fn: definedFn}
 	case *StmtDefineLibFunc:
 		libFunc, err := GetLibFunc(stmt.Lib, len(stmt.Params))
 		if err != nil {
@@ -510,9 +526,6 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 				return expr.Name.Errorf("Function %s called with %d argument(s), expected %d argument(s)", expr.Name.Value, len(expr.Args), calledFn.fn.nArgs)
 			}
 			fn.insns = append(fn.insns, &insn2Call{insn2Token(expr.Name), isReturn, enclosingLevel, calledFn.fn})
-			if isReturn {
-				fn.insns = append(fn.insns, &insn2Ret{insn2Token(expr.Name)})
-			}
 		}
 	case *ExprBinary:
 		if err := compileExpr2(fn, scope, expr.Left, false); err != nil {
@@ -579,7 +592,6 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 		}
 		fn.insns = append(fn.insns, insn)
 		if expr.Block != nil {
-			fn.insns = append(fn.insns, &insn2Pop{insn2Token(expr.Block.Block.StmtFirstToken())})
 			blockScope := &analyzeScope2{
 				parent:         scope,
 				enclosing:      nil,
@@ -613,16 +625,16 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 
 func Compile2(stmts []Stmt) ([]string, error) {
 	var enclosing *analyzeScope2 = nil
-	f, err := compile2(enclosing, []Token{}, &StmtBlock{
+	main := &fn2{}
+	if err := compile2(main, enclosing, []Token{}, &StmtBlock{
 		Token:  Token{},
 		Stmts:  stmts,
 		Expr:   nil,
 		Return: true,
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
-	fns := []*fn2{f}
+	fns := []*fn2{main}
 	findFnIndex := func(fn *fn2) (int, bool) {
 		for i := range fns {
 			if fn == fns[i] {
@@ -642,7 +654,7 @@ func Compile2(stmts []Stmt) ([]string, error) {
 			}
 		}
 	}
-	collectFns(f)
+	collectFns(main)
 	asm := []string{}
 	for i, fn := range fns {
 		asm = append(asm, fmt.Sprintf("fn%d nArgs:%d nIdents:%d", i, fn.nArgs, fn.nIdents))
@@ -668,7 +680,7 @@ func Compile2(stmts []Stmt) ([]string, error) {
 			case *insn2TryPushExpr:
 				asm = append(asm, fmt.Sprintf("<%d>: trypushexpr %d", insnIndex, insn.insnIndex))
 			case *insn2PopExpr:
-				asm = append(asm, fmt.Sprintf("<%d>: popexpr <%d>", insnIndex, insn.insnIndex))
+				asm = append(asm, fmt.Sprintf("<%d>: popexpr %d <%d>", insnIndex, insn.identIndex, insn.insnIndex))
 			case *insn2GtExpr:
 				asm = append(asm, fmt.Sprintf("<%d>: gtexpr <%d>", insnIndex, insn.insnIndex))
 			case *insn2LtExpr:
