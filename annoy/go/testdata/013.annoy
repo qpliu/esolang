@@ -12,3 +12,40 @@ f() := {
 f().
 test(b + a).
 // CALL:4
+// ASM:fn0 nArgs:0 nIdents:2
+// ASM:<0>: val0
+// ASM:<1>: val0
+// ASM:<2>: val0
+// ASM:<3>: pushexpr
+// ASM:<4>: pushexpr
+// ASM:<5>: assign 0
+// ASM:<6>: val0
+// ASM:<7>: val0
+// ASM:<8>: pushexpr
+// ASM:<9>: assign 1
+// ASM:<10>: call[0] fn1 nArgs:0
+// ASM:<11>: pop
+// ASM:<12>: valIdent [0]1
+// ASM:<13>: valIdent [0]0
+// ASM:<14>: pushexpr
+// ASM:<15>: call lib test nArgs:1
+// ASM:<16>: pop
+// ASM:fn1 nArgs:0 nIdents:0
+// ASM:<0>: valIdent [1]1
+// ASM:<1>: valIdent [1]0
+// ASM:<2>: trypushexpr <5>
+// ASM:<3>: valIdent [1]1
+// ASM:<4>: call lib test nArgs:1
+// ASM:<5>: call lib test nArgs:1
+// ASM:<6>: pop
+// ASM:<7>: valIdent [1]1
+// ASM:<8>: valIdent [1]0
+// ASM:<9>: trypushexpr <13>
+// ASM:<10>: valIdent [1]1
+// ASM:<11>: call lib test nArgs:1
+// ASM:<12>: ret
+// ASM:<13>: call lib test nArgs:1
+// ASM:<14>: pop
+// ASM:<15>: val0
+// ASM:<16>: call lib test nArgs:1
+// ASM:<17>: ret

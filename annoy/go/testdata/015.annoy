@@ -17,3 +17,80 @@ test(f(0+0+0,y)).
 // CALL:6
 // CALL:1
 // CALL:4
+// ASM:fn0 nArgs:0 nIdents:1
+// ASM:<0>: val0
+// ASM:<1>: val0
+// ASM:<2>: val0
+// ASM:<3>: val0
+// ASM:<4>: pushexpr
+// ASM:<5>: pushexpr
+// ASM:<6>: pushexpr
+// ASM:<7>: assign 0
+// ASM:<8>: val0
+// ASM:<9>: valIdent [0]0
+// ASM:<10>: call[0] fn1 nArgs:2
+// ASM:<11>: call lib test nArgs:1
+// ASM:<12>: pop
+// ASM:<13>: val0
+// ASM:<14>: val0
+// ASM:<15>: pushexpr
+// ASM:<16>: valIdent [0]0
+// ASM:<17>: call[0] fn1 nArgs:2
+// ASM:<18>: call lib test nArgs:1
+// ASM:<19>: pop
+// ASM:<20>: val0
+// ASM:<21>: val0
+// ASM:<22>: val0
+// ASM:<23>: pushexpr
+// ASM:<24>: pushexpr
+// ASM:<25>: valIdent [0]0
+// ASM:<26>: call[0] fn1 nArgs:2
+// ASM:<27>: call lib test nArgs:1
+// ASM:<28>: pop
+// ASM:fn1 nArgs:2 nIdents:2
+// ASM:<0>: valIdent [0]0
+// ASM:<1>: val0
+// ASM:<2>: eqexpr <6>
+// ASM:<3>: pop
+// ASM:<4>: valIdent [0]1
+// ASM:<5>: ret
+// ASM:<6>: val0
+// ASM:<7>: call lib test nArgs:1
+// ASM:<8>: eqexpr <21>
+// ASM:<9>: pop
+// ASM:<10>: val0
+// ASM:<11>: val0
+// ASM:<12>: val0
+// ASM:<13>: val0
+// ASM:<14>: val0
+// ASM:<15>: val0
+// ASM:<16>: pushexpr
+// ASM:<17>: pushexpr
+// ASM:<18>: pushexpr
+// ASM:<19>: pushexpr
+// ASM:<20>: pushexpr
+// ASM:<21>: call lib test nArgs:1
+// ASM:<22>: pop
+// ASM:<23>: val0
+// ASM:<24>: call lib test nArgs:1
+// ASM:<25>: valIdent [0]0
+// ASM:<26>: val0
+// ASM:<27>: val0
+// ASM:<28>: pushexpr
+// ASM:<29>: gtexpr <33>
+// ASM:<30>: pop
+// ASM:<31>: valIdent [0]1
+// ASM:<32>: ret
+// ASM:<33>: eqexpr <44>
+// ASM:<34>: pop
+// ASM:<35>: val0
+// ASM:<36>: val0
+// ASM:<37>: val0
+// ASM:<38>: val0
+// ASM:<39>: val0
+// ASM:<40>: pushexpr
+// ASM:<41>: pushexpr
+// ASM:<42>: pushexpr
+// ASM:<43>: pushexpr
+// ASM:<44>: call lib test nArgs:1
+// ASM:<45>: ret

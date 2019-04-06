@@ -535,6 +535,7 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 			return err
 		}
 		var insnIndex *int
+		blockNeedsPop := true
 		switch expr.Op.Value {
 		case "+":
 			if expr.Block == nil {
@@ -543,6 +544,7 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 				insn := &insn2TryPushExpr{insn2Token(expr.Op), -1}
 				fn.insns = append(fn.insns, insn)
 				insnIndex = &insn.insnIndex
+				blockNeedsPop = false
 			}
 		case "<":
 			insn := &insn2LtExpr{insn2Token(expr.Op), -1}
@@ -561,7 +563,9 @@ func compileExpr2(fn *fn2, scope *analyzeScope2, expression Expr, isReturn bool)
 		}
 		if insnIndex != nil {
 			if expr.Block != nil {
-				fn.insns = append(fn.insns, &insn2Pop{insn2Token(expr.Block.Token)})
+				if blockNeedsPop {
+					fn.insns = append(fn.insns, &insn2Pop{insn2Token(expr.Block.Token)})
+				}
 				blockScope := &analyzeScope2{
 					parent:         scope,
 					enclosing:      nil,
@@ -678,7 +682,7 @@ func Compile2(stmts []Stmt) ([]string, error) {
 			case *insn2PushExpr:
 				asm = append(asm, fmt.Sprintf("<%d>: pushexpr", insnIndex))
 			case *insn2TryPushExpr:
-				asm = append(asm, fmt.Sprintf("<%d>: trypushexpr %d", insnIndex, insn.insnIndex))
+				asm = append(asm, fmt.Sprintf("<%d>: trypushexpr <%d>", insnIndex, insn.insnIndex))
 			case *insn2PopExpr:
 				asm = append(asm, fmt.Sprintf("<%d>: popexpr %d <%d>", insnIndex, insn.identIndex, insn.insnIndex))
 			case *insn2GtExpr:

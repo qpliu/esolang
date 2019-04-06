@@ -1,3 +1,19 @@
 test(x) := "automated testing function".
 test((0+0+0) < (0+0+0+0))
 // CALL:3
+// ASM:fn0 nArgs:0 nIdents:0
+// ASM:<0>: val0
+// ASM:<1>: val0
+// ASM:<2>: val0
+// ASM:<3>: pushexpr
+// ASM:<4>: pushexpr
+// ASM:<5>: val0
+// ASM:<6>: val0
+// ASM:<7>: val0
+// ASM:<8>: val0
+// ASM:<9>: pushexpr
+// ASM:<10>: pushexpr
+// ASM:<11>: pushexpr
+// ASM:<12>: ltexpr <13>
+// ASM:<13>: call lib test nArgs:1
+// ASM:<14>: pop
