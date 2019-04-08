@@ -1,0 +1,5 @@
+a := 0.
+0+a.
+a.
+// ERR:testdata/018.annoy:3:1: Identifier a refers to an unaccessible value
+// ERR2:testdata/018.annoy:3:1: Identifier refers to an inaccessible value

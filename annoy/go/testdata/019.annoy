@@ -1,0 +1,5 @@
+test(x,y) := "automated testing function".
+a := 0.
+test(a,0+a).
+// ERR:testdata/019.annoy:3:6: Expression refers to an unaccessible value
+// ERR2:testdata/019.annoy:3:1: Argument 1 refers to an inaccessible value

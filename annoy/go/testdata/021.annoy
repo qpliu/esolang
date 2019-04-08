@@ -1,0 +1,4 @@
+a := 0.
+a+a.
+// ERR:testdata/021.annoy:2:2: Expression pushes a value onto itself
+// ERR2:testdata/021.annoy:2:2: Expression pushes a value onto itself
