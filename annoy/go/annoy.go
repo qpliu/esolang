@@ -30,7 +30,7 @@ func main() {
 		return stmts
 	}()
 
-	err := Interp(os.Stdin, os.Stdout, stmts)
+	err := Interp2(os.Stdin, os.Stdout, stmts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)

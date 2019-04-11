@@ -1,6 +1,6 @@
 all: annoy
 
-annoy: annoy.go ast.go interp.go lib.go parser.go tokenizer.go value.go
+annoy: annoy.go ast.go interp2.go lib.go parser.go tokenizer.go value.go
 	go build -o $@ $^
 
 clean:
