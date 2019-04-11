@@ -1,0 +1,2 @@
+029():={0}.029():={0}.0
+// ERR2:testdata/029.annoy:1:12: Function definition of 029 shadows definition at testdata/029.annoy:1:1

@@ -1,0 +1,2 @@
+030():=read.030():=read.0
+// ERR2:testdata/030.annoy:1:13: Function definition of 030 shadows definition at testdata/030.annoy:1:1

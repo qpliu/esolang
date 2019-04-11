@@ -1,0 +1,4 @@
+a := 0.
+a>(0+a).
+// ERR:testdata/026.annoy:2:1: Expression refers to an unaccessible value
+// ERR2:testdata/026.annoy:2:2: Left argument refers to an inaccessible value

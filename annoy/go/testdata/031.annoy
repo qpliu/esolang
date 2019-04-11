@@ -1,0 +1,4 @@
+031(x):="automated testing value inspector".
+031(0,0)
+// ERR:testdata/031.annoy:2:1: Function 031 called with 2 argument(s), expected 1 argument(s)
+// ERR2:testdata/031.annoy:2:1: Function 031 called with 2 argument(s), expected 1 argument(s)
