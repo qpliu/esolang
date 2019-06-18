@@ -2,7 +2,7 @@ module Parse(parse)
 where
 
 import Data.List(elemIndex)
-import Data.Map(Map,elems,empty,foldWithKey,insert,member,(!))
+import Data.Map(Map,empty,foldWithKey,insert,member,(!))
 import qualified Data.Map
 
 import Ast
@@ -10,11 +10,8 @@ import Ast
        Expr(ExprParam,ExprCall,ExprTree,ExprLeft,ExprRight,ExprCond))
 import Tokenize(Token,tokenLocation,token)
 
-parse :: [Token] -> Either [String] [Function]
-parse tokens = do
-    funcToks <- pass1 tokens
-    funcs <- pass2 funcToks
-    return (elems funcs)
+parse :: [Token] -> Either [String] (Map String Function)
+parse tokens = pass1 tokens >>= pass2
 
 isIdent :: Token -> Bool
 isIdent t = not (token t `elem` ["=",".","?",",","<",">","0","1","(",")"])
@@ -95,7 +92,7 @@ pass2 funcToks = foldWithKey check2 (Right empty) funcs
               toks <- checkExpected "," toks
               (rexpr,toks) <- parseExpr toks
               return (ExprCond t expr lexpr rexpr,toks)
-          | otherwise = Right (expr,toks)
+          | otherwise = Right (expr,t:toks)
         parseCall calleeTok toks = maybe (Left [tokenLocation calleeTok ++ ": undefined identifier"]) (parseArgs [] toks . arity) (Data.Map.lookup (token calleeTok) funcToks)
           where
             parseArgs args toks nargs
