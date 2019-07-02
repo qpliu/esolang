@@ -4,19 +4,22 @@ where
 import Data.Bits(testBit)
 import Data.Char(chr,ord)
 
-import Tree(Tree,cons,left,value)
+import Tree(Tree,cons,left,right,value)
 
 zeros :: Tree
 zeros = cons False zeros zeros
 
 fromBits :: [Bool] -> Tree
-fromBits [] = zeros
-fromBits (bit:bits) = cons True (cons bit (fromBits bits) zeros) zeros
+fromBits [] = cons True zeros zeros
+fromBits (bit:bits)
+  | bit = cons True zeros (fromBits bits)
+  | otherwise = cons True (fromBits bits) zeros
 
 toBits :: Tree -> [Bool]
 toBits t
-  | not (value t) = []
-  | otherwise = value (left t) : toBits (left (left t))
+  | value (left t) == value (right t) = []
+  | value (left t) = False : toBits (left t)
+  | otherwise = True : toBits (right t)
 
 fromString :: String -> Tree
 fromString str = fromBits (concatMap charToBits str)
