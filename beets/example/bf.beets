@@ -1,0 +1,322 @@
+bf inp = read-code inp z z z z.
+
+z = 0z,z.
+EOF = 1z,z.
+
+== representing a tape of bits
+== the left subtree and recursive left subtrees are previous elements
+== the right subtree and recursive right subtrees are next elements
+
+rotl t = (>t)?0t,>>t,1t,>>t.
+rotr t = (<t)?0<<t,t,1<<t,t.
+
+set t = 1<t,>t.
+clear t = 0<t,>t.
+
+== code-0, code-1, code-2 are 3 bits encoding each instruction
+==   000=+ 100=- 010=< 110=> 001=[ 101=] 011=, 111=.
+== code-mark marks the range of the instructions
+== reads instructions until ! or EOF
+== any subsequent input is consumed by the input instruction
+read-code inp code-0 code-1 code-2 code-mark =
+  check-EOF inp rewind code-0 code-mark
+                rewind code-1 code-mark
+                rewind code-2 code-mark
+                rewind code-mark code-mark
+  check-! inp   rewind code-0 code-mark
+                rewind code-1 code-mark
+                rewind code-2 code-mark
+                rewind code-mark code-mark
+  check-plus inp  rotr clear code-0
+                  rotr clear code-1
+                  rotr clear code-2
+                  rotr set code-mark
+  check-minus inp rotr set code-0
+                  rotr clear code-1
+                  rotr clear code-2
+                  rotr set code-mark
+  check-lt inp    rotr clear code-0
+                  rotr set code-1
+                  rotr clear code-2
+                  rotr set code-mark
+  check-gt inp    rotr set code-0
+                  rotr set code-1
+                  rotr clear code-2
+                  rotr set code-mark
+  check-lbra inp  rotr clear code-0
+                  rotr clear code-1
+                  rotr set code-2
+                  rotr set code-mark
+  check-rbra inp  rotr set code-0
+                  rotr clear code-1
+                  rotr set code-2
+                  rotr set code-mark
+  check-comma inp rotr clear code-0
+                  rotr set code-1
+                  rotr set code-2
+                  rotr set code-mark
+  check-dot   inp rotr set code-0
+                  rotr set code-1
+                  rotr set code-2
+                  rotr set code-mark
+  read-code drop-8 inp code-0 code-1 code-2 code-mark.
+
+rewind t mark = (>mark)?t,rewind rotl t rotl mark.
+
+drop-1 inp = (<inp)?>inp,<inp.
+drop-2 inp = drop-1 drop-1 inp.
+drop-3 inp = drop-1 drop-2 inp.
+drop-4 inp = drop-2 drop-2 inp.
+drop-5 inp = drop-1 drop-4 inp.
+drop-6 inp = drop-2 drop-4 inp.
+drop-7 inp = drop-3 drop-4 inp.
+drop-8 inp = drop-4 drop-4 inp.
+
+check-EOF inp code-0 code-1 code-2 code-mark not-EOF =
+  (<inp) ? (>inp) ?
+    interp inp code-0 code-1 code-2 code-mark z z z z z z z z, not-EOF, not-EOF.
+
+check-! inp code-0 code-1 code-2 code-mark not-! =
+  == ! 21 10000100
+  (>inp) ? not-!, (<>inp) ? not-!, (<<>inp) ? not-!, (<<<>inp) ? not-!,
+  (<<<<>inp) ? not-!, (><<<<>inp) ? not-!, (<><<<<>inp) ? not-!,
+  (<><<<<>inp) ? not-!, (<<><<<<>inp) ? not-!,
+  interp <<><<<<>inp code-0 code-1 code-2 code-mark z z z z z z z z.
+
+check-plus inp code-0 code-1 code-2 code-mark not-plus =
+  == + 2b 11010100
+  (>inp) ? not-plus, (>>inp) ? not-plus, (<>>inp) ? not-plus,
+  (><>>inp) ? not-plus, (<><>>inp) ? not-plus, (><><>>inp) ? not-plus,
+  (<><><>>inp) ? not-plus, (<<><><>>inp) ? not-plus,
+  read-code <<><><>>inp code-0 code-1 code-2 code-mark.
+
+check-minus inp code-0 code-1 code-2 code-mark not-minus =
+  == - 2d 10110100
+  (>inp) ? not-minus, (<>inp) ? not-minus, (><>inp) ? not-minus,
+  (>><>inp) ? not-minus, (<>><>inp) ? not-minus, (><>><>inp) ? not-minus,
+  (<><>><>inp) ? not-minus, (<<><>><>inp) ? not-minus,
+  read-code <<><>><>inp code-0 code-1 code-2 code-mark.
+
+check-lt inp code-0 code-1 code-2 code-mark not-lt =
+  == < 3c 00111100
+  (<inp) ? not-lt, (<<inp) ? not-lt, (><<inp) ? not-lt,
+  (>><<inp) ? not-lt, (>>><<inp) ? not-lt, (>>>><<inp) ? not-lt,
+  (<>>>><<inp) ? not-lt, (<<>>>><<inp) ? not-lt,
+  read-code <<>>>><<inp code-0 code-1 code-2 code-mark.
+
+check-gt inp code-0 code-1 code-2 code-mark not-gt =
+  == > 3e 01111100
+  (<inp) ? not-gt, (><inp) ? not-gt, (>><inp) ? not-gt,
+  (>>><inp) ? not-gt, (>>>><inp) ? not-gt, (>>>>><inp) ? not-gt,
+  (<>>>>><inp) ? not-gt, (<<>>>>><inp) ? not-gt,
+  read-code <<>>>>><inp code-0 code-1 code-2 code-mark.
+
+check-lbra inp code-0 code-1 code-2 code-mark not-lbra =
+  == [ 5b 11011010
+  (>inp) ? not-lbra, (>>inp) ? not-lbra, (<>>inp) ? not-lbra,
+  (><>>inp) ? not-lbra, (>><>>inp) ? not-lbra, (<>><>>inp) ? not-lbra,
+  (><>><>>inp) ? not-lbra, (<><>><>>inp) ? not-lbra,
+  read-code <><>><>>inp code-0 code-1 code-2 code-mark.
+
+check-rbra inp code-0 code-1 code-2 code-mark not-rbra =
+  == [ 5d 10111010
+  (>inp) ? not-rbra, (<>inp) ? not-rbra, (><>inp) ? not-rbra,
+  (>><>inp) ? not-rbra, (>>><>inp) ? not-rbra, (<>>><>inp) ? not-rbra,
+  (><>>><>inp) ? not-rbra, (<><>>><>inp) ? not-rbra,
+  read-code <><>>><>inp code-0 code-1 code-2 code-mark.
+
+check-comma inp code-0 code-1 code-2 code-mark not-comma =
+  == , 2c 00110100
+  (<inp) ? not-comma, (<<inp) ? not-comma, (><<inp) ? not-comma,
+  (>><<inp) ? not-comma, (<>><<inp) ? not-comma, (><>><<inp) ? not-comma,
+  (<><>><<inp) ? not-comma, (<<><>><<inp) ? not-comma,
+  read-code <<><>><<inp code-0 code-1 code-2 code-mark.
+
+check-dot inp code-0 code-1 code-2 code-mark not-dot =
+  == . 2e 01110100
+  (<inp) ? not-dot, (><inp) ? not-dot, (>><inp) ? not-dot,
+  (>>><inp) ? not-dot, (<>>><inp) ? not-dot, (><>>><inp) ? not-dot,
+  (<><>>><inp) ? not-dot, (<<><>>><inp) ? not-dot,
+  read-code <<><>>><inp code-0 code-1 code-2 code-mark.
+
+== interpret instructions
+interp inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  check-end-of-code code-mark
+  check-000 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  check-100 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  check-010 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  check-110 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  check-001 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  check-101 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  check-011 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7
+  execute-111 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7.
+
+check-end-of-code code-mark not-end-of-code = code-mark ? EOF, not-end-of-code.
+
+check-000 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-000 =
+  code-0 ? code-1 ? code-2 ? execute-000 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-000, not-000, not-000.
+
+check-100 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-100 =
+  code-0 ? not-100, code-1 ? code-2 ? execute-100 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-100, not-100.
+
+check-010 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-010 =
+  code-0 ? code-1 ? not-010, code-2 ? execute-010 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-010, not-010.
+
+check-110 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-110 =
+  code-0 ? not-110, code-1 ? not-110, code-2 ? execute-110 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-110.
+
+check-001 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-001 =
+  code-0 ? code-1 ? code-2 ? not-001, execute-001 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-001, not-001.
+
+check-101 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-101 =
+  code-0 ? not-101, code-1 ? code-2 ? not-101, execute-101 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-101.
+
+check-011 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 not-011 =
+  code-0 ? code-1 ? not-011, code-2 ? not-011, execute-011 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  not-011.
+
+== +
+execute-000 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  tape-0 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  tape-1 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 set tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  tape-2 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 set tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  tape-3 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 clear tape-2 set tape-3 tape-4 tape-5 tape-6 tape-7,
+  tape-4 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 clear tape-2 clear tape-3 set tape-4 tape-5 tape-6 tape-7,
+  tape-5 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 clear tape-2 clear tape-3 clear tape-4 set tape-5 tape-6 tape-7,
+  tape-6 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 clear tape-2 clear tape-3 clear tape-4 clear tape-5 set tape-6 tape-7,
+  tape-7 ? interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 clear tape-2 clear tape-3 clear tape-4 clear tape-5 clear tape-6 set tape-7,
+           interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 clear tape-1 clear tape-2 clear tape-3 clear tape-4 clear tape-5 clear tape-6 clear tape-7.
+
+== -
+execute-100 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  tape-0 ? tape-1 ? tape-2 ? tape-3 ? tape-4 ? tape-5 ? tape-6 ? tape-7 ?
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 set tape-2 set tape-3 set tape-4 set tape-5 set tape-6 set tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 set tape-2 set tape-3 set tape-4 set tape-5 set tape-6 clear tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 set tape-2 set tape-3 set tape-4 set tape-5 clear tape-6 tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 set tape-2 set tape-3 set tape-4 clear tape-5 tape-6 tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 set tape-2 set tape-3 clear tape-4 tape-5 tape-6 tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 set tape-2 clear tape-3 tape-4 tape-5 tape-6 tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 set tape-1 clear tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark set tape-0 clear tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark clear tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7.
+
+== <
+execute-010 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr tape-0 rotr tape-1 rotr tape-2 rotr tape-3 rotr tape-4 rotr tape-5 rotr tape-6 rotr tape-7.
+
+== >
+execute-110 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotl tape-0 rotl tape-1 rotl tape-2 rotl tape-3 rotl tape-4 rotl tape-5 rotl tape-6 rotl tape-7.
+
+== [
+execute-001 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  tape-0 ? tape-1 ? tape-2 ? tape-3 ? tape-4 ? tape-5 ? tape-6 ? tape-7 ?
+  interp inp
+         rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-0
+         rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-1
+         rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-2
+         rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7,
+ interp inp rotr code-0 rotr code-1  rotr code-2 rotr code-mark
+        tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7.
+
+find-rbra code-0 code-1 code-2 code-mark code =
+  find-rbra-check-end-of-code code-mark
+  find-rbra-check-101 code-0 code-1 code-2 code-mark code
+  find-rbra-check-001 code-0 code-1 code-2 code-mark code
+  find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code.
+
+find-rbra-check-end-of-code code-mark not-end-of-code =
+  code-mark ? z, not-end-of-code.
+
+find-rbra-check-101 code-0 code-1 code-2 code-mark code not-101 =
+  code-0 ? not-101, code-1 ? code-2 ? not-101, code, not-101.
+
+find-rbra-check-001 code-0 code-1 code-2 code-mark code not-001 =
+  code-0 ? code-1 ? code-2 ? not-001,
+  find-rbra
+    rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-0
+    rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-1
+    rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-2
+    rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code-mark
+    rotr find-rbra rotr code-0 rotr code-1 rotr code-2 rotr code-mark rotr code,
+  not-001, not-001.
+
+== ]
+execute-101 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  interp inp
+         find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-0
+         find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-1
+         find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-2
+         find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-mark
+         tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7.
+
+find-lbra code-0 code-1 code-2 code-mark code =
+  find-lbra-check-beginning-of-code code-mark
+  find-lbra-check-001 code-0 code-1 code-2 code-mark code
+  find-lbra-check-101 code-0 code-1 code-2 code-mark code
+  find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code.
+
+find-lbra-check-beginning-of-code code-mark not-beginning-of-code =
+  code-mark ? z, not-beginning-of-code.
+
+find-lbra-check-001 code-0 code-1 code-2 code-mark code not-001 =
+  code-0 ? code-1 ? code-2 ? not-001, code, not-001, not-001.
+
+find-lbra-check-101 code-0 code-1 code-2 code-mark code not-101 =
+  code-0 ? not-101, code-1 ? code-2 ? not-101,
+  find-lbra
+    rotl find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-0
+    rotl find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-1
+    rotl find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-2
+    rotl find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code-mark
+    rotl find-lbra rotl code-0 rotl code-1 rotl code-2 rotl code-mark rotl code,
+  not-101.
+
+== ,
+execute-011 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+interp drop-8 inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark
+  input-bit inp tape-0
+  input-bit drop-1 inp tape-1
+  input-bit drop-2 inp tape-2
+  input-bit drop-3 inp tape-3
+  input-bit drop-4 inp tape-4
+  input-bit drop-5 inp tape-5
+  input-bit drop-6 inp tape-6
+  input-bit drop-7 inp tape-7.
+
+input-bit inp tape = input-bit-tape-unchanged-on-EOF inp tape.
+
+input-bit-tape-unchanged-on-EOF inp tape = (<inp) ? (>inp) ? tape, set tape, clear tape.
+
+input-bit-tape-set-to-0-on-EOF inp tape = (<inp) ? (>inp) ? clear tape, set tape, clear tape.
+
+input-bit-tape-set-to-1-on-EOF inp tape = (<inp) ? (>inp) ? set tape, set tape, clear tape.
+
+== .
+execute-111 inp code-0 code-1 code-2 code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7 =
+  output-bit tape-0 output-bit tape-1 output-bit tape-2 output-bit tape-3
+  output-bit tape-4 output-bit tape-5 output-bit tape-6 output-bit tape-7
+  interp inp rotr code-0 rotr code-1 rotr code-2 rotr code-mark tape-0 tape-1 tape-2 tape-3 tape-4 tape-5 tape-6 tape-7.
+
+output-bit bit rest = bit ? 1rest,z, 1z,rest.
