@@ -1,6 +1,6 @@
 -- An implementation of But Is It Art?
 --
--- See: http://esolangs.org/wiki/But_Is_It_Art%3F
+-- See: https://esolangs.org/wiki/But_Is_It_Art%3F
 --
 -- Since it's not clear whether multiple identical tiles in the source
 -- need to appear once or multiple times in the witness rectangle, this
