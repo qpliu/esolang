@@ -1,0 +1,602 @@
+-- brainfuck interpreter in Intramodular Transaction
+-- https://esolangs.org/wiki/Brainfuck
+-- https://esolangs.org/wiki/Intramodular_Transaction
+
+main input = readInsns input z z z z;
+
+z = 0z;
+
+readInsns input insns0 insns1 insns2 marker =
+  checkEOF  input rewind z insns0 marker rewind z insns1 marker
+                  rewind z insns2 marker marker
+  checkBang input rewind z insns0 marker rewind z insns1 marker
+                  rewind z insns2 marker marker
+  checkPlus  input 0insns0 0insns1 0insns2 1marker
+  checkMinus input 1insns0 0insns1 0insns2 1marker
+  checkLt    input 0insns0 1insns1 0insns2 1marker
+  checkGt    input 1insns0 1insns1 0insns2 1marker
+  checkLbra  input 0insns0 0insns1 1insns2 1marker
+  checkRbra  input 1insns0 0insns1 1insns2 1marker
+  checkComma input 0insns0 1insns1 1insns2 1marker
+  checkDot   input 1insns0 1insns1 1insns2 1marker
+  readInsns  ................input insns0 insns1 insns2 marker;
+
+rewind tape reverseTape marker =
+    ? marker ? reverseTape rewind 1tape .reverseTape .marker
+                           rewind 0tape .reverseTape .marker
+             tape;
+
+checkEOF input insns0 insns1 insns2 marker notEOF =
+    ? input notEOF
+            interp input insns0 z insns1 z insns2 z marker z
+                   z z  z z  z z  z z  z z  z z  z z  z z;
+
+advance tape reverseTape = ? tape 1reverseTape 0reverseTape;
+
+checkBang input insns0 insns1 insns2 marker notBang =
+    -- ! 10000100
+    ? .input
+    ? ...input notBang
+    ? .....input notBang
+    ? .......input notBang
+    ? .........input notBang
+    ? ...........input
+    ? .............input notBang
+    ? ...............input notBang
+    interp ................input insns0 z insns1 z insns2 z marker z
+                           z z  z z  z z  z z  z z  z z  z z  z z
+    notBang notBang;
+
+checkPlus input insns0 insns1 insns2 marker notPlus =
+    -- + 11010100
+    ? .input
+    ? ...input
+    ? .....input notPlus
+    ? .......input
+    ? .........input notPlus
+    ? ...........input
+    ? .............input notPlus
+    ? ...............input notPlus
+    readInsns ................input insns0 insns1 insns2 marker
+    notPlus notPlus notPlus notPlus;
+
+checkMinus input insns0 insns1 insns2 marker notMinus =
+    -- - 10110100
+    ? .input
+    ? ...input notMinus
+    ? .....input
+    ? .......input
+    ? .........input notMinus
+    ? ...........input
+    ? .............input notMinus
+    ? ...............input notMinus
+    readInsns ................input insns0 insns1 insns2 marker
+    notMinus notMinus notMinus notMinus;
+
+checkLt input insns0 insns1 insns2 marker notLt =
+    -- < 00111100
+    ? .input notLt
+    ? ...input notLt
+    ? .....input
+    ? .......input
+    ? .........input
+    ? ...........input
+    ? .............input notLt
+    ? ...............input notLt
+    readInsns ................input insns0 insns1 insns2 marker
+    notLt notLt notLt notLt;
+
+checkGt input insns0 insns1 insns2 marker notGt =
+    -- > 01111100
+    ? .input notGt
+    ? ...input
+    ? .....input
+    ? .......input
+    ? .........input
+    ? ...........input
+    ? .............input notGt
+    ? ...............input notGt
+    readInsns ................input insns0 insns1 insns2 marker
+    notGt notGt notGt notGt notGt;
+
+checkLbra input insns0 insns1 insns2 marker notLbra =
+    -- [ 11011010
+    ? .input
+    ? ...input
+    ? .....input notLbra
+    ? .......input
+    ? .........input
+    ? ...........input notLbra
+    ? .............input
+    ? ...............input notLbra
+    readInsns ................input insns0 insns1 insns2 marker
+    notLbra notLbra notLbra notLbra notLbra;
+
+checkRbra input insns0 insns1 insns2 marker notRbra =
+    -- ] 10111010
+    ? .input
+    ? ...input notRbra
+    ? .....input
+    ? .......input
+    ? .........input
+    ? ...........input notRbra
+    ? .............input
+    ? ...............input notRbra
+    readInsns ................input insns0 insns1 insns2 marker
+    notRbra notRbra notRbra notRbra notRbra;
+
+checkComma input insns0 insns1 insns2 marker notComma =
+    -- , 00110100
+    ? .input notComma
+    ? ...input notComma
+    ? .....input
+    ? .......input
+    ? .........input notComma
+    ? ...........input
+    ? .............input notComma
+    ? ...............input notComma
+    readInsns ................input insns0 insns1 insns2 marker
+    notComma notComma notComma;
+
+checkDot input insns0 insns1 insns2 marker notDot =
+    -- . 01110100
+    ? .input notDot
+    ? ...input
+    ? .....input
+    ? .......input
+    ? .........input notDot
+    ? ...........input
+    ? .............input notDot
+    ? ...............input notDot
+    readInsns ................input insns0 insns1 insns2 marker
+    notDot notDot notDot notDot;
+
+interp input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    checkEndOfCode marker
+    check000 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    check100 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    check010 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    check110 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    check001 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    check101 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    check011 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    exec111  input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7;
+
+checkEndOfCode marker notEndOfCode = ? marker notEndOfCode z;
+
+check000 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not000 =
+    ? insns0 not000
+    ? insns1 not000
+    ? insns2 not000
+    exec000 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7;
+
+check100 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not100 =
+    ? insns0
+    ? insns1 not100
+    ? insns2 not100
+    exec100 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    not100;
+
+check010 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not010 =
+    ? insns0 not010
+    ? insns1
+    ? insns2 not010
+    exec010 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    not010;
+
+check110 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not110 =
+    ? insns0
+    ? insns1
+    ? insns2 not110
+    exec110 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    not110 not110;
+
+check001 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not001 =
+    ? insns0 not001
+    ? insns1 not001
+    ? insns2
+    exec001 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    not001;
+
+check101 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not101 =
+    ? insns0
+    ? insns1 not101
+    ? insns2
+    exec101 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    not101 not101;
+
+check011 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 not011 =
+    ? insns0 not011
+    ? insns1
+    ? insns2
+    exec011 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    not011 not011;
+
+-- +
+exec000 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    ? tape0
+    ? tape1
+    ? tape2
+    ? tape3
+    ? tape4
+    ? tape5
+    ? tape6
+    ? tape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 0.tape3 rtape3
+        0.tape4 rtape4 0.tape5 rtape5 0.tape6 rtape6 0.tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 0.tape3 rtape3
+        0.tape4 rtape4 0.tape5 rtape5 0.tape6 rtape6 1.tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 0.tape3 rtape3
+        0.tape4 rtape4 0.tape5 rtape5 1.tape6 rtape6   tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 0.tape3 rtape3
+        0.tape4 rtape4 1.tape5 rtape5   tape6 rtape6   tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 0.tape3 rtape3
+        1.tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 1.tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 0.tape1 rtape1 1.tape2 rtape2   tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0 1.tape1 rtape1   tape2 rtape2   tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0   tape1 rtape1   tape2 rtape2   tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7;
+
+-- -
+exec100 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    ? tape0
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        0.tape0 rtape0   tape1 rtape1   tape2 rtape2   tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    ? tape1
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 0.tape1 rtape1   tape2 rtape2   tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    ? tape2
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 0.tape2 rtape2   tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    ? tape3
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 0.tape3 rtape3
+          tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    ? tape4
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 1.tape3 rtape3
+        0.tape4 rtape4   tape5 rtape5   tape6 rtape6   tape7 rtape7
+    ? tape5
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 1.tape3 rtape3
+        1.tape4 rtape4 0.tape5 rtape5   tape6 rtape6   tape7 rtape7
+    ? tape6
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 1.tape3 rtape3
+        1.tape4 rtape4 1.tape5 rtape5 0.tape6 rtape6   tape7 rtape7
+    ? tape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 1.tape3 rtape3
+        1.tape4 rtape4 1.tape5 rtape5 1.tape6 rtape6 0.tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+        1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 1.tape3 rtape3
+        1.tape4 rtape4 1.tape5 rtape5 1.tape6 rtape6 1.tape7 rtape7;
+
+-- <
+exec010 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           advance rtape0 tape0 .rtape0 advance rtape1 tape1 .rtape1
+           advance rtape2 tape2 .rtape2 advance rtape3 tape3 .rtape3
+           advance rtape4 tape4 .rtape4 advance rtape5 tape5 .rtape5
+           advance rtape6 tape6 .rtape6 advance rtape7 tape7 .rtape7;
+
+-- >
+exec110 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           .tape0 advance tape0 rtape0 .tape1 advance tape1 rtape1
+           .tape2 advance tape2 rtape2 .tape3 advance tape3 rtape3
+           .tape4 advance tape4 rtape4 .tape5 advance tape5 rtape5
+           .tape6 advance tape6 rtape6 .tape7 advance tape7 rtape7;
+
+-- [
+exec001 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    ? tape0
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape1
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape2
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape3
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape4
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape5
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape6
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    ? tape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+    interp input
+           findRbra  .insns0 .insns1 .insns2 .marker .insns0
+           rfindRbra .insns0 .insns1 .insns2 .marker .insns0 ? insns0 1rinsns0 0rinsns0
+           findRbra  .insns0 .insns1 .insns2 .marker .insns1
+           rfindRbra .insns0 .insns1 .insns2 .marker .insns1 ? insns1 1rinsns1 0rinsns1
+           findRbra  .insns0 .insns1 .insns2 .marker .insns2
+           rfindRbra .insns0 .insns1 .insns2 .marker .insns2 ? insns2 1rinsns2 0rinsns2
+           findRbra  .insns0 .insns1 .insns2 .marker .marker
+           rfindRbra .insns0 .insns1 .insns2 .marker .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7;
+
+-- moves to one space past matching right bracket
+findRbra insns0 insns1 insns2 marker tape =
+    ? marker
+    checkForNestedLbra insns0 insns1 insns2 marker tape
+    checkForMatchingRbra insns0 insns1 insns2 marker tape
+    findRbra .insns0 .insns1 .insns2 .marker .tape
+    tape;
+
+checkForNestedLbra insns0 insns1 insns2 marker tape notNestedLbra =
+    ? insns0 notNestedLbra
+    ? insns1 notNestedLbra
+    ? insns2
+    findRbra findRbra .insns0 .insns1 .insns2 .marker .insns0
+             findRbra .insns0 .insns1 .insns2 .marker .insns1
+             findRbra .insns0 .insns1 .insns2 .marker .insns2
+             findRbra .insns0 .insns1 .insns2 .marker .marker
+             findRbra .insns0 .insns1 .insns2 .marker .tape
+    notNestedLbra;
+
+checkForMatchingRbra insns0 insns1 insns2 marker tape notMatchingRbra =
+    ? insns0
+    ? insns1 notMatchingRbra
+    ? insns2
+    .tape
+    notMatchingRbra notMatchingRbra;
+
+rfindRbra insns0 insns1 insns2 marker tape rtape =
+    ? marker
+    rcheckForNestedLbra insns0 insns1 insns2 marker tape rtape
+    rcheckForMatchingRbra insns0 insns1 insns2 marker tape rtape
+    rfindRbra .insns0 .insns1 .insns2 .marker .tape ? tape 1rtape 0rtape
+    rtape;
+
+rcheckForNestedLbra insns0 insns1 insns2 marker tape rtape notNestedLbra =
+    ? insns0 notNestedLbra
+    ? insns1 notNestedLbra
+    ? insns2
+    rfindRbra findRbra .insns0 .insns1 .insns2 .marker .insns0
+              findRbra .insns0 .insns1 .insns2 .marker .insns1
+              findRbra .insns0 .insns1 .insns2 .marker .insns2
+              findRbra .insns0 .insns1 .insns2 .marker .marker
+              findRbra .insns0 .insns1 .insns2 .marker .tape
+              rfindRbra  .insns0 .insns1 .insns2 .marker .tape ? tape 1rtape 0rtape
+    notNestedLbra;
+
+rcheckForMatchingRbra insns0 insns1 insns2 marker tape rtape notMatchingRbra =
+    ? insns0
+    ? insns1 notMatchingRbra
+    ? insns2
+    ? tape 1rtape 0rtape
+    notMatchingRbra notMatchingRbra;
+
+-- ]
+exec101 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    interp input
+           findLbra  rinsns0 rinsns1 rinsns2 rmarker insns0 rinsns0
+           rfindLbra rinsns0 rinsns1 rinsns2 rmarker rinsns0
+           findLbra  rinsns0 rinsns1 rinsns2 rmarker insns1 rinsns1
+           rfindLbra rinsns0 rinsns1 rinsns2 rmarker rinsns1
+           findLbra  rinsns0 rinsns1 rinsns2 rmarker insns2 rinsns2
+           rfindLbra rinsns0 rinsns1 rinsns2 rmarker rinsns2
+           findLbra  rinsns0 rinsns1 rinsns2 rmarker marker rmarker
+           rfindLbra rinsns0 rinsns1 rinsns2 rmarker rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7;
+
+-- moves to matching left bracket
+findLbra rinsns0 rinsns1 rinsns2 rmarker tape rtape =
+    ? rmarker
+    checkForNestedRbra rinsns0 rinsns1 rinsns2 rmarker tape rtape
+    checkForMatchingLbra rinsns0 rinsns1 rinsns2 rmarker tape rtape
+    findLbra .rinsns0 .rinsns1 .rinsns2 .rmarker ? rtape 1tape 0tape .rtape
+    ? rtape 1tape 0tape; -- move one additional space if at beginning of code
+
+checkForNestedRbra rinsns0 rinsns1 rinsns2 rmarker tape rtape notNestedRbra =
+    ? rinsns0
+    ? rinsns1 notNestedRbra
+    ? rinsns2
+    findLbra .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rinsns0
+             .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rinsns1
+             .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rinsns2
+             .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rmarker
+             ? rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rtape
+                 1 findLbra .rinsns0 .rinsns1 .rinsns2 .rmarker ? rtape 1tape 0tape .rtape
+                 0 findLbra .rinsns0 .rinsns1 .rinsns2 .rmarker ? rtape 1tape 0tape .rtape
+             .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rtape
+    notNestedRbra notNestedRbra;
+
+checkForMatchingLbra rinsns0 rinsns1 rinsns2 rmarker tape rtape notMatchingLbra =
+    ? rinsns0 notMatchingLbra
+    ? rinsns1 notMatchingLbra
+    ? rinsns2
+    ? rtape 1tape 0tape
+    notMatchingLbra;
+
+rfindLbra rinsns0 rinsns1 rinsns2 rmarker rtape =
+    ? rmarker
+    rcheckForNestedRbra rinsns0 rinsns1 rinsns2 rmarker rtape
+    rcheckForMatchingLbra rinsns0 rinsns1 rinsns2 rmarker rtape
+    rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rtape
+    .rtape; -- move one additional space if at beginning of code
+
+rcheckForNestedRbra rinsns0 rinsns1 rinsns2 rmarker rtape notNestedRbra =
+    ? rinsns0
+    ? rinsns1 notNestedRbra
+    ? rinsns2
+    rfindLbra .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rinsns0
+              .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rinsns1
+              .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rinsns2
+              .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rmarker
+              .rfindLbra .rinsns0 .rinsns1 .rinsns2 .rmarker .rtape
+    notNestedRbra notNestedRbra;
+
+rcheckForMatchingLbra rinsns0 rinsns1 rinsns2 rmarker rtape notMatchingLbra =
+    ? rinsns0 notMatchingLbra
+    ? rinsns1 notMatchingLbra
+    ? rinsns2
+    .rtape
+    notMatchingLbra;
+
+-- ,
+exec011 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    ? input
+    interp ................input
+           .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+           .insns2 advance insns2 rinsns2 .marker 1rmarker
+           ? .input 1.tape0 0.tape0 rtape0
+           ? ...input 1.tape1 0.tape1 rtape1
+           ? .....input 1.tape2 0.tape2 rtape2
+           ? .......input 1.tape3 0.tape3 rtape3
+           ? .........input 1.tape4 0.tape4 rtape4
+           ? ...........input 1.tape5 0.tape5 rtape5
+           ? .............input 1.tape6 0.tape6 rtape6
+           ? ...............input 1.tape7 0.tape7 rtape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+
+           -- tape is unchanged on EOF
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7
+
+           -- alternatively, to set tape to 0 on EOF
+           -- 0.tape0 rtape0 0.tape1 rtape1 0.tape2 rtape2 0.tape3 rtape3
+           -- 0.tape4 rtape4 0.tape5 rtape5 0.tape6 rtape6 0.tape7 rtape7
+
+           -- alternatively, to set tape to -1 on EOF
+           -- 1.tape0 rtape0 1.tape1 rtape1 1.tape2 rtape2 1.tape3 rtape3
+           -- 1.tape4 rtape4 1.tape5 rtape5 1.tape6 rtape6 1.tape7 rtape7
+    ;
+
+-- .
+exec111 input insns0 rinsns0 insns1 rinsns1 insns2 rinsns2 marker rmarker
+       tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+       tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7 =
+    output tape0 output tape1 output tape2 output tape3
+    output tape4 output tape5 output tape6 output tape7
+    interp input .insns0 advance insns0 rinsns0 .insns1 advance insns1 rinsns1
+                 .insns2 advance insns2 rinsns2 .marker 1rmarker
+           tape0 rtape0 tape1 rtape1 tape2 rtape2 tape3 rtape3
+           tape4 rtape4 tape5 rtape5 tape6 rtape6 tape7 rtape7;
+
+output bit rest = 1? bit 1rest 0rest;
