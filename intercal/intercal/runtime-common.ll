@@ -27,9 +27,6 @@ declare i32 @time(i8*)
 ; in the [0 x i32], 0..ndims-1 are the dimensions, ndims... are the values
 %arr_val = type {%arr_val*,i32,i32,[0 x i32]}
 
-@stack = global [79 x i8*] zeroinitializer
-@stackptr = global i32 0
-
 @read_digit_error = private constant [43 x i8] c"ICL579I WHAT BASE AND/OR LANGUAGE INCLUDES "
 
 define i1 @is_space(i8 %char) {

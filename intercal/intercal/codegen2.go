@@ -431,6 +431,11 @@ func (cgs *codeGenState2) genErrorMessages(w io.Writer) error {
 }
 
 func (cgs *codeGenState2) genGlobals(w io.Writer) error {
+	// next/resume stack
+	if _, err := fmt.Fprintf(w, "@stack = global [79 x i8*] zeroinitializer\n@stackptr = global i32 0\n"); err != nil {
+		return err
+	}
+
 	// abstain flag global array
 	if _, err := fmt.Fprintf(w, "@abstain_flags = global [%d x i1] [", len(cgs.statements)+1); err != nil {
 		return err
