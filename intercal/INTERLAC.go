@@ -13,7 +13,7 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [-strict] [-llc LLC-CMD] [-cc CC-CMD] [-ll|-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s [-cg1|-cg2] [-strict] [-llc LLC-CMD] [-cc CC-CMD] [-ll|-o EXEFILE] SRCFILE [SRCFILE...]\n", os.Args[0])
 	os.Exit(1)
 }
 
@@ -22,6 +22,7 @@ func main() {
 	exeFile := ""
 	llFlag := false
 	strictFlag := false
+	cgVersion := 1
 	cc := os.Getenv("CC")
 	if cc == "" {
 		cc = "cc"
@@ -57,6 +58,12 @@ func main() {
 		} else if os.Args[srcFileIndex] == "-strict" {
 			strictFlag = true
 			srcFileIndex++
+		} else if os.Args[srcFileIndex] == "-cg1" {
+			cgVersion = 1
+			srcFileIndex++
+		} else if os.Args[srcFileIndex] == "-cg2" {
+			cgVersion = 2
+			srcFileIndex++
 		} else {
 			break
 		}
@@ -85,7 +92,11 @@ func main() {
 	llvmVersion := getLLVMVersion(llc)
 
 	if llFlag {
-		intercal.CodeGen(statements, llvmVersion, os.Stdout)
+		if cgVersion == 1 {
+			intercal.CodeGen(statements, llvmVersion, os.Stdout)
+		} else {
+			intercal.CodeGen2(statements, llvmVersion, os.Stdout)
+		}
 		return
 	}
 
@@ -116,9 +127,16 @@ func main() {
 			}
 		}
 
-		if err := intercal.CodeGen(statements, llvmVersion, f); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
-			os.Exit(1)
+		if cgVersion == 1 {
+			if err := intercal.CodeGen(statements, llvmVersion, f); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
+				os.Exit(1)
+			}
+		} else {
+			if err := intercal.CodeGen2(statements, llvmVersion, f); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err.Error())
+				os.Exit(1)
+			}
 		}
 	}()
 

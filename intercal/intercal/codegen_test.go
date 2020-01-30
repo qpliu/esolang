@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func testCodeGen(t *testing.T, srcFile string, llvmVersion int) {
+func testCodeGen(t *testing.T, srcFile string, llvmVersion int, cgVersion int) {
 	outFile := filepath.Join("testdata", srcFile) + ".codegen.out"
 	if _, err := os.Stat(outFile); err != nil {
 		return
@@ -28,7 +28,7 @@ func testCodeGen(t *testing.T, srcFile string, llvmVersion int) {
 		return
 	}
 
-	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("codegen_test.%s.%d", filepath.Base(srcFile), os.Getpid()))
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("codegen_test.%s.cg%d.%d", filepath.Base(srcFile), cgVersion, os.Getpid()))
 
 	if err := func() error {
 		f, err := os.Create(tmpFile + ".ll")
@@ -36,7 +36,11 @@ func testCodeGen(t *testing.T, srcFile string, llvmVersion int) {
 			return err
 		}
 		defer f.Close()
-		return CodeGen(statements, llvmVersion, f)
+		if cgVersion == 1 {
+			return CodeGen(statements, llvmVersion, f)
+		} else {
+			return CodeGen2(statements, llvmVersion, f)
+		}
 	}(); err != nil {
 		t.Errorf("codegen %s: %s", srcFile, err.Error())
 		return
@@ -92,7 +96,10 @@ func TestCodeGen(t *testing.T) {
 	}
 	for _, name := range names {
 		if filepath.Ext(name) == ".i" {
-			testCodeGen(t, name, llvmVersion)
+			const cgVersion1 = 1
+			const cgVersion2 = 2
+			testCodeGen(t, name, llvmVersion, cgVersion1)
+			testCodeGen(t, name, llvmVersion, cgVersion2)
 		}
 	}
 }
