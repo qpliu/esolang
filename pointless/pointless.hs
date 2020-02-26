@@ -105,8 +105,7 @@ resolve scope (Concat expr1 expr2) = do
     v1 <- f1 arg
     v2 <- f2 arg
     return (v1 ++ v2))
-resolve scope (Func func) = do
-  maybe (fail ("Unbound identifier: "++func)) return (scope func)
+resolve scope (Func func) = maybe (fail ("Unbound identifier: "++func)) return (scope func)
 
 interp :: Expr -> [Bool] -> Either String [Bool]
 interp expr input = do
