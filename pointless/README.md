@@ -105,8 +105,10 @@ are the bits to the right and the third, fifth, seventh, etc pairs are
 the bits to the left.
 ```
 LET
-  make-tape = (_,1 0 0 0 make-tape,1 1 0 0 make-tape),
-  from-tape = (_,_,(_,0 from-tape,1 from-tape)),
+  make-tape = LET make-tape* = (_,1 0 0 0 make-tape*,1 1 0 0 make-tape*)
+              IN  (_,1 0 make-tape*,1 1 make-tape*),
+  from-tape = LET from-tape* = (bit,from-tape* cdr cdr)
+              IN  (bit,from-tape* cdr),
 
   bit = (_,_,(_,0 _,1 _)),
   nil? = (1 _,1 _,0 _),
