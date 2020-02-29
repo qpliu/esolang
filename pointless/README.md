@@ -76,8 +76,7 @@ to its argument and the result of applying g to its argument.
 Functions
 ---------
 Functions may be identifiers bound in an enclosing LET expression or a
-built-in function bound in the initial scope.  The built-in functions
-are as follows.
+built-in function bound in the initial scope.  The initial scope has
 
 ### _
 _ ignores its argument and returns an empty list.
@@ -105,6 +104,47 @@ Cat
 ```
 LET cat = (_,0 cat,1 cat) IN cat.
 ```
+
+Tape of bits
+------------
+A finite tape of bits can be encoded as pairs of bits, where the first
+bit is a non-nil flag and the second bit is the bit value, where the
+first pair is the bit at the head, the even pairs are the bits to the
+right and the odd pairs are the bits to the left.
+```
+LET
+  make-tape = (_,1 0 0 0,1 1 0 0),
+  from-tape = (_,_,(_,0 from-tape,1 from-tap)),
+
+  bit = (_,_,(_,0 _,1 _)),
+  set-nil = (_,0,0),
+  set-1 = (1 1,(1 1,1 1,1 1),(1 1,1 1,1 1)),
+  set-0 = (1 0,(1 0,1 0,1 0),(1 0,1 0,1 0)),
+
+  car = (0 0 _,(0 0 _,0 0 _,0 0 _),(0 0 _,1 0 _,1 1 _)),
+  cdr = (_,(_,(_,0,1),(_,0,1)),(_,(_,0,1),(_,0,1))),
+  b[0] = car,
+  b[1] = car cdr,
+  b[-1] = car cdr cdr,
+  b[2] = car cdr cdr cdr,
+
+  > = (b[1],(b[2],(b[0],>* cdr cdr))),
+  >* = (_,(b[2],(b[0],>* cdr cdr)) 0,(b[2],(b[0],>* cdr cdr)) 1),
+  < = (b[-1],(b[0],>* cdr)),
+  <* = (_,(b[2],(b[0],<* cdr cdr)) 0,(b[2],(b[0],<* cdr cdr)) 1),
+
+  rewind = (_,rewind <,(_,0,1)) (at-start?,(_,0,1)),
+  at-start? = (1 _,1 _,0 _) cdr cdr
+IN
+  etc.
+
+```
+Multiple tapes can be encoded by interleaving the bits of each tape and
+defining operations that read, write, and move the head for each tape
+independently.
+
+Using tapes for input, output, code, and data, a brainfuck interpreter
+could be implemented in Pointless.
 
 Implementation
 ==============
