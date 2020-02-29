@@ -87,13 +87,13 @@ Hello world
 0 0 0 1 0 0 1 0  1 0 1 0 0 1 1 0  0 0 1 1 0 1 1 0  0 0 1 1 0 1 1 0
 1 1 1 1 0 1 1 0  0 0 0 0 0 1 0 0  1 1 1 0 1 1 1 0  1 1 1 1 0 1 1 0
 0 1 0 0 1 1 1 0  0 0 1 1 0 1 1 0  0 0 1 0 0 1 1 0  1 0 0 0 0 1 0 0
-0 1 0 1 0 0 0 0 _.
+0 1 0 1 0 0 0 0  _.
 ```
 
 Cat
 ---
 ```
-LET cat = (_,0 cat,1 cat) IN cat.
+(_,0,1).
 ```
 
 Tape of bits
@@ -107,7 +107,7 @@ the bits to the left.
 LET
   make-tape = LET make-tape* = (_,1 0 0 0 make-tape*,1 1 0 0 make-tape*)
               IN  (_,1 0 make-tape*,1 1 make-tape*),
-  from-tape = LET from-tape* = (bit,from-tape* cdr cdr)
+  from-tape = LET from-tape* = (_,(bit,from-tape* cdr cdr),_) (nil?,(_,0,1))
               IN  (bit,from-tape* cdr),
 
   bit = (_,_,(_,0 _,1 _)),
@@ -123,10 +123,10 @@ LET
   b[2] = car cdr cdr,
   b[3] = car cdr cdr cdr,
 
-  > = LET >* = (_,(b[3],(b[0],>* cdr cdr)) 0,(b[3],(b[0],>* cdr cdr)) 1),
+  > = LET >* = (_,(b[3],(b[0],>* cdr cdr)) 0,(b[3],(b[0],>* cdr cdr)) 1)
       IN  (b[1],(b[3],(b[0],>* cdr cdr))),
-  < = LET <* = (_,(b[3],(b[0],<* cdr cdr)) 0,(b[3],(b[0],<* cdr cdr)) 1),
-      IN  (b[2],(b[0],>* cdr)),
+  < = LET <* = (_,(b[3],(b[0],<* cdr cdr)) 0,(b[3],(b[0],<* cdr cdr)) 1)
+      IN  (b[2],(b[0],<* cdr)),
 
   rewind = (_,rewind <,(_,0,1)) (nil? b[2],(_,0,1))
 IN

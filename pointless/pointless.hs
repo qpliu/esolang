@@ -3,7 +3,7 @@
 
 import Data.Char(chr,isSpace,ord)
 import System.Environment(getArgs)
-import System.IO(char8,hPutStrLn,hSetEncoding,stderr,stdin,stdout)
+import System.IO(char8,hSetEncoding,stdin,stdout)
 
 tokenize :: String -> [String]
 tokenize "" = []
@@ -18,57 +18,57 @@ tokenize (c:rest)
       | isSpace c || c `elem` "().,=" = reverse ident : tokenize (c:rest)
       | otherwise = tokenizeIdent (c:ident) rest
 
-parse :: [String] -> Either String Expr
-parse tokens = do
-  (tokens,expr) <- parseExpr tokens
-  case tokens of
-    [] -> fail "Unexpected EOF"
-    (".":_) -> return expr
-    (token:_) -> fail ("Unexpected token: "++token)
+parse :: [String] -> Expr
+parse tokens =
+  case parseExpr tokens of
+    ([],_) -> error "Unexpected EOF"
+    (".":_,expr) -> expr
+    (token:_,_) -> error ("Unexpected token: "++token)
 
-parseExpr :: [String] -> Either String ([String],Expr)
-parseExpr [] = fail "Unexpected EOF"
+parseExpr :: [String] -> ([String],Expr)
+parseExpr [] = error "Unexpected EOF"
 parseExpr ("(":tokens) = parseGrouping [] tokens
 parseExpr ("LET":tokens) = parseLet [] tokens
 parseExpr (token:tokens)
-  | token `elem` [",",".","IN",")","="] = fail ("Unexpected token: "++token)
+  | token `elem` [",",".","IN",")","="] = error ("Unexpected token: "++token)
   | otherwise = parseCompose (Func token) tokens
 
-parseCompose :: Expr -> [String] -> Either String ([String],Expr)
-parseCompose expr [] = fail "Unexpected EOF"
+parseCompose :: Expr -> [String] -> ([String],Expr)
+parseCompose expr [] = error "Unexpected EOF"
 parseCompose expr tokens@(token:_)
-  | token `elem` [",",")","IN","."] = return (tokens,expr)
-  | otherwise = do
-      (newTokens,newExpr) <- parseExpr tokens
-      return (newTokens,Compose expr newExpr)
+  | token `elem` [",",")","IN","."] = (tokens,expr)
+  | otherwise = let (newTokens,newExpr) = parseExpr tokens
+                in  (newTokens,Compose expr newExpr)
 
-parseGrouping :: [Expr] -> [String] -> Either String ([String],Expr)
-parseGrouping _ [] = fail "Unexpected EOF"
-parseGrouping exprs tokens = do
-    (newTokens,newExpr) <- parseExpr tokens
-    case (length exprs,newTokens) of
-      (_,[]) -> fail "Unexpected EOF"
-      (n,",":newNewTokens) ->
-          if n < 2 then parseGrouping (newExpr:exprs) newNewTokens
-                   else fail "Unexpected token: ,"
-      (1,")":newNewTokens) -> parseCompose (Concat (head exprs) newExpr) newNewTokens
-      (2,")":newNewTokens) -> parseCompose (If (head (tail exprs)) (head exprs) newExpr) newNewTokens
-      (_,")":_) -> fail "Unexpected token: )"
-      (_,token:_) -> fail ("Unexpected token: "++token)
+parseGrouping :: [Expr] -> [String] -> ([String],Expr)
+parseGrouping _ [] = error "Unexpected EOF"
+parseGrouping exprs tokens =
+    case parseExpr tokens of
+      ([],_) -> error "Unexpected EOF"
+      (",":newTokens,expr) ->
+        if length exprs < 2 then parseGrouping (expr:exprs) newTokens
+                            else error "Unexpected token: ,"
+      (")":newTokens,expr) ->
+        if length exprs == 1
+          then parseCompose (Concat (head exprs) expr) newTokens
+          else if length exprs == 2
+            then parseCompose (If (head (tail exprs)) (head exprs) expr) newTokens
+            else error "Unexpected token: )"
+      (token:_,_) -> error ("Unexpected token: "++token)
 
-parseLet :: [(String,Expr)] -> [String] -> Either String ([String],Expr)
-parseLet bindings [] = fail "Unexpected EOF"
+parseLet :: [(String,Expr)] -> [String] -> ([String],Expr)
+parseLet bindings [] = error "Unexpected EOF"
 parseLet bindings (ident:"=":tokens)
-  | ident `elem` [".",",","=","(",")","LET","IN"] = fail ("Unexpected token: "++ident)
-  | otherwise = do
-      (newTokens,expr) <- parseExpr tokens
-      case newTokens of
-        [] -> fail "Unexpected EOF"
-        ("IN":newNewTokens) -> do
-          (newNewNewTokens,newExpr) <- parseExpr newNewTokens
-          return (newNewNewTokens,Let (reverse ((ident,expr):bindings)) newExpr)
-        (",":newNewTokens) -> parseLet ((ident,expr):bindings) newNewTokens
-        (token:_) -> fail ("Unexpected token: "++token)
+  | ident `elem` [".",",","=","(",")","LET","IN"] = error ("Unexpected token: "++ident)
+  | otherwise =
+      case parseExpr tokens of
+        ([],_) -> error "Unexpected EOF"
+        ("IN":newTokens,expr) ->
+            let (newNewTokens,letExpr) = parseExpr newTokens
+            in  (newNewTokens,Let (reverse ((ident,expr):bindings)) letExpr)
+        (",":newTokens,expr) -> parseLet ((ident,expr):bindings) newTokens
+        (token:_,_) -> error ("Unexpected token: "++token)
+parseLet _ _ = error "Invalid LET binding"
 
 data Expr =
     Compose Expr Expr
@@ -77,40 +77,28 @@ data Expr =
   | Concat Expr Expr
   | Func String
 
-initialScope :: String -> Maybe ([Bool] -> Either String [Bool])
-initialScope "_" = Just (const (return []))
-initialScope "0" = Just (return . (False:))
-initialScope "1" = Just (return . (True:))
+initialScope :: String -> Maybe ([Bool] -> [Bool])
+initialScope "_" = Just (const [])
+initialScope "0" = Just (False:)
+initialScope "1" = Just (True:)
 initialScope _ = Nothing
 
-resolve :: (String -> Maybe ([Bool] -> Either String [Bool])) -> Expr -> Either String ([Bool] -> Either String [Bool])
-resolve scope (Compose expr1 expr2) = do
-  f1 <- resolve scope expr1
-  f2 <- resolve scope expr2
-  return ((>>= f1) . f2)
+resolve :: (String -> Maybe ([Bool] -> [Bool])) -> Expr -> ([Bool] -> [Bool])
+resolve scope (Compose expr1 expr2) = resolve scope expr1 . resolve scope expr2
 resolve scope (Let bindings expr) = resolve newScope expr
   where
     newScope ident = maybe (scope ident) Just
-                           (lookup ident (map (fmap bind) bindings))
-    bind expr = either (const . fail) id (resolve newScope expr)
-resolve scope (If expr1 expr2 expr3) = do
-  f1 <- resolve scope expr1
-  f2 <- resolve scope expr2
-  f3 <- resolve scope expr3
-  return (\ arg -> if null arg then f1 arg else if head arg then f3 (tail arg) else f2 (tail arg))
-resolve scope (Concat expr1 expr2) = do
-  f1 <- resolve scope expr1
-  f2 <- resolve scope expr2
-  return (\ arg -> do
-    v1 <- f1 arg
-    v2 <- f2 arg
-    return (v1 ++ v2))
-resolve scope (Func func) = maybe (fail ("Unbound identifier: "++func)) return (scope func)
+                           (lookup ident (map (fmap (resolve newScope)) bindings))
+resolve scope (If expr1 expr2 expr3) = (\ arg ->
+    if null arg
+      then resolve scope expr1 arg
+      else resolve scope (if head arg then expr3 else expr2) (tail arg))
+resolve scope (Concat expr1 expr2) = (\ arg ->
+    resolve scope expr1 arg ++ resolve scope expr2 arg)
+resolve scope (Func func) = maybe (error ("Unbound identifier: "++func)) id (scope func)
 
-interp :: Expr -> [Bool] -> Either String [Bool]
-interp expr input = do
-  fn <- resolve initialScope expr
-  fn input
+interp :: Expr -> [Bool] -> [Bool]
+interp expr input = (resolve initialScope expr) input
 
 fromBits :: [Bool] -> String
 fromBits bits
@@ -125,14 +113,21 @@ toBits = concatMap (byteBits 8 . ord)
     byteBits b n | b <= 0 = []
                  | otherwise = (mod n 2 == 1) : byteBits (b-1) (div n 2)
 
-run :: Expr -> IO ()
-run expr = do
-  hSetEncoding stdin char8
-  hSetEncoding stdout char8
-  interact (either id fromBits . interp expr . toBits)
+to01String :: [Bool] -> String
+to01String = map (\ b -> if b then '1' else '0')
+
+from01String :: String -> [Bool]
+from01String = concatMap (\ ch -> if ch == '0' then [False] else if ch == '1' then [True] else [])
 
 main :: IO ()
 main = do
-  (srcFile:_) <- getArgs
+  args <- getArgs
+  let (srcFile,fromStr,toStr) =
+        case args of
+            [srcFile] -> (srcFile,toBits,fromBits)
+            ["-b",srcFile] -> (srcFile,from01String,to01String)
+            _ -> error "Usage: pointless [-b] SRCFILE"
   src <- readFile srcFile
-  either (hPutStrLn stderr) run (parse (tokenize src))
+  hSetEncoding stdin char8
+  hSetEncoding stdout char8
+  interact (toStr . interp (parse (tokenize src)) . fromStr)

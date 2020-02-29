@@ -1,1 +1,1 @@
-LET cat = (_,0 cat,1 cat) IN cat.
+(_,0,1).
