@@ -5,9 +5,6 @@ takes a list of bits and returns a list of bits.
 
 Syntax
 ======
-
-Grammar
--------
 ```ebnf
 program = expr, "." ;
 
@@ -24,11 +21,11 @@ concat = "(", expr, ",", expr, ")" ;
 binding = identifier, "=", expr ;
 ```
 Identifiers are consecutive sequences of non-whitespace characters, excluding
-"(", ")", ",", "=", and ".".  Also, "LET" and "IN" are reserved and may not
+`(`, `)`, `,`, `=`, and `.`.  Also, `LET` and `IN` are reserved and may not
 be used as identifiers.  Whitespace separates identifiers and is otherwise
 ignored.
 
-Comments begin with "==" and extend to the end of the line.
+Comments begin with `==` and extend to the end of the line.
 
 Expressions
 ===========
@@ -77,15 +74,9 @@ Functions
 ---------
 Functions may be identifiers bound in an enclosing LET expression or a
 built-in function bound in the initial scope.  The initial scope has
-
-### _
-_ ignores its argument and returns an empty list.
-
-### 0
-0 returns its argument with 0 prepended.
-
-### 1
-1 returns its argument with 1 prepended.
+- `_` ignores its argument and returns an empty list.
+- `0` returns its argument with 0 prepended.
+- `1` returns its argument with 1 prepended.
 
 Examples
 ========
@@ -109,14 +100,16 @@ Tape of bits
 ------------
 A finite tape of bits can be encoded as pairs of bits, where the first
 bit is a non-nil flag and the second bit is the bit value, where the
-first pair is the bit at the head, the even pairs are the bits to the
-right and the odd pairs are the bits to the left.
+first pair is the bit at the head, the second, fourth, sixth, etc pairs
+are the bits to the right and the third, fifth, seventh, etc pairs are
+the bits to the left.
 ```
 LET
-  make-tape = (_,1 0 0 0,1 1 0 0),
-  from-tape = (_,_,(_,0 from-tape,1 from-tap)),
+  make-tape = (_,1 0 0 0 make-tape,1 1 0 0 make-tape),
+  from-tape = (_,_,(_,0 from-tape,1 from-tape)),
 
   bit = (_,_,(_,0 _,1 _)),
+  nil? = (1 _,1 _,0 _),
   set-nil = (_,0,0),
   set-1 = (1 1,(1 1,1 1,1 1),(1 1,1 1,1 1)),
   set-0 = (1 0,(1 0,1 0,1 0),(1 0,1 0,1 0)),
@@ -125,16 +118,15 @@ LET
   cdr = (_,(_,(_,0,1),(_,0,1)),(_,(_,0,1),(_,0,1))),
   b[0] = car,
   b[1] = car cdr,
-  b[-1] = car cdr cdr,
-  b[2] = car cdr cdr cdr,
+  b[2] = car cdr cdr,
+  b[3] = car cdr cdr cdr,
 
-  > = (b[1],(b[2],(b[0],>* cdr cdr))),
-  >* = (_,(b[2],(b[0],>* cdr cdr)) 0,(b[2],(b[0],>* cdr cdr)) 1),
-  < = (b[-1],(b[0],>* cdr)),
-  <* = (_,(b[2],(b[0],<* cdr cdr)) 0,(b[2],(b[0],<* cdr cdr)) 1),
+  > = LET >* = (_,(b[3],(b[0],>* cdr cdr)) 0,(b[3],(b[0],>* cdr cdr)) 1),
+      IN  (b[1],(b[3],(b[0],>* cdr cdr))),
+  < = LET <* = (_,(b[3],(b[0],<* cdr cdr)) 0,(b[3],(b[0],<* cdr cdr)) 1),
+      IN  (b[2],(b[0],>* cdr)),
 
-  rewind = (_,rewind <,(_,0,1)) (at-start?,(_,0,1)),
-  at-start? = (1 _,1 _,0 _) cdr cdr
+  rewind = (_,rewind <,(_,0,1)) (nil? b[2],(_,0,1))
 IN
   etc.
 
@@ -143,8 +135,8 @@ Multiple tapes can be encoded by interleaving the bits of each tape and
 defining operations that read, write, and move the head for each tape
 independently.
 
-Using tapes for input, output, code, and data, a brainfuck interpreter
-could be implemented in Pointless.
+A brainfuck interpreter could be implemented in Pointless by encoding tapes
+for input, output, code, and data as its state.
 
 Implementation
 ==============
