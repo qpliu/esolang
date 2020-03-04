@@ -1,0 +1,207 @@
+== brainfuck interpreter in Pointless
+
+== The state is 4 tapes of bits encoded as
+== tape[0]-notnil[0] tape[0]-bit[0] tape[3]-notnil[0] tape[1]-bit[0]
+== tape[2]-notnil[0] tape[2]-bit[0] tape[3]-notnil[0] tape[3]-bit[0]
+== tape[0]-notnil[1] ...
+== tape[0]-notnil[-1] ...
+== tape[0]-notnil[2] ...
+== tape[0]-notnil[-2] ...
+== etc...
+
+== notnil is 0 for nil, to mark each end of the tape
+== bit is the value on the tape when notnil is 1
+
+== tape[0] is the input
+== tape[1] is the output
+== tape[2] is the code
+== tape[3] is the data
+
+LET
+  encode-input =
+    LET encode-input* = (_,1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 encode-input*,1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 encode-input*)
+    IN  (_,1 0 0 0 0 0 0 0 encode-input*,1 1 0 0 0 0 0 0 encode-input*),
+  decode-output =
+    LET decode-output* = (_,_(bit b1[0],decode-output* cdr cdr)) (notnil? b1[0],(_,0,1))
+    IN  (_,_,(bit b1[0],decode-output* cdr)) (notnil? b1[0],(_,0,1)) rewind1,
+
+  notnil? = (0 _,0 _,1 _),
+  bit = (0 _,0 _,(0 _,0 _,1 _)),
+
+  drop-bit-pair = (_,(_,(_,0,1),(_,0,1)),(_,(_,0,1),(_,0,1))),
+  top-bit-pair = (0 0 _,(0 0 _,0 0 _,0 1 _),(0 0 _,1 0 _,1 1 _)),
+
+  cdr = drop-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair,
+  b0[0] = top-bit-pair,
+  b1[0] = top-bit-pair drop-bit-pair,
+  b2[0] = top-bit-pair drop-bit-pair drop-bit-pair,
+  b3[0] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair,
+  b0[1] = top-bit-pair cdr,
+  b1[1] = top-bit-pair drop-bit-pair cdr,
+  b2[1] = top-bit-pair drop-bit-pair drop-bit-pair cdr,
+  b3[1] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr,
+  b0[2] = top-bit-pair cdr cdr,
+  b1[2] = top-bit-pair drop-bit-pair cdr cdr,
+  b2[2] = top-bit-pair drop-bit-pair drop-bit-pair cdr cdr,
+  b3[2] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr cdr,
+  b0[3] = top-bit-pair cdr cdr cdr,
+  b1[3] = top-bit-pair drop-bit-pair cdr cdr cdr,
+  b2[3] = top-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr,
+  b3[3] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr,
+  b0[4] = top-bit-pair cdr cdr cdr cdr,
+  b1[4] = top-bit-pair drop-bit-pair cdr cdr cdr cdr,
+  b2[4] = top-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr,
+  b3[4] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr,
+  b0[5] = top-bit-pair cdr cdr cdr cdr cdr,
+  b1[5] = top-bit-pair drop-bit-pair cdr cdr cdr cdr cdr,
+  b2[5] = top-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr cdr,
+  b3[5] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr cdr,
+  b0[6] = top-bit-pair cdr cdr cdr cdr cdr cdr,
+  b1[6] = top-bit-pair drop-bit-pair cdr cdr cdr cdr cdr cdr,
+  b2[6] = top-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr cdr cdr,
+  b3[6] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr cdr cdr,
+  b0[7] = top-bit-pair cdr cdr cdr cdr cdr cdr cdr,
+  b1[7] = top-bit-pair drop-bit-pair cdr cdr cdr cdr cdr cdr cdr,
+  b2[7] = top-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr cdr cdr cdr,
+  b3[7] = top-bit-pair drop-bit-pair drop-bit-pair drop-bit-pair cdr cdr cdr cdr cdr cdr cdr,
+
+  byte = (_,_,(bit b0[0],(bit b0[1],(bit b0[2],(bit b0[3],(bit b0[4],(bit b0[5],(bit b0[6],bit b0[7])))))))),
+  byte0 = byte,
+  byte1 = byte drop-bit-pair,
+  byte2 = byte drop-bit-pair drop-bit-pair,
+  byte3 = byte drop-bit-pair drop-bit-pair drop-bit-pair,
+
+  !-byte? = (0 _,0 _,(0 _,(0 _,(0 _,(0 _,(0 _,0 _,(0 _,(0 _,1 _,0 _),0 _)),0 _),0 _),0 _),0 _)), == 10000100
+  +-byte? = (0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,(0 _,1 _, 0_),0 _)),0 _)),0 _))), == 11010100
+  --byte? = (0 _,0 _,(0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,(0 _,1 _,0 _),0 _)),0 _))),0 _)), == 10110100
+  [-byte? = (0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,1 _,0 _)),0 _))),0 _))), == 11011010
+  ]-byte? = (0 _,0 _,(0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,1 _,0 _)),0 _)))),0 _)), == 10111010
+  <-byte? = (0 _,(0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,1 _,0 _),0 _))))),0 _),0 _), == 00111100
+  >-byte? = (0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,1 _,0 _),0 _)))))),0 _), == 01111100
+  dot-byte? = (0 _,(0 _,0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,(0 _,1 _,0 _),0 _)),0 _)))),0 _), == 01110100
+  comma-byte? = (0 _,(0 _,(0 _,0 _,(0 _,0 _,(0 _,(0 _,0 _,(0 _,(0 _,1 _,0 _),0 _)),0 _))),0 _),0 _), == 00110100
+  zero-byte? = (1 _,(0 _,(0 _,(0 _,(0 _,(0 _,(0 _,(0 _,1 _,0 _),0 _),0 _),0 _),0 _),0 _),0 _),0 _), == 00000000, nil counts as a zero byte
+
+  == move tape head left one bit
+  <0 = LET h* = (b0[3],(b1[0],(b2[0],(b3[0],(b0[0],(b1[1],(b2[1],b3[1]))))))),
+           <0* = (_,(h*,<0* cdr cdr)0,(h*,<0* cdr cdr)1),
+           h = (b0[2],(b1[0],(b2[0],(b3[0],(b0[0],(b1[1],(b2[1],b3[1])))))))
+       IN  (_,(h,<0* cdr)0,(h,<0* cdr)1),
+  <1 = LET h* = (b0[0],(b1[3],(b2[0],(b3[0],(b0[1],(b1[0],(b2[1],b3[1]))))))),
+           <1* = (_,(h*,<1* cdr cdr)0,(h*,<1* cdr cdr)1),
+           h = (b0[0],(b1[2],(b2[0],(b3[0],(b0[1],(b1[0],(b2[1],b3[1])))))))
+       IN  (_,(h,<1* cdr)0,(h,<1* cdr)1),
+  <2 = LET h* = (b0[0],(b1[0],(b2[3],(b3[0],(b0[1],(b1[1],(b2[0],b3[1]))))))),
+           <2* = (_,(h*,<2* cdr cdr)0,(h*,<2* cdr cdr)1),
+           h = (b0[0],(b1[0],(b2[2],(b3[0],(b0[1],(b1[1],(b2[0],b3[1])))))))
+       IN  (_,(h,<2* cdr)0,(h,<2* cdr)1),
+  <3 = LET h* = (b0[0],(b1[0],(b2[0],(b3[3],(b0[1],(b1[1],(b2[1],b3[0]))))))),
+           <3* = (_,(h*,<3* cdr cdr)0,(h*,<3* cdr cdr)1),
+           h = (b0[0],(b1[0],(b2[0],(b3[2],(b0[1],(b1[1],(b2[1],b3[0])))))))
+       IN  (_,(h,<3* cdr)0,(h,<3* cdr)1),
+
+  == move tape head right one bit
+  >0 = LET h* = (b0[3],(b1[0],(b2[0],(b3[0],(b0[0],(b1[1],(b2[1],b3[1]))))))),
+           >0* = (_,(h*,>0* cdr cdr)0,(h*,>0* cdr cdr)1),
+           h = (b0[1],(b1[0],(b2[0],(b3[0],(b0[3],(b1[1],(b2[1],(b3[1],(b0[0],(b1[2],(b2[2],b3[2])))))))))))
+       IN  (_,(h,>0* cdr cdr)0,(h,>0* cdr cdr)1),
+  >1 = LET h* = (b0[0],(b1[3],(b2[0],(b3[0],(b0[1],(b1[0],(b2[1],b3[1]))))))),
+           >1* = (_,(h*,>1* cdr cdr)0,(h*,>1* cdr cdr)1),
+           h = (b0[0],(b1[1],(b2[0],(b3[0],(b0[1],(b1[3],(b2[1],(b3[1],(b0[2],(b1[0],(b2[2],b3[2])))))))))))
+       IN  (_,(h,>1* cdr cdr)0,(h,>1* cdr cdr)1),
+  >2 = LET h* = (b0[0],(b1[0],(b2[3],(b3[0],(b0[1],(b1[1],(b2[0],b3[1]))))))),
+           >2* = (_,(h*,>2* cdr cdr)0,(h*,>2* cdr cdr)1),
+           h = (b0[0],(b1[0],(b2[1],(b3[0],(b0[1],(b1[1],(b2[3],(b3[1],(b0[2],(b1[2],(b2[0],b3[2])))))))))))
+       IN  (_,(h,>2* cdr cdr)0,(h,>2* cdr cdr)1),
+  >3 = LET h* = (b0[0],(b1[0],(b2[0],(b3[3],(b0[1],(b1[1],(b2[1],b3[0]))))))),
+           >3* = (_,(h*,>3* cdr cdr)0,(h*,>3* cdr cdr)1),
+           h = (b0[0],(b1[0],(b2[0],(b3[1],(b0[1],(b1[1],(b2[1],(b3[3],(b0[2],(b1[2],(b2[2],b3[0])))))))))))
+       IN  (_,(h,>3* cdr cdr)0,(h,>3* cdr cdr)1),
+
+  == move tape head left eight bits
+  <<0 = <0 <0 <0 <0 <0 <0 <0 <0,
+  <<1 = <1 <1 <1 <1 <1 <1 <1 <1,
+  <<2 = <2 <2 <2 <2 <2 <2 <2 <2,
+  <<3 = <3 <3 <3 <3 <3 <3 <3 <3,
+
+  == move tape head right eight bits
+  >>0 = >0 >0 >0 >0 >0 >0 >0 >0,
+  >>1 = >1 >1 >1 >1 >1 >1 >1 >1,
+  >>2 = >2 >2 >2 >2 >2 >2 >2 >2,
+  >>3 = >3 >3 >3 >3 >3 >3 >3 >3,
+
+  rewind1 = (_,(_,0,1),rewind1 <1) (notnil? bit1[2],(_,0,1)),
+  rewind2 = (_,(_,0,1),rewind2 <2) (notnil? bit2[2],(_,0,1)),
+
+  parse =
+    LET
+      copy-bit = >0 >2 (b0[0],(b1[0],(b0[0],(b3[0],cdr)))),
+      copy-byte = copy-bit copy-bit copy-bit copy-bit copy-bit copy-bit copy-bit copy-bit,
+
+      parse* = (_,(_,0,1),check-!) (notnil? b0[0],(_,0,1)),
+      check-! = (_,check-+,>>0) (!-byte? byte0,(_,0,1)),
+      check-+ = (_,check--,parse* copy-byte) (+-byte? byte0,(_,0,1)),
+      check-- = (_,check-[,parse* copy-byte) (--byte? byte0,(_,0,1)),
+      check-[ = (_,check-],parse* copy-byte) ([-byte? byte0,(_,0,1)),
+      check-] = (_,check-<,parse* copy-byte) (]-byte? byte0,(_,0,1)),
+      check-< = (_,check->,parse* copy-byte) (<-byte? byte0,(_,0,1)),
+      check-> = (_,check-dot,parse* copy-byte) (>-byte? byte0,(_,0,1)),
+      check-dot = (_,check-comma,parse* copy-byte) (dot-byte? byte0,(_,0,1)),
+      check-comma = (_,parse* >>0,parse* copy-byte) (dot-byte? byte0,(_,0,1))
+    IN
+      parse*,
+
+  execute =
+    LET
+      check-+ =
+        LET exec-+ = execute >>2 inc0,
+	    inc0 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc1 cdr)))) (bit b3[0],(_,0,1)),
+	    inc1 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc2 cdr)))) (bit b3[0],(_,0,1)),
+	    inc2 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc3 cdr)))) (bit b3[0],(_,0,1)),
+	    inc3 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc4 cdr)))) (bit b3[0],(_,0,1)),
+	    inc4 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc5 cdr)))) (bit b3[0],(_,0,1)),
+	    inc5 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc6 cdr)))) (bit b3[0],(_,0,1)),
+	    inc6 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 inc7 cdr)))) (bit b3[0],(_,0,1)),
+	    inc7 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1))
+	IN  (_,check--,exec-+) (+-byte? byte2,(_,0,1)),
+      check-- =
+        LET exec-- = execute >>2 dec0,
+	    dec0 = (_,(b0[0],(b1[0],(b2[0],1 1 dec1 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec1 = (_,(b0[0],(b1[0],(b2[0],1 1 dec2 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec2 = (_,(b0[0],(b1[0],(b2[0],1 1 dec3 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec3 = (_,(b0[0],(b1[0],(b2[0],1 1 dec4 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec4 = (_,(b0[0],(b1[0],(b2[0],1 1 dec5 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec5 = (_,(b0[0],(b1[0],(b2[0],1 1 dec6 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec6 = (_,(b0[0],(b1[0],(b2[0],1 1 dec7 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1)),
+	    dec7 = (_,(b0[0],(b1[0],(b2[0],1 1 cdr))),(b0[0],(b1[0],(b2[0],1 0 cdr)))) (bit b3[0],(_,0,1))
+	IN  (_,check-[,exec--) (--byte? byte2,(_,0,1)),
+      check-[ =
+        LET exec-[ = (_,execute,execute find-]) (zero-byte? byte3,(_,0,1)),
+	    find-] =
+	      LET try-[ = (_,try-],find-] find-] >>2) ([-byte? byte2,(_,0,1)),
+	          try-] = (_,find-] >>2,>>2) (]-byte? byte2,(_,0,1))
+	      IN (_,try-[,(_,0,1)) (zero-byte? byte2,(_,0,1))
+	IN  (_,check-],exec-[ >>2) ([-byte? byte2,(_,0,1)),
+      check-] =
+        LET exec-] = (_,execute find-[ <<2,execute >>2) (zero-byte? byte3,(_,0,1)),
+	    find-[ =
+	      LET try-] = (_,try-[,find-[ <<2 find-[ <<2) (]-byte? byte2,(_,0,1)),
+	          try-[ = (_,find-[ <<2,(_,0,1)) ([-byte? byte2,(_,0,1))
+	      IN (_,try-],(_,0,1)) (zero-byte? byte2,(_,0,1))
+	IN  (_,check-<,exec-]) (]-byte? byte2,(_,0,1)),
+      check-< =
+        LET exec-< = execute >>2 <<3
+	IN  (_,check->,exec-<) (<-byte? byte2,(_,0,1)),
+      check-> =
+        LET exec-> = execute >>2 >>3
+	IN  (_,check-dot,exec-<) (>-byte? byte2,(_,0,1)),
+      check-dot =
+        LET exec-dot = execute >>2 (b0[0],(b3[0],(b2[0],(b3[0],(b0[1],(b3[1],(b2[1],(b3[1],(b0[2],(b3[2],(b2[2],(b3[2],(b0[3],(b3[3],(b2[3],(b3[3],(b0[4],(b3[4],(b2[4],(b3[4],(b0[5],(b3[5],(b2[5],(b3[5],(b0[6],(b3[6],(b2[6],(b3[6],(b0[7],(b3[7],(b2[7],(b3[7],cdr cdr cdr cdr cdr cdr cdr cdr)))))))))))))))))))))))))))))))) >>1
+	IN  (_,check-comma,exec-dot) (dot-byte? byte2,(_,0,1)),
+      check-comma =
+        LET exec-comma = execute >>2 >>0 (b0[0],(b1[0],(b2[0],(b1[0],(b0[1],(b1[1],(b2[1],(b1[1],(b0[2],(b1[2],(b2[2],(b1[2],(b0[3],(b1[3],(b2[3],(b1[3],(b0[4],(b1[4],(b2[4],(b1[4],(b0[5],(b1[5],(b2[5],(b1[5],(b0[6],(b1[6],(b2[6],(b1[6],(b0[7],(b1[7],(b2[7],(b1[7],cdr cdr cdr cdr cdr cdr cdr cdr))))))))))))))))))))))))))))))))
+	IN  (_,execute >>2,exec-comma) (comma-byte? byte2,(_,0,1))
+    IN
+      (_,(_,0,1),check-+) (notnil? b2[0],(_,0,1))
+IN
+  decode-output rewind1 execute rewind2 parse encode-input.
