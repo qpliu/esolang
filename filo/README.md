@@ -6,7 +6,7 @@ Syntax
 ```ebnf
 program = definitions ;
 
-program = definition, { definitions } ;
+definitions = definition, { definitions } ;
 
 definition = identifier, "=", expression, "." ;
 
@@ -15,7 +15,7 @@ expression = "@" | "0" | expression, "*", expression |
              identifier, expression, ",";
 ```
 Identifiers are consecutive sequences of non-whitespace characters, excluding
-`@`, `0`, `*`, `+`, '-`, `,`, `=`, and `.`.  Whitespace separates identifiers
+`@`, `0`, `*`, `+`, `-`, `,`, `=`, and `.`.  Whitespace separates identifiers
 and is otherwise ignored.
 
 `*`, `+`, and `-` are right-associative and have equal precedence.
