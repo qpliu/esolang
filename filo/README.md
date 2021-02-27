@@ -74,7 +74,7 @@ Let
 [f=x.g=y]z
 ```
 Defines `f` and `g` when evaluating `z`.  This is a recursive let,
-so the definitions of `f` and `g apply to `x` and `y`.
+so the definitions of `f` and `g` apply to `x` and `y`.
 
 Input/Output encoding
 =====================
