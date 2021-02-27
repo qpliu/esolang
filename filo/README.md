@@ -8,9 +8,10 @@ program = expression ;
 
 expression = "@"
            | "0"
-           | expression, "*", expression, ","
-           | identifier, expression, "+", expression
-           | identifier, expression, "-", expression
+           | expression, "*", expression
+           | expression, "+", expression
+           | expression, "-", expression
+           | identifier, "*", identifier, expression, ",", expression, ","
 	   | "[", definitions, "]", expression ;
 
 definitions = definition, { definitions } ;
@@ -21,11 +22,11 @@ Identifiers are consecutive sequences of non-whitespace characters, excluding
 `@`, `0`, `*`, `+`, `-`, `=`, `.`, and `,`.  Whitespace separates identifiers
 and is otherwise ignored.
 
-`*` is right-associative.
+`*`, `+`, and `-` are right-associative with equal precedence.
 
-A `.` immediately preceding a `]` may be omitted.
+A `.` immediately preceding `]` may be omitted.
 
-A `,` immediately preceding a `]`, `.`, `+`, `-`, or EOF may be omitted.
+A `,` immediately preceding `]`, `.`, or EOF may be omitted.
 
 Comments begin with `==` and extend to the end of the line.
 
@@ -48,25 +49,32 @@ An empty stack.
 Push
 ----
 ```
-x * y,
+x * y
 ```
 A new stack with `x` pushed onto `y`.
 
 Pop
 ---
 ```
-f x - y
+x - y
 ```
-The result of applying function `f` to `x` with its top element removed
-unless `x` is empty, then `y`.
+The `x` with its top element removed unless `x` is empty, then `y`.
 
 Top
 ---
 ```
-f x + y
+x + y
 ```
-The result of applying function `f` to the top element of `x`
-unless `x` is empty, then `y`.
+The top element of `x` unless `x` is empty, then `y`.
+
+Apply
+-----
+```
+f * g x, y,
+```
+A new stack with the result of `f` applied to the top element of `x` pushed
+onto the result of `g` applied to `x` with its top element removed unless
+`x` is empty, then `y`.
 
 Let
 ---
@@ -103,7 +111,7 @@ Hello world
 [h=0*0*0*@*0*0*@*0 * @*0*@*0*0*@*@*0 * 0*0*@*@*0*@*@*0 * 0*0*@*@*0*@*@*0
   *@*@*@*@*0*@*@*0 * 0*0*0*0*0*@*0*0 * @*@*@*0*@*@*@*0 * @*@*@*@*0*@*@*0
   *0*@*0*0*@*@*@*0 * 0*0*@*@*0*@*@*0 * 0*0*@*0*0*@*@*0 * @*0*0*0*0*@*0*0
-  *0*@*0*@*0*0*0*0] h0*0*0-0
+  *0*@*0*@*0*0*0*0] h*h 0*0*0,0,-0
 ```
 
 Implementation

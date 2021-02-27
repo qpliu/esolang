@@ -23,7 +23,7 @@ isIdent "" = error "Unexpected tokenize error"
 isIdent [c] = not (c `elem` "@0*+-=,.[]")
 isIdent _ = True
 
-data Expr = Arg | Nil | Push Expr Expr | Top String Expr Expr | Pop String Expr Expr | Let [(String,Expr)] Expr
+data Expr = Arg | Nil | Push Expr Expr | Top Expr Expr | Pop Expr Expr | Let [(String,Expr)] Expr | Apply String String Expr Expr
 
 parse :: [String] -> Expr
 parse tokens = fst (parseExpr tokens)
@@ -36,15 +36,20 @@ parseSingle [] = error "Parse error: unexpected EOF"
 parseSingle ("@":tokens) = (Arg,tokens)
 parseSingle ("0":tokens) = (Nil,tokens)
 parseSingle ("[":tokens) = parseLet [] tokens
-parseSingle (ident:tokens) | isIdent ident =
-    case rest of
-      ("+":_) -> (Top ident arg nil,remaining)
-      ("-":_) -> (Pop ident arg nil,remaining)
-      _ -> error "Parse error: expected '+' or '-'"
-  where
-    (arg,rest) = parseExpr tokens
-    (nil,remaining) = parseExpr (tail rest)
+parseSingle (ident1:"*":ident2:tokens) | isIdent ident1 && isIdent ident2 = parseApply ident1 ident2 tokens
 parseSingle (token:_) = error ("Parse error: unexpected token: "++token)
+
+parseApply :: String -> String -> [String] -> (Expr,[String])
+parseApply ident1 ident2 tokens =
+    case parseExpr tokens of
+        (arg,(",":rest)) ->
+            case parseExpr rest of
+                (nil,(",":remaining)) -> (Apply ident1 ident2 arg nil,remaining)
+                (nil,remaining@(".":_)) -> (Apply ident1 ident2 arg nil,remaining)
+                (nil,remaining@("]":_)) -> (Apply ident1 ident2 arg nil,remaining)
+                (nil,[]) -> (Apply ident1 ident2 arg nil,[])
+                (_,token:_) -> error ("Parse error: unexpected token: "++token)
+        (_,token:_) -> error ("Parse error: unexpected token: "++token)
 
 parseLet :: [(String,Expr)] -> [String] -> (Expr,[String])
 parseLet defs [] = error "Parse error: unexpected EOF"
@@ -62,27 +67,22 @@ parseLet defs (ident:"=":tokens) | isIdent ident =
 parseLet defs (token:_) = error ("Parse error: unexpected token: "++token)
 
 parseBinary :: Expr -> [String] -> (Expr,[String])
-parseBinary lhs ("*":tokens) = case rest of
-    [] -> (Push lhs rhs,rest)
-    (",":remaining) -> parseBinary (Push lhs rhs) remaining
-    remaining@(".":_) -> (Push lhs rhs,remaining)
-    remaining@("]":_) -> (Push lhs rhs,remaining)
-    remaining@("+":_) -> (Push lhs rhs,remaining)
-    remaining@("-":_) -> (Push lhs rhs,remaining)
-    (token:_) -> error ("Parse error: unexpected token: "++token)
-  where (rhs,rest) = parseExpr tokens
+parseBinary lhs ("*":tokens) = (Push lhs rhs,rest) where (rhs,rest) = parseExpr tokens
+parseBinary lhs ("+":tokens) = (Top lhs rhs,rest) where (rhs,rest) = parseExpr tokens
+parseBinary lhs ("-":tokens) = (Pop lhs rhs,rest) where (rhs,rest) = parseExpr tokens
 parseBinary expr tokens = (expr,tokens)
 
-data RExpr = RArg | RNil | RPush RExpr RExpr | RTop RExpr RExpr RExpr | RPop RExpr RExpr RExpr
+data RExpr = RArg | RNil | RPush RExpr RExpr | RTop RExpr RExpr | RPop RExpr RExpr | RApply RExpr RExpr RExpr RExpr
 
 resolve :: [[(String,RExpr)]] -> Expr -> RExpr
 resolve scopes expr = case expr of
     Arg -> RArg
     Nil -> RNil
     (Push lhs rhs) -> RPush (resolve scopes lhs) (resolve scopes rhs)
-    (Top f arg nil) -> RTop (lookupDef scopes f) (resolve scopes arg) (resolve scopes nil)
-    (Pop f arg nil) -> RPop (lookupDef scopes f) (resolve scopes arg) (resolve scopes nil)
+    (Top arg nil) -> RTop (resolve scopes arg) (resolve scopes nil)
+    (Pop arg nil) -> RPop (resolve scopes arg) (resolve scopes nil)
     (Let defs body) -> let scope = map (fmap (resolve (scope:scopes))) defs in resolve (scope:scopes) body
+    (Apply f g arg nil) -> RApply (lookupDef scopes f) (lookupDef scopes g) (resolve scopes arg) (resolve scopes nil)
   where
     lookupDef [] f = error ("Resolve error: undefined symbol: "++f)
     lookupDef (scope:outerScopes) f = maybe (lookupDef outerScopes f) id (lookup f scope)
@@ -92,20 +92,25 @@ data Val = Val [Val]
 push :: Val -> Val -> Val
 push val (Val vals) = Val (val:vals)
 
-top :: (Val -> Val) -> Val -> Val -> Val
-top f (Val []) val = val
-top f (Val (val:_)) _ = f val
+top :: Val -> Val -> Val
+top (Val []) val = val
+top (Val (val:_)) _ = val
 
-pop :: (Val -> Val) -> Val -> Val -> Val
-pop f (Val []) val = val
-pop f (Val (_:vals)) _ = f (Val vals)
+pop :: Val -> Val -> Val
+pop (Val []) val = val
+pop (Val (_:vals)) _ = Val vals
+
+apply :: (Val -> Val) -> (Val -> Val) -> Val -> Val -> Val
+apply f g (Val []) val = val
+apply f g (Val (val:vals)) _ = push (f val) (g (Val vals))
 
 eval :: RExpr -> Val -> Val
 eval RArg arg = arg
 eval RNil arg = Val []
 eval (RPush lhs rhs) arg = push (eval lhs arg) (eval rhs arg)
-eval (RTop f expr nil) arg = top (eval f) (eval expr arg) (eval nil arg)
-eval (RPop f expr nil) arg = pop (eval f) (eval expr arg) (eval nil arg)
+eval (RTop expr nil) arg = top (eval expr arg) (eval nil arg)
+eval (RPop expr nil) arg = pop (eval expr arg) (eval nil arg)
+eval (RApply f g expr nil) arg = apply (eval f) (eval g) (eval expr arg) (eval nil arg)
 
 serialize :: Val -> [Bool]
 serialize (Val vals) = map (\ (Val v) -> not (null v)) vals
