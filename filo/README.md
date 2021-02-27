@@ -1,26 +1,31 @@
-FILO is a stack-based programming language.  A FILO program consists of a
-set of function definitions.
+FILO is a stack-based programming language.  A FILO program consists of an
+expression.
 
 Syntax
 ======
 ```ebnf
-program = definitions ;
+program = expression ;
+
+expression = "@"
+           | "0"
+           | expression, "*", expression, ","
+           | identifier, expression, "+", expression
+           | identifier, expression, "-", expression
+	   | "[", definitions, "]", expression ;
 
 definitions = definition, { definitions } ;
 
 definition = identifier, "=", expression, "." ;
-
-expression = "@" | "0" | expression, "*", expression |
-             expression, "+", expression | expression, "-", expression |
-             identifier, expression, ",";
 ```
 Identifiers are consecutive sequences of non-whitespace characters, excluding
-`@`, `0`, `*`, `+`, `-`, `,`, `=`, and `.`.  Whitespace separates identifiers
+`@`, `0`, `*`, `+`, `-`, `=`, `.`, and `,`.  Whitespace separates identifiers
 and is otherwise ignored.
 
-`*`, `+`, and `-` are right-associative and have equal precedence.
+`*` is right-associative.
 
-A `,` immediately preceding a `.` may be omitted.
+A `.` immediately preceding a `]` may be omitted.
+
+A `,` immediately preceding a `]`, `.`, `+`, `-`, or EOF may be omitted.
 
 Comments begin with `==` and extend to the end of the line.
 
@@ -43,31 +48,33 @@ An empty stack.
 Push
 ----
 ```
-x * y
+x * y,
 ```
 A new stack with `x` pushed onto `y`.
 
 Pop
 ---
 ```
-x - y
+f x - y
 ```
-The stack consisting of `x` with its top element removed, unless `x`
-is empty, then `y`.
+The result of applying function `f` to `x` with its top element removed
+unless `x` is empty, then `y`.
 
 Top
 ---
 ```
-x + y
+f x + y
 ```
-The top element of `x`, unless `x` is empty, then `y`.
+The result of applying function `f` to the top element of `x`
+unless `x` is empty, then `y`.
 
-Apply
------
+Let
+---
 ```
-f x
+[f=x.g=y]z
 ```
-The result of applying function `f` to `x`.
+Defines `f` and `g` when evaluating `z`.  This is a recursive let,
+so the definitions of `f` and `g apply to `x` and `y`.
 
 Input/Output encoding
 =====================
@@ -87,17 +94,16 @@ below.
 cat
 ---
 ```
-cat=@.
+@
 ```
 
 Hello world
 -----------
 ```
-hello=h0*0.
-h=0*0*0*@*0*0*@*0 * @*0*@*0*0*@*@*0 * 0*0*@*@*0*@*@*0 * 0*0*@*@*0*@*@*0
- *@*@*@*@*0*@*@*0 * 0*0*0*0*0*@*0*0 * @*@*@*0*@*@*@*0 * @*@*@*@*0*@*@*0
- *0*@*0*0*@*@*@*0 * 0*0*@*@*0*@*@*0 * 0*0*@*0*0*@*@*0 * @*0*0*0*0*@*0*0
- *0*@*0*@*0*0*0*0.
+[h=0*0*0*@*0*0*@*0 * @*0*@*0*0*@*@*0 * 0*0*@*@*0*@*@*0 * 0*0*@*@*0*@*@*0
+  *@*@*@*@*0*@*@*0 * 0*0*0*0*0*@*0*0 * @*@*@*0*@*@*@*0 * @*@*@*@*0*@*@*0
+  *0*@*0*0*@*@*@*0 * 0*0*@*@*0*@*@*0 * 0*0*@*0*0*@*@*0 * @*0*0*0*0*@*0*0
+  *0*@*0*@*0*0*0*0] h0*0*0-0
 ```
 
 Implementation

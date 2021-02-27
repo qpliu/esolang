@@ -2,7 +2,6 @@
 -- Usage: ./filo SRC-FILE
 
 import Data.Char(chr,isSpace,ord)
-import Data.Map(Map,alter,empty,(!))
 import System.Environment(getArgs)
 import System.IO(char8,hSetEncoding,stdin,stdout)
 
@@ -21,85 +20,92 @@ tokenize (c:rest)
 
 isIdent :: String -> Bool
 isIdent "" = error "Unexpected tokenize error"
-isIdent [c] = not (c `elem` "@0*+-,=.")
+isIdent [c] = not (c `elem` "@0*+-=,.[]")
 isIdent _ = True
 
-data Def = Def String Expr
+data Expr = Arg | Nil | Push Expr Expr | Top String Expr Expr | Pop String Expr Expr | Let [(String,Expr)] Expr
 
-data Expr = Arg | Nil | Push Expr Expr | Top Expr Expr | Pop Expr Expr
-          | Apply String Expr | ResolvedApply Expr Expr
-
-parse :: [String] -> [Def]
-parse [] = []
-parse tokens = def : parse rest where (def,rest) = parseDef tokens
-
-parseDef :: [String] -> (Def,[String])
-parseDef (ident:"=":tokens)
-  | not (isIdent ident) = error ("Parse error: expected ident, got "++ident)
-  | otherwise =
-      case rest of
-          (".":_) -> (Def ident expr,tail rest)
-          _ -> error "Parse error: expected '.'"
-  where (expr,rest) = parseExpr tokens
-parseDef _ = error "Parse error: expected definition"
+parse :: [String] -> Expr
+parse tokens = fst (parseExpr tokens)
 
 parseExpr :: [String] -> (Expr,[String])
 parseExpr tokens = parseBinary expr rest where (expr,rest) = parseSingle tokens
 
 parseSingle :: [String] -> (Expr,[String])
+parseSingle [] = error "Parse error: unexpected EOF"
 parseSingle ("@":tokens) = (Arg,tokens)
 parseSingle ("0":tokens) = (Nil,tokens)
+parseSingle ("[":tokens) = parseLet [] tokens
 parseSingle (ident:tokens) | isIdent ident =
     case rest of
-        (",":_) -> (Apply ident expr,tail rest)
-        (".":_) -> (Apply ident expr,rest)
-        _ -> error "Parse error: expected ',' or '.'"
-  where (expr,rest) = parseExpr tokens
-parseSingle _ = error "Parse error: expected '@', '0', or ident"
+      ("+":_) -> (Top ident arg nil,remaining)
+      ("-":_) -> (Pop ident arg nil,remaining)
+      _ -> error "Parse error: expected '+' or '-'"
+  where
+    (arg,rest) = parseExpr tokens
+    (nil,remaining) = parseExpr (tail rest)
+parseSingle (token:_) = error ("Parse error: unexpected token: "++token)
+
+parseLet :: [(String,Expr)] -> [String] -> (Expr,[String])
+parseLet defs [] = error "Parse error: unexpected EOF"
+parseLet defs ("]":tokens) = (Let defs body,rest)
+  where (body,rest) = parseExpr tokens
+parseLet defs (ident:"=":tokens) | isIdent ident =
+    case rest of
+      ("]":_) -> (Let newDefs letBody,remaining)
+      (".":_) -> parseLet newDefs (tail rest)
+      _ -> error "Parse error: expected ']' or '.'"
+  where
+    (defBody,rest) = parseExpr tokens
+    (letBody,remaining) = parseExpr (tail rest)
+    newDefs = maybe ((ident,defBody):defs) (const (error ("Parse error: multiple definitions: "++ident))) (lookup ident defs)
+parseLet defs (token:_) = error ("Parse error: unexpected token: "++token)
 
 parseBinary :: Expr -> [String] -> (Expr,[String])
-parseBinary lhs ("*":tokens) = (Push lhs rhs,rest) where (rhs,rest) = parseExpr tokens
-parseBinary lhs ("+":tokens) = (Top lhs rhs,rest) where (rhs,rest) = parseExpr tokens
-parseBinary lhs ("-":tokens) = (Pop lhs rhs,rest) where (rhs,rest) = parseExpr tokens
+parseBinary lhs ("*":tokens) = case rest of
+    [] -> (Push lhs rhs,rest)
+    (",":remaining) -> parseBinary (Push lhs rhs) remaining
+    remaining@(".":_) -> (Push lhs rhs,remaining)
+    remaining@("]":_) -> (Push lhs rhs,remaining)
+    remaining@("+":_) -> (Push lhs rhs,remaining)
+    remaining@("-":_) -> (Push lhs rhs,remaining)
+    (token:_) -> error ("Parse error: unexpected token: "++token)
+  where (rhs,rest) = parseExpr tokens
 parseBinary expr tokens = (expr,tokens)
 
-resolve :: [Def] -> Map String Expr
-resolve defs = resolved
+data RExpr = RArg | RNil | RPush RExpr RExpr | RTop RExpr RExpr RExpr | RPop RExpr RExpr RExpr
+
+resolve :: [[(String,RExpr)]] -> Expr -> RExpr
+resolve scopes expr = case expr of
+    Arg -> RArg
+    Nil -> RNil
+    (Push lhs rhs) -> RPush (resolve scopes lhs) (resolve scopes rhs)
+    (Top f arg nil) -> RTop (lookupDef scopes f) (resolve scopes arg) (resolve scopes nil)
+    (Pop f arg nil) -> RPop (lookupDef scopes f) (resolve scopes arg) (resolve scopes nil)
+    (Let defs body) -> let scope = map (fmap (resolve (scope:scopes))) defs in resolve (scope:scopes) body
   where
-    resolved = foldl resolve1 empty defs
-    resolve1 m (Def ident expr) = alter resolveDef ident m
-      where
-        resolveDef Nothing = Just (resolveExpr expr)
-        resolveDef _ = error ("Resolve error: multiple definitions: "++ident)
-    resolveExpr Arg = Arg
-    resolveExpr Nil = Nil
-    resolveExpr (Push lhs rhs) = Push (resolveExpr lhs) (resolveExpr rhs)
-    resolveExpr (Top lhs rhs) = Top (resolveExpr lhs) (resolveExpr rhs)
-    resolveExpr (Pop lhs rhs) = Pop (resolveExpr lhs) (resolveExpr rhs)
-    resolveExpr (Apply name body) = ResolvedApply (resolved!name) (resolveExpr body)
-    resolveExpr (ResolvedApply _ _) = error "Unexpected resolve error"
+    lookupDef [] f = error ("Resolve error: undefined symbol: "++f)
+    lookupDef (scope:outerScopes) f = maybe (lookupDef outerScopes f) id (lookup f scope)
 
 data Val = Val [Val]
 
 push :: Val -> Val -> Val
 push val (Val vals) = Val (val:vals)
 
-top :: Val -> Val -> Val
-top (Val []) val = val
-top (Val (val:_)) _ = val
+top :: (Val -> Val) -> Val -> Val -> Val
+top f (Val []) val = val
+top f (Val (val:_)) _ = f val
 
-pop :: Val -> Val -> Val
-pop (Val []) val = val
-pop (Val (_:vals)) _ = Val vals
+pop :: (Val -> Val) -> Val -> Val -> Val
+pop f (Val []) val = val
+pop f (Val (_:vals)) _ = f (Val vals)
 
-eval :: Expr -> Val -> Val
-eval Arg arg = arg
-eval Nil arg = Val []
-eval (Push lhs rhs) arg = push (eval lhs arg) (eval rhs arg)
-eval (Top lhs rhs) arg = top (eval lhs arg) (eval rhs arg)
-eval (Pop lhs rhs) arg = pop (eval lhs arg) (eval rhs arg)
-eval (Apply _ _) arg = error "Unexpected eval error"
-eval (ResolvedApply expr exprArg) arg = eval expr (eval exprArg arg)
+eval :: RExpr -> Val -> Val
+eval RArg arg = arg
+eval RNil arg = Val []
+eval (RPush lhs rhs) arg = push (eval lhs arg) (eval rhs arg)
+eval (RTop f expr nil) arg = top (eval f) (eval expr arg) (eval nil arg)
+eval (RPop f expr nil) arg = pop (eval f) (eval expr arg) (eval nil arg)
 
 serialize :: Val -> [Bool]
 serialize (Val vals) = map (\ (Val v) -> not (null v)) vals
@@ -123,9 +129,7 @@ toBits = concatMap (byteBits 8 . ord)
 main :: IO ()
 main = do
   [srcFile] <- getArgs
-  src <- readFile srcFile
-  let mainFunc = takeWhile (/= '.') (reverse (takeWhile (/= '/') (reverse srcFile)))
-      funcs = resolve (parse (tokenize src))
+  expr <- fmap (resolve [] . parse . tokenize) (readFile srcFile)
   hSetEncoding stdin char8
   hSetEncoding stdout char8
-  interact (fromBits . serialize . eval (funcs!mainFunc) . deserialize . toBits)
+  interact (fromBits . serialize . eval expr . deserialize . toBits)
