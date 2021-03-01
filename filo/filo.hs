@@ -47,15 +47,13 @@ parseApply ident1 ident2 tokens =
                 (nil,(",":remaining)) -> (Apply ident1 ident2 arg nil,remaining)
                 (nil,remaining) -> (Apply ident1 ident2 arg nil,remaining)
         (_,token:_) -> error ("Parse error: unexpected token: "++token)
+        (_,[]) -> error "Parse error: unexpected EOF"
 
 parseLet :: [(String,Expr)] -> [String] -> (Expr,[String])
 parseLet defs [] = error "Parse error: unexpected EOF"
 parseLet defs ("]":tokens) = (Let defs body,rest)
   where (body,rest) = parseExpr tokens
-parseLet defs (ident:"=":tokens) | isIdent ident =
-    case rest of
-      ("]":_) -> (Let newDefs letBody,remaining)
-      _ -> parseLet newDefs rest
+parseLet defs (ident:"=":tokens) | isIdent ident = parseLet newDefs rest
   where
     (defBody,rest) = parseExpr tokens
     (letBody,remaining) = parseExpr (tail rest)
