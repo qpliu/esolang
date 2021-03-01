@@ -1,0 +1,43 @@
+[
+  z = 0
+  i = @
+  is_nil? = z*z @, 0*0*0, -0
+
+  is_zero_bit? = z*is_nil? 0*@+0, 0, -0
+  is_one_bit? = z*z @+0, 0
+
+  == ascii 0 = 00001100
+  is_ascii_zero? =
+    i*i
+      z*z z*is_one_bit?  0* @, 0,-0,
+      z*z z*is_one_bit?  0* @-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+      z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_zero_bit? 0* i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      0*@,,,,,,,,,
+      0,
+    -0
+  ascii_zero = [zero = 0*0*0*0*@*@*0*0] z*zero 0*0*0,0,-0
+
+  == ascii 1 = 10001100
+  is_ascii_one? =
+    i*i
+      z*z z*is_zero_bit? 0* @, 0,-0,
+      z*z z*is_one_bit?  0* @-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+      z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_zero_bit? 0* i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      0*@,,,,,,,,,
+      0,
+    -0
+  ascii_ones = [ones = @*0*0*0*@*@*0*0*z*ones 0*@,0,-0] z*ones 0*0*0,0,-0
+]
+z*ascii_zero z*is_ascii_zero? 0*@,0,-0,
+z*ascii_ones z*is_ascii_one?  0*@,0,-0,
+0,,-0
