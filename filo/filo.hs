@@ -20,7 +20,7 @@ tokenize (c:rest)
 
 isIdent :: String -> Bool
 isIdent "" = error "Unexpected tokenize error"
-isIdent [c] = not (c `elem` "@0*+-=,.[]")
+isIdent [c] = not (c `elem` "@0*+-=,[]")
 isIdent _ = True
 
 data Expr = Arg | Nil | Push Expr Expr | Top Expr Expr | Pop Expr Expr | Let [(String,Expr)] Expr | Apply String String Expr Expr
@@ -45,10 +45,7 @@ parseApply ident1 ident2 tokens =
         (arg,(",":rest)) ->
             case parseExpr rest of
                 (nil,(",":remaining)) -> (Apply ident1 ident2 arg nil,remaining)
-                (nil,remaining@(".":_)) -> (Apply ident1 ident2 arg nil,remaining)
-                (nil,remaining@("]":_)) -> (Apply ident1 ident2 arg nil,remaining)
-                (nil,[]) -> (Apply ident1 ident2 arg nil,[])
-                (_,token:_) -> error ("Parse error: unexpected token: "++token)
+                (nil,remaining) -> (Apply ident1 ident2 arg nil,remaining)
         (_,token:_) -> error ("Parse error: unexpected token: "++token)
 
 parseLet :: [(String,Expr)] -> [String] -> (Expr,[String])
@@ -58,8 +55,7 @@ parseLet defs ("]":tokens) = (Let defs body,rest)
 parseLet defs (ident:"=":tokens) | isIdent ident =
     case rest of
       ("]":_) -> (Let newDefs letBody,remaining)
-      (".":_) -> parseLet newDefs (tail rest)
-      _ -> error "Parse error: expected ']' or '.'"
+      _ -> parseLet newDefs rest
   where
     (defBody,rest) = parseExpr tokens
     (letBody,remaining) = parseExpr (tail rest)

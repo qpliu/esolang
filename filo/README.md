@@ -4,7 +4,7 @@ expression.
 Syntax
 ======
 ```ebnf
-program = expression ;
+program = expression;
 
 expression = "@"
            | "0"
@@ -12,21 +12,19 @@ expression = "@"
            | expression, "+", expression
            | expression, "-", expression
            | identifier, "*", identifier, expression, ",", expression, ","
-	   | "[", definitions, "]", expression ;
+	   | "[", definitions, "]", expression;
 
-definitions = definition, { definitions } ;
+definitions = definition, { definitions };
 
-definition = identifier, "=", expression, "." ;
+definition = identifier, "=", expression;
 ```
 Identifiers are consecutive sequences of non-whitespace characters, excluding
-`@`, `0`, `*`, `+`, `-`, `=`, `.`, and `,`.  Whitespace separates identifiers
+`@`, `0`, `*`, `+`, `-`, `=`, and `,`.  Whitespace separates identifiers
 and is otherwise ignored.
 
 `*`, `+`, and `-` are right-associative with equal precedence.
 
-A `.` immediately preceding `]` may be omitted.
-
-A `,` immediately preceding `]`, `.`, or EOF may be omitted.
+A `,` at the end of a definition or at the end of a program may be omitted.
 
 Comments begin with `==` and extend to the end of the line.
 
@@ -79,7 +77,7 @@ onto the result of `g` applied to `x` with its top element removed unless
 Let
 ---
 ```
-[f=x.g=y]z
+[f=x g=y]z
 ```
 Defines `f` and `g` when evaluating `z`.  This is a recursive let,
 so the definitions of `f` and `g` apply to `x` and `y`.
