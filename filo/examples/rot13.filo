@@ -1,0 +1,333 @@
+[
+  z = 0
+  i = @
+  is_nil? = z*z @, 0*0*0, -0
+
+  is_zero_bit? = z*is_nil? 0*@+0, 0, -0
+  is_one_bit? = z*z @+0, 0
+
+  == all alphabetical characters in ascii are in the range 64-127
+  is_64:127? =
+    i*i
+      z*z z*is_zero_bit? 0* i*i i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      z*z z*is_one_bit?  0* i*i i*i i*i i*i i*i i*i @-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0, 0,-0,
+      0*0*@,,,
+      0,
+    -0
+
+  cat8 =
+    i*i@+0,0, *
+    i*i i*i@-0,0,+0,0, *
+    i*i i*i i*i@-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i@-0,0,-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,+0,0, *
+    z*drop8 0*@,0,-0
+
+  drop8 = z*rot13 0*i*i i*i i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,,0,-0
+
+  is_ooooo = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ioooo = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oiooo = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iiooo = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ooioo = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ioioo = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oiioo = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iiioo = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oooio = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iooio = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oioio = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iioio = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ooiio = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ioiio = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oiiio = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iiiio = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ooooi = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ioooi = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oiooi = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iiooi = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ooioi = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ioioi = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oiioi = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iiioi = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oooii = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iooii = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oioii = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iioii = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_one_bit?  0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ooiii = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_ioiii = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_one_bit?  0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_oiiii = i*i
+    z*z z*is_one_bit?  0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+  is_iiiii = i*i
+    z*z z*is_zero_bit? 0* @, 0,-0,
+    z*z z*is_zero_bit? 0* @-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i @-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i @-0,0,-0,0,-0, 0,-0,
+    z*z z*is_zero_bit? 0* i*i i*i i*i @-0,0,-0,0,-0,0,-0, 0,-0,
+    0*0*@,,,,,,0,-0
+
+  cat_hi3 =
+    i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,+0,0, *
+    i*i i*i i*i i*i i*i i*i i*i i*i@-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,-0,0,+0,0, *
+    z*drop8 0*@,0,-0
+
+  out_ioooo = [out=@*0*0*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oiooo = [out=0*@*0*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iiooo = [out=@*@*0*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ooioo = [out=0*0*@*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ioioo = [out=@*0*@*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oiioo = [out=0*@*@*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iiioo = [out=@*@*@*0*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oooio = [out=0*0*0*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iooio = [out=@*0*0*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oioio = [out=0*@*0*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iioio = [out=@*@*0*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ooiio = [out=0*0*@*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ioiio = [out=@*0*@*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oiiio = [out=0*@*@*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iiiio = [out=@*@*@*@*0* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ooooi = [out=0*0*0*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ioooi = [out=@*0*0*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oiooi = [out=0*@*0*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iiooi = [out=@*@*0*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ooioi = [out=0*0*@*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_ioioi = [out=@*0*@*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oiioi = [out=0*@*@*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iiioi = [out=@*@*@*0*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oooii = [out=0*0*0*@*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_iooii = [out=@*0*0*@*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+  out_oioii = [out=0*@*0*@*@* z*cat_hi3 @,0,-0]z*out 0*0*@,0,-0
+
+  == the non-alphabetical characters in the range 64-127 are
+  ==  00000_10 (0x40,0x60)
+  ==  11011_10 (0x5b,0x7b)
+  ==  00111_10 (0x5c,0x7c)
+  ==  10111_10 (0x5d,0x7d)
+  ==  01111_10 (0x5e,0x7e)
+  ==  11111_10 (0x5f,0x7f)
+  rot13c =
+    z*cat8 z*is_ooooo 0*@,0,-0,
+    z*cat8 z*is_iioii 0*@,0,-0,
+    z*cat8 z*is_ooiii 0*@,0,-0,
+    z*cat8 z*is_ioiii 0*@,0,-0,
+    z*cat8 z*is_oiiii 0*@,0,-0,
+    z*cat8 z*is_iiiii 0*@,0,-0,
+    z*out_oiiio z*is_ioooo 0*@,0,-0,
+    z*out_iiiio z*is_oiooo 0*@,0,-0,
+    z*out_ooooi z*is_iiooo 0*@,0,-0,
+    z*out_ioooi z*is_ooioo 0*@,0,-0,
+    z*out_oiooi z*is_ioioo 0*@,0,-0,
+    z*out_iiooi z*is_oiioo 0*@,0,-0,
+    z*out_ooioi z*is_iiioo 0*@,0,-0,
+    z*out_ioioi z*is_oooio 0*@,0,-0,
+    z*out_oiioi z*is_iooio 0*@,0,-0,
+    z*out_iiioi z*is_oioio 0*@,0,-0,
+    z*out_oooii z*is_iioio 0*@,0,-0,
+    z*out_iooii z*is_ooiio 0*@,0,-0,
+    z*out_oioii z*is_ioiio 0*@,0,-0,
+    z*out_ioooo z*is_oiiio 0*@,0,-0,
+    z*out_oiooo z*is_iiiio 0*@,0,-0,
+    z*out_iiooo z*is_ooooi 0*@,0,-0,
+    z*out_ooioo z*is_ioooi 0*@,0,-0,
+    z*out_ioioo z*is_oiooi 0*@,0,-0,
+    z*out_oiioo z*is_iiooi 0*@,0,-0,
+    z*out_iiioo z*is_ooioi 0*@,0,-0,
+    z*out_oooio z*is_ioioi 0*@,0,-0,
+    z*out_iooio z*is_oiioi 0*@,0,-0,
+    z*out_oioio z*is_iiioi 0*@,0,-0,
+    z*out_iioio z*is_oooii 0*@,0,-0,
+    z*out_ooiio z*is_iooii 0*@,0,-0,
+    z*out_ioiio z*is_oioii 0*@,0,-0,
+    0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,-0
+
+  rot13 = i*i z*z @,0*0*0,-0,z*rot13c z*is_64:127? 0*@,0,-0, z*cat8 0*@,0,,,-0
+]
+z*rot13 0*@,0,-0
