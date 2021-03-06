@@ -1,0 +1,177 @@
+== brainfuck interpreter
+
+[
+z=0
+i=@
+
+== A trick to specify associativity is to use i*i0,expr,.
+
+== parse
+== - argument is bits of input
+== - result is (0*0 representing tape)*(code*0)*remaining bits of input
+==
+== ! separates code from input
+==
+== Code is encoded as:
+== [ 0
+== ] 0*0
+== + 0*0*0
+== - 0*0*0*0
+== < 0*0*0*0*0
+== > 0*0*0*0*0*0
+== . 0*0*0*0*0*0*0
+== , 0*0*0*0*0*0*0*0
+parse = [
+  initial_tape = 0*0
+
+  == parse_byte
+  == - argument is (reversed parsed code)*remaining input
+  == - result is (reversed parsed code)*remaining input
+  parse_byte = [
+    O? = z*z@+0,0*0*0,-0
+    1? = z*z@+0,0,
+    5b? = i*i0,z*O? @,0,-0,-
+          i*i0,z*O? @-0,0,-0,-
+          i*i0,z*1? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    5d? = i*i0,z*O? @,0,-0,-
+          i*i0,z*1? @-0,0,-0,-
+          i*i0,z*O? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    2b? = i*i0,z*O? @,0,-0,-
+          i*i0,z*O? @-0,0,-0,-
+          i*i0,z*1? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    2d? = i*i0,z*O? @,0,-0,-
+          i*i0,z*1? @-0,0,-0,-
+          i*i0,z*O? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    3c? = i*i0,z*1? @,0,-0,-
+          i*i0,z*1? @-0,0,-0,-
+          i*i0,z*O? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    3e? = i*i0,z*1? @,0,-0,-
+          i*i0,z*O? @-0,0,-0,-
+          i*i0,z*O? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    2e? = i*i0,z*1? @,0,-0,-
+          i*i0,z*O? @-0,0,-0,-
+          i*i0,z*O? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    2c? = i*i0,z*1? @,0,-0,-
+          i*i0,z*1? @-0,0,-0,-
+          i*i0,z*O? i*i0,@-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    21? = i*i0,z*O? @,0,-0,-
+          i*i0,z*1? @-0,0,-0,-
+          i*i0,z*1? i*i0,@-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,@-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,@-0,-0,-0,-0,0,-0,-
+          i*i0,z*O? i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,0,-0,-
+          i*i0,z*1? i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,0,-0,-
+          0*0
+    pop_byte = i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,-0
+
+    push_O = 0*@
+    push_OO = i*i0,0*0,*@
+    push_OOO = i*i0,0*0*0,*@
+    push_OOOO = i*i0,0*0*0*0,*@
+    push_OOOOO = i*i0,0*0*0*0*0,*@
+    push_OOOOOO = i*i0,0*0*0*0*0*0,*@
+    push_OOOOOOO = i*i0,0*0*0*0*0*0*0,*@
+    push_OOOOOOOO = i*i0,0*0*0*0*0*0*0*0,*@
+  ]
+  == check for EOF: if tail arg is empty, return arg, else...
+    i*i0,z*z@-0,0*0*@,-0,-
+  == check for !:
+  ==   if tail arg starts with 0x21, return head arg*pop_byte (tail arg), else...
+    i*i0,i*i0,i*i z*21?0*@,0,-0,0*0*0,-0,-0*i*pop_byte @,0,,-
+  == check for [:
+  ==   if tail arg starts with 0x5b, return parse_byte ((push_O (head arg))*pop_byte (tail arg)), else ...
+    i*i0,i*i0,i*i z*5b?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_O*pop_byte @,0,,0,-0,-
+  == check for ]:
+    i*i0,i*i0,i*i z*5d?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OO*pop_byte @,0,,0,-0,-
+  == check for +:
+    i*i0,i*i0,i*i z*2b?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OOO*pop_byte @,0,,0,-0,-
+  == check for -:
+    i*i0,i*i0,i*i z*2d?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OOOO*pop_byte @,0,,0,-0,-
+  == check for <:
+    i*i0,i*i0,i*i z*3c?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OOOOO*pop_byte @,0,,0,-0,-
+  == check for >:
+    i*i0,i*i0,i*i z*3e?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OOOOOO*pop_byte @,0,,0,-0,-
+  == check for .:
+    i*i0,i*i0,i*i z*2e?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OOOOOOO*pop_byte @,0,,0,-0,-
+  == check for ,:
+    i*i0,i*i0,i*i z*2c?0*@,0,-0,0*0*0,-0,-0*z*parse_byte 0*push_OOOOOOOO*pop_byte @,0,,0,-0,-
+  == return parse_byte (head arg*pop_byte (tail arg))
+    z*parse_byte 0*i*pop_byte @,0,,0,-0
+
+  rewind_code = [
+    == rewind:
+    ==   if tail arg is nil
+    ==     then arg
+    ==     else rewind ((head (tail arg)*head arg)*tail (tail arg))
+    rewind =
+      i*i0,z*z@-0,0*0*@,-0,-
+      z*rewind 0*i*i0,i*i0,i*i0,@-0,+0,*@+0,*i*i0,@-0,-0,0,-0
+  ]
+  i*i0,z*rewind 0*0*@+0,0,-0,*@-0
+]
+initial_tape*rewind_code z*parse_byte 0*0*@,0,,0,
+
+== interpret
+== - argument is state: (tape)*(code)*remaining input
+== - result is output
+==
+== tape is ((tape at and following head)*reversed tape preceding head)
+== code is ((instructions at and following instruction pointer)*
+==          reversed instructions preceding instruction pointer)
+==
+== On reading EOF, , does not change the tape.
+interpret = [
+]
+@ == TODO
+
+]
+z*interpret z*parse 0*@,0,,0,-0
