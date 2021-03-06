@@ -170,8 +170,42 @@ initial_tape*rewind_code z*parse_byte 0*0*@,0,,0,
 ==
 == On reading EOF, , does not change the tape.
 interpret = [
-]
-@ == TODO
+  == advance
+  == - argument is (current item*upcoming items)*past items
+  == - result is (upcoming items)*current item*past items
+  advance = i*i0,i*i0,@+0,-0,*i*i0,i*i0,@+0,+0,*@-0
 
+  == rewind
+  == - argument is (current and upcoming items)*latest item*past items
+  == - result is (latest item*current and upcoming items)*past items
+  rewind = i*i0,i*i0,i*i0,@-0,+0,*@+0,*i*i0,@-0,-0
+
+  exec_O = @ == TODO
+  exec_OO = 0 == TODO
+  exec_OOO = 0 == TODO
+  exec_OOOO = 0 == TODO
+  exec_OOOOO = 0 == TODO
+  exec_OOOOOO = 0 == TODO
+  exec_OOOOOOO = 0 == TODO
+  exec_OOOOOOOO = 0 == TODO
+]
+== check for end of code: if head (head (tail arg)) is nil, return nil, else...
+  i*i0,z*z i*i0,i*i0,i*i0,@-0,+0,+0,,0*0*0,-0,-
+== check for [ (0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,,0*0*z*exec_O 0*@,0,-0,-0,-
+== check for ] (0*0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,-0,0*0*z*exec_OO 0*@,0,-0,-0,-
+== check for + (0*0*0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,-0,-0,0*0*z*exec_OOO 0*@,0,-0,-0,-
+== check for - (0*0*0*0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,-0,-0,-0,0*0*z*exec_OOOO 0*@,0,-0,-0,-
+== check for < (0*0*0*0*0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,-0,-0,-0,-0,0*0*z*exec_OOOOO 0*@,0,-0,-0,-
+== check for > (0*0*0*0*0*0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,-0,-0,-0,-0,-0,0*0*z*exec_OOOOOO 0*@,0,-0,-0,-
+== check for . (0*0*0*0*0*0*0)
+  i*i0,z*z i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,+0,+0,+0,-0,-0,-0,-0,-0,-0,0*0*z*exec_OOOOOOO 0*@,0,-0,-0,-
+== must be , (0*0*0*0*0*0*0*0)
+  z*exec_OOOOOOOO 0*@,0,-0
 ]
 z*interpret z*parse 0*@,0,,0,-0
