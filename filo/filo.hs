@@ -23,7 +23,7 @@ isIdent "" = error "Unexpected tokenize error"
 isIdent [c] = not (c `elem` "@0*+-=,[]")
 isIdent _ = True
 
-data Expr = Arg | Nil | Push Expr Expr | Top Expr Expr | Pop Expr Expr | Let [(String,Expr)] Expr | Apply String String Expr Expr
+data Expr = Arg | Nil | Push Expr Expr | Top Expr Expr | Pop Expr Expr | Let [(String,Expr)] Expr | Apply String String Expr Expr | Apply1 String Expr
 
 parse :: [String] -> Expr
 parse tokens = fst (parseExpr tokens)
@@ -66,7 +66,19 @@ parseBinary lhs ("+":tokens) = (Top lhs rhs,rest) where (rhs,rest) = parseExpr t
 parseBinary lhs ("-":tokens) = (Pop lhs rhs,rest) where (rhs,rest) = parseExpr tokens
 parseBinary expr tokens = (expr,tokens)
 
-data RExpr = RArg | RNil | RPush RExpr RExpr | RTop RExpr RExpr | RPop RExpr RExpr | RApply RExpr RExpr RExpr RExpr
+optimize :: Expr -> Expr
+optimize (Apply _ _ Nil expr) = optimize expr
+optimize (Pop (Apply _ f (Push _ expr) _) _) = Apply1 f (optimize expr)
+optimize Arg = Arg
+optimize Nil = Nil
+optimize (Push lhs rhs) = Push (optimize lhs) (optimize rhs)
+optimize (Top lhs rhs) = Top (optimize lhs) (optimize rhs)
+optimize (Pop lhs rhs) = Pop (optimize lhs) (optimize rhs)
+optimize (Let bindings expr) = Let (map (fmap optimize) bindings) (optimize expr)
+optimize (Apply f g arg nil) = Apply f g (optimize arg) (optimize nil)
+optimize (Apply1 f expr) = error "Internal error: optimize Apply1 should be unreachable"
+
+data RExpr = RArg | RNil | RPush RExpr RExpr | RTop RExpr RExpr | RPop RExpr RExpr | RApply RExpr RExpr RExpr RExpr | RApply1 RExpr RExpr
 
 resolve :: [[(String,RExpr)]] -> Expr -> RExpr
 resolve scopes expr = case expr of
@@ -77,11 +89,12 @@ resolve scopes expr = case expr of
     (Pop arg nil) -> RPop (resolve scopes arg) (resolve scopes nil)
     (Let defs body) -> let scope = map (fmap (resolve (scope:scopes))) defs in resolve (scope:scopes) body
     (Apply f g arg nil) -> RApply (lookupDef scopes f) (lookupDef scopes g) (resolve scopes arg) (resolve scopes nil)
+    (Apply1 f arg) -> RApply1 (lookupDef scopes f) (resolve scopes arg)
   where
     lookupDef [] f = error ("Resolve error: undefined symbol: "++f)
     lookupDef (scope:outerScopes) f = maybe (lookupDef outerScopes f) id (lookup f scope)
 
-data Val = Val [Val]
+data Val = Val [Val] deriving Show
 
 push :: Val -> Val -> Val
 push val (Val vals) = Val (val:vals)
@@ -105,6 +118,7 @@ eval (RPush lhs rhs) arg = push (eval lhs arg) (eval rhs arg)
 eval (RTop expr nil) arg = top (eval expr arg) (eval nil arg)
 eval (RPop expr nil) arg = pop (eval expr arg) (eval nil arg)
 eval (RApply f g expr nil) arg = apply (eval f) (eval g) (eval expr arg) (eval nil arg)
+eval (RApply1 f expr) arg = eval f (eval expr arg)
 
 serialize :: Val -> [Bool]
 serialize (Val vals) = map (\ (Val v) -> not (null v)) vals
@@ -125,10 +139,14 @@ toBits = concatMap (byteBits 8 . ord)
     byteBits b n | b <= 0 = []
                  | otherwise = (mod n 2 == 1) : byteBits (b-1) (div n 2)
 
+run :: String -> Val -> IO Val
+run srcFile val =
+  fmap (flip eval val . resolve [] . optimize . parse . tokenize) (readFile srcFile)
+
 main :: IO ()
 main = do
   [srcFile] <- getArgs
-  expr <- fmap (resolve [] . parse . tokenize) (readFile srcFile)
+  expr <- fmap (resolve [] . optimize . parse . tokenize) (readFile srcFile)
   hSetEncoding stdin char8
   hSetEncoding stdout char8
   interact (fromBits . serialize . eval expr . deserialize . toBits)
