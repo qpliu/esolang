@@ -180,14 +180,108 @@ interpret = [
   == - result is (latest item*current and upcoming items)*past items
   rewind = i*i0,i*i0,i*i0,@-0,+0,*@+0,*i*i0,@-0,-0
 
+  == advance_ip
+  == - argument is (code)*remaining input, ie. tail state
+  == - result is (code)*remaining input
+  advance_ip = advance*i @,0,
+
+  == [
+  == - argument is state
+  == - result is output
   exec_O = @ == TODO
+
+  == ]
+  == - argument is state
+  == - result is output
   exec_OO = 0 == TODO
-  exec_OOO = 0 == TODO
-  exec_OOOO = 0 == TODO
-  exec_OOOOO = 0 == TODO
-  exec_OOOOOO = 0 == TODO
-  exec_OOOOOOO = 0 == TODO
-  exec_OOOOOOOO = 0 == TODO
+
+  == +
+  == - argument is state
+  == - result is output
+  exec_OOO = [
+    == - argument is tape
+    == - result is tape
+    inc_tape = inc_head*i @,inc_head*z 0*0,0,,
+
+    inc_head = inc_byte*i @,inc_byte*z 0*0,0,,
+
+    inc_byte = @ == TODO
+  ]
+  z*interpret 0*inc_tape*advance_ip @,0,,0,-0
+
+  == -
+  == - argument is state
+  == - result is output
+  exec_OOOO = [
+    == - argument is tape
+    == - result is tape
+    dec_tape = dec_head*i @,dec_head*z 0*0,0,,
+
+    dec_head = dec_byte*i @,dec_byte*z 0*0,0,,
+
+    dec_byte = @ == TODO
+  ]
+  z*interpret 0*dec_tape*advance_ip @,0,,0,-0
+
+  == <
+  == - argument is state
+  == - result is output
+  exec_OOOOO = z*interpret 0*rewind*advance_ip @,0,,0,-0
+
+  == >
+  == - argument is state
+  == - result is output
+  exec_OOOOOO = z*interpret 0*advance*advance_ip @,0,,0,-0
+
+  == .
+  == - argument is state
+  == - result is output
+  exec_OOOOOOO = [
+    == - argument is state
+    == - result is 8th bit of byte at tape head
+    bit8 = i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,-0,-0,+0,
+  ]
+    i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,+0,*
+    i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,+0,*
+    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,+0,*
+    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,+0,*
+    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,+0,*
+    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,+0,*
+    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,-0,+0,*
+    bit8*interpret @*i*advance_ip @,0,,0,
+
+  == ,
+  == - argument is state
+  == - result is output
+  exec_OOOOOOOO = [
+    == - argument is (code)*remaining input
+    == - result is (code)*remaining input
+    advance_ip_and_consume_byte = advance*consume_byte @,0,
+    == - argument is remaining input
+    == - result is remaining input
+    consume_byte = i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@-0,-0,-0,-0,-0,-0,-0,-0
+
+    == - argument is state
+    == - result is tape
+    copy_input_to_tape = [
+      == - argument is state
+      == - result is byte
+      read_byte = [
+        read_bits2 = i*read_bits3 @,0,
+        read_bits3 = i*read_bits4 @,0,
+        read_bits4 = i*read_bits5 @,0,
+        read_bits5 = i*read_bits6 @,0,
+        read_bits6 = i*read_bits7 @,0,
+        read_bits7 = i*read_bits8 @,0,
+        read_bits8 = i*z @,0,
+      ] i*read_bits2 i*i0,@-0,-0,0,
+    ]
+    read_byte*i @*i*i0,i*i0,@+0,+0,-0,0,*i*i0,@+0,-0
+  ]
+  == check for EOF: if EOF, advance instruction pointer, else ...
+    i*i0,z*z i*i0,@-0,-0,0*z*interpret 0*i*advance_ip @,0,,0,,-0,-
+  ==
+    z*interpret 0*copy_input_to_tape*advance_ip_and_consume_byte @*@-0,0,,0,-0
 ]
 == check for end of code: if head (head (tail arg)) is nil, return nil, else...
   i*i0,z*z i*i0,i*i0,i*i0,@-0,+0,+0,,0*0*0,-0,-
