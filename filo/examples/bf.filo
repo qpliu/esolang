@@ -210,9 +210,9 @@ interpret = [
       z*skip z*advance_ip 0*@,0,,0,-0
   ]
   == if tape head is not zero, then...
-    i*i0,z*z z*zero? 0*@,0,-0,0*0*
+    i*i0,z*z z*zero? 0*@,0,-0,0*
   == advance ip, interpret
-    z*interpret 0*i*advance_ip @,0,,0,-0
+    z*interpret 0*i*advance_ip @,0,,0,
   == else...
     ,-0,-
   == skip past matching close bracket, interpret
@@ -222,11 +222,26 @@ interpret = [
   == - argument is state
   == - result is output
   exec_OO = [
+    == - argument is (code)*remaining input
+    == - result is (code)*remaining input
+    rewind_ip = rewind*i @,0,
+
+    == - argument is (code)*remaining input
+    == - result is (code)*remaining input
+    skip =
+      == if just after beginning of code, then
+      i*i0,z*z i*i0,@+0,-0,0*0*@,-0,-
+      == else if just after open bracket, then
+      i*i0,z*z i*i0,i*i0,@+0,-0,+0,0*0*@,-0,-
+      == else if just after close bracket, then
+      i*i0,z*z i*i0,i*i0,i*i0,@+0,-0,+0,-0,0*z*skip z*rewind_ip z*skip 0*rewind*i @,0,,0,,0,,0,,-0,-
+      == else continue looking
+      z*skip z*rewind_ip 0*@,0,,0,-0
   ]
   == if tape head is not zero, then...
-    i*i0,z*z z*zero? 0*@,0,-0,0*0*
+    i*i0,z*z z*zero? 0*@,0,-0,0*
   == rewind to just after matching open bracket, interpret
-    @ == TODO
+    z*interpret 0*i*skip @,0,,0,
   == else...
     ,-0,-
   == advance ip, interpret
