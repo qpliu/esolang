@@ -185,15 +185,41 @@ interpret = [
   == - result is (code)*remaining input
   advance_ip = advance*i @,0,
 
+  == - argument is state
+  == - result is 0 / 0*0
+  zero? = [
+    z_tape? = z_byte?*z @,0,+0*0
+    z_byte? = z*z @+0,z*z_byte? @,0*0*0,,-0
+  ]
+  z_tape?*z @+0,0,+0*0
+
   == [
   == - argument is state
   == - result is output
-  exec_O = @ == TODO
+  exec_O = [
+  ]
+  == if tape head is not zero, then...
+    i*i0,z*z z*zero? 0*@,0,-0,0*0*
+  == advance ip, interpret
+    z*interpret 0*i*advance_ip @,0,,0,-0
+  == else...
+    ,-0,-
+  == skip past matching close bracket, interpret
+    @ == TODO
 
   == ]
   == - argument is state
   == - result is output
-  exec_OO = 0 == TODO
+  exec_OO = [
+  ]
+  == if tape head is not zero, then...
+    i*i0,z*z z*zero? 0*@,0,-0,0*0*
+  == rewind to just after matching open bracket, interpret
+    @ == TODO
+  == else...
+    ,-0,-
+  == advance ip, interpret
+    z*interpret 0*i*advance_ip @,0,,0,-0
 
   == +
   == - argument is state
@@ -268,14 +294,14 @@ interpret = [
     == - result is 8th bit of byte at tape head
     bit8 = i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,-0,-0,+0,
   ]
-    i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,+0,*
-    i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,+0,*
-    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,+0,*
-    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,+0,*
-    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,+0,*
-    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,+0,*
-    i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,-0,+0,*
-    bit8*interpret @*i*advance_ip @,0,,0,
+  i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,+0,*
+  i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,+0,*
+  i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,+0,*
+  i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,+0,*
+  i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,+0,*
+  i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,+0,*
+  i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,i*i0,@+0,+0,+0,-0,-0,-0,-0,-0,-0,+0,*
+  bit8*interpret @*i*advance_ip @,0,,0,
 
   == ,
   == - argument is state
@@ -301,7 +327,8 @@ interpret = [
         read_bits6 = i*read_bits7 @,0,
         read_bits7 = i*read_bits8 @,0,
         read_bits8 = i*z @,0,
-      ] i*read_bits2 i*i0,@-0,-0,0,
+      ]
+      i*read_bits2 i*i0,@-0,-0,0,
     ]
     read_byte*i @*i*i0,i*i0,@+0,+0,-0,0,*i*i0,@+0,-0
   ]
