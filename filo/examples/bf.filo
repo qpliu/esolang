@@ -197,6 +197,17 @@ interpret = [
   == - argument is state
   == - result is output
   exec_O = [
+    == - argument is (code)*remaining input
+    == - result is (code)*remaining input
+    skip =
+      == if looking at end of code, then
+      i*i0,z*z i*i0,i*i0,@+0,+0,,0*0*@,-0,-
+      == else if looking at open bracket, then
+      i*i0,z*z i*i0,i*i0,i*i0,@+0,+0,+0,,0*0*z*skip z*skip z*advance_ip 0*@,0,,0,,0,-0,-0,-
+      == else if looking at close bracket, then
+      i*i0,z*z i*i0,i*i0,i*i0,@+0,+0,+0,-0,0*0*z*advance_ip 0*@,0,-0,-0,-
+      == else continue looking
+      z*skip z*advance_ip 0*@,0,,0,-0
   ]
   == if tape head is not zero, then...
     i*i0,z*z z*zero? 0*@,0,-0,0*0*
@@ -205,7 +216,7 @@ interpret = [
   == else...
     ,-0,-
   == skip past matching close bracket, interpret
-    @ == TODO
+    z*interpret 0*i*skip i*advance_ip @,0,,0,,0,-0
 
   == ]
   == - argument is state
