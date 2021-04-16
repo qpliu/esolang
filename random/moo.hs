@@ -160,10 +160,10 @@ mustBe01 expr = mustBe expr 0 []
     maxDepth = 10 -- arbitrary parameter
     mustBe (Call expr args) depth params
       | depth >= maxDepth = False
-      | otherwise = mustBe expr (depth+1) args
+      | otherwise = mustBe expr (depth+1) (args:params)
     mustBe (Arg i) depth params
       | null params = False
-      | otherwise = mustBe (params!!i) (depth+1) params
+      | otherwise = mustBe (head params!!i) (depth+1) (tail params)
     mustBe Impl _ _ = False
     mustBe (LE _ _) _ _ = True
 
