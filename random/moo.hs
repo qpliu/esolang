@@ -28,6 +28,15 @@
 -- considered an expression that will be evaluated and cannot span multiple
 -- lines.
 
+-- I don't see how evaluating recursive functions such as
+-- (+) a b c = ((b == 0) && (c == a)) || (c == inc (a + dec b))
+-- terminates without some short-circuiting mechanism.
+-- I can see two short-circuit mechanisms:
+--   1. If the left argument of <= is 0, the result is 1.
+--   2. If the left argument of <= is 2 or greater and the right argument
+--      can be statically proven to be either 0 or 1, the result is 0.
+-- I don't think these are sufficient to make the evaluation of + terminate.
+
 import Data.Char(isSpace)
 import Data.Map(Map,empty,insert,member,toList,(!))
 import qualified Data.Map
@@ -145,6 +154,19 @@ resolve unresolved tokens = resolveExpr tokens
       | length exprStack == n = return (reverse exprStack,toks)
       | otherwise = resolveExprList (Impl:exprStack,remainingToks) n stopOnInfix
 
+mustBe01 :: Expr -> Bool
+mustBe01 expr = mustBe expr 0 []
+  where
+    maxDepth = 10 -- arbitrary parameter
+    mustBe (Call expr args) depth params
+      | depth >= maxDepth = False
+      | otherwise = mustBe expr (depth+1) args
+    mustBe (Arg i) depth params
+      | null params = False
+      | otherwise = mustBe (params!!i) (depth+1) params
+    mustBe Impl _ _ = False
+    mustBe (LE _ _) _ _ = True
+
 eval :: Expr -> [Integer] -> Integer -> Integer
 eval (Call fn args) params implicit = call 0
   where evalArg arg = eval arg params implicit
@@ -153,7 +175,11 @@ eval (Call fn args) params implicit = call 0
                | otherwise = i
 eval (Arg i) params implicit = params !! i
 eval Impl params implicit = implicit
-eval (LE lhs rhs) params implicit = if l <= r then 1 else 0
+eval (LE lhs rhs) params implicit
+  | l == 0 = 1
+  | l > 1 && mustBe01 rhs = 0
+  | l <= r = 1
+  | otherwise = 0
   where l = eval lhs params implicit
         r = eval rhs params implicit
 
