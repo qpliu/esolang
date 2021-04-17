@@ -134,6 +134,9 @@ resolve unresolved tokens = resolveExpr tokens
           body <- resolved!name
           resolveExprList (Call body []:exprStack,remainingToks) n stopOnInfix
       | isInfix name && null exprStack = Left "Resolver failure"
+      | isInfix name && arity name == 1 = do
+          body <- resolved!name
+          resolveExprList (Call body [head exprStack]:tail exprStack,remainingToks) n stopOnInfix
       | isInfix name = do
           body <- resolved!name
           (args,moreToks) <- resolveExprList ([],remainingToks) (arity name - 1) False
@@ -154,19 +157,6 @@ resolve unresolved tokens = resolveExpr tokens
       | length exprStack == n = return (reverse exprStack,toks)
       | otherwise = resolveExprList (Impl:exprStack,remainingToks) n stopOnInfix
 
-mustBe01 :: Expr -> Bool
-mustBe01 expr = mustBe expr 0 []
-  where
-    maxDepth = 10 -- arbitrary parameter
-    mustBe (Call expr args) depth params
-      | depth >= maxDepth = False
-      | otherwise = mustBe expr (depth+1) (args:params)
-    mustBe (Arg i) depth params
-      | null params = False
-      | otherwise = mustBe (head params!!i) (depth+1) (tail params)
-    mustBe Impl _ _ = False
-    mustBe (LE _ _) _ _ = True
-
 eval :: Expr -> [Integer] -> Integer -> Integer
 eval (Call fn args) params implicit = call 0
   where evalArg arg = eval arg params implicit
@@ -177,11 +167,13 @@ eval (Arg i) params implicit = params !! i
 eval Impl params implicit = implicit
 eval (LE lhs rhs) params implicit
   | l == 0 = 1
-  | l > 1 && mustBe01 rhs = 0
+  | l > 1 && isLE rhs = 0
   | l <= r = 1
   | otherwise = 0
   where l = eval lhs params implicit
         r = eval rhs params implicit
+        isLE (LE _ _) = True
+        isLE _ = False
 
 repl :: (Map String Unresolved,[String]) -> IO ()
 repl (defs,tokens) = do
@@ -194,15 +186,21 @@ repl (defs,tokens) = do
       | otherwise = either perror addDef (parseDef tokens)
     epl [":q"] = return ()
     epl [":?"] = do
-        putStrLn ":? print this message"
-        putStrLn ":d print definitions"
-        putStrLn ":c clear definitions"
-        putStrLn ":q quit"
+        putStrLn ":? - print this message"
+        putStrLn ":d - print definitions"
+        putStrLn ":c - clear definitions"
+        putStrLn ":l file - load definitions from file"
+        putStrLn ":q - quit"
         repl (defs,[])
     epl [":d"] = do
         mapM_ print (toList defs)
         repl (defs,[])
     epl [":c"] = repl (empty,[])
+    epl [":l",file] = do
+        src <- readFile file
+        let (errors,newDefs) = load [] defs [] (lines src)
+        mapM_ putStrLn errors
+        repl (newDefs,[])
     epl toks
       | not (null tokens) = repl (defs,tokens++toks)
       | "=" `elem` toks = repl (defs,toks)
@@ -217,6 +215,13 @@ repl (defs,tokens) = do
         tokens <- parseExpr [] "" toks
         expr <- resolve defs tokens
         return (eval expr [] 0)
+    load errors defs tokens lines
+      | null tokens && null lines = (reverse errors,defs)
+      | null lines || null (tokenize (head lines)) =
+          either (\ msg -> load (msg:errors) defs [] (drop 1 lines))
+                 (\ (name,def) -> load errors (insert name def defs) [] (drop 1 lines))
+                 (parseDef tokens)
+      | otherwise = load errors defs (tokens ++ tokenize (head lines)) (tail lines)
 
 main :: IO ()
 main = do
