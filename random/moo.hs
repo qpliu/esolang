@@ -98,7 +98,7 @@ parseExpr params implicit tokens = do
       | name == implicit = parseTokens (Implicit:parsedToks) rest
       | otherwise = parseTokens (maybe (Identifier name) Argument (lookup name params):parsedToks) rest
 
-data Expr = Call Expr [Expr] | Arg Int | Impl | LE Expr Expr
+data Expr = Call (Either String Expr) [Expr] | Arg Int | Impl | LE Expr Expr
 
 resolve :: Map String Unresolved -> [Token] -> Either String Expr
 resolve unresolved tokens = resolveExpr tokens
@@ -130,21 +130,17 @@ resolve unresolved tokens = resolveExpr tokens
     resolveExprList (exprStack,toks@(Identifier name:remainingToks)) n stopOnInfix
       | not (member name unresolved) = Left "Resolver failure"
       | (arity name == 0 || not (isInfix name) || stopOnInfix) && length exprStack == n = return (reverse exprStack,toks)
-      | arity name == 0 = do
-          body <- resolved!name
-          resolveExprList (Call body []:exprStack,remainingToks) n stopOnInfix
+      | arity name == 0 =
+          resolveExprList (Call (resolved!name) []:exprStack,remainingToks) n stopOnInfix
       | isInfix name && null exprStack = Left "Resolver failure"
-      | isInfix name && arity name == 1 = do
-          body <- resolved!name
-          resolveExprList (Call body [head exprStack]:tail exprStack,remainingToks) n stopOnInfix
+      | isInfix name && arity name == 1 =
+          resolveExprList (Call (resolved!name) [head exprStack]:tail exprStack,remainingToks) n stopOnInfix
       | isInfix name = do
-          body <- resolved!name
           (args,moreToks) <- resolveExprList ([],remainingToks) (arity name - 1) False
-          resolveExprList (Call body (head exprStack:args):tail exprStack,moreToks) n stopOnInfix
+          resolveExprList (Call (resolved!name) (head exprStack:args):tail exprStack,moreToks) n stopOnInfix
       | otherwise = do
-          body <- resolved!name
           (args,moreToks) <- resolveExprList ([],remainingToks) (arity name) True
-          resolveExprList (Call body args:exprStack,moreToks) n stopOnInfix
+          resolveExprList (Call (resolved!name) args:exprStack,moreToks) n stopOnInfix
     resolveExprList (exprStack,toks@(Grouping group:remainingToks)) n stopOnInfix
       | length exprStack == n = return (reverse exprStack,toks)
       | otherwise = do
@@ -157,23 +153,30 @@ resolve unresolved tokens = resolveExpr tokens
       | length exprStack == n = return (reverse exprStack,toks)
       | otherwise = resolveExprList (Impl:exprStack,remainingToks) n stopOnInfix
 
-eval :: Expr -> [Integer] -> Integer -> Integer
-eval (Call fn args) params implicit = call 0
+eval :: Expr -> [Integer] -> Integer -> Either String Integer
+eval (Call (Left msg) args) params implicit = Left msg
+eval (Call (Right fn) args) params implicit = call 0
   where evalArg arg = eval arg params implicit
-        callArgs = map evalArg args
-        call i | eval fn callArgs i == 0 = call (i+1)
-               | otherwise = i
-eval (Arg i) params implicit = params !! i
-eval Impl params implicit = implicit
-eval (LE lhs rhs) params implicit
-  | l == 0 = 1
-  | l > 1 && isLE rhs = 0
-  | l <= r = 1
-  | otherwise = 0
-  where l = eval lhs params implicit
-        r = eval rhs params implicit
-        isLE (LE _ _) = True
-        isLE _ = False
+        call i = do
+          callArgs <- mapM evalArg args
+          r <- eval fn callArgs i
+          if r == 0
+            then call (i+1)
+            else return i
+eval (Arg i) params implicit = return (params !! i)
+eval Impl params implicit = return implicit
+eval (LE lhs rhs) params implicit = do
+    l <- eval lhs params implicit
+    evalLE l
+  where
+    evalLE l
+      | l == 0 = return 1
+      | l > 1 && isLE rhs = return 0
+      | otherwise = do
+          r <- eval rhs params implicit
+          return (if l <= r then 1 else 0)
+    isLE (LE _ _) = True
+    isLE _ = False
 
 repl :: (Map String Unresolved,[String]) -> IO ()
 repl (defs,tokens) = do
@@ -214,7 +217,7 @@ repl (defs,tokens) = do
     compileEval toks = do
         tokens <- parseExpr [] "" toks
         expr <- resolve defs tokens
-        return (eval expr [] 0)
+        eval expr [] 0
     load errors defs tokens lines
       | null tokens && null lines = (reverse errors,defs)
       | null lines || null (tokenize (head lines)) =
