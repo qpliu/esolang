@@ -28,18 +28,10 @@
 -- considered an expression that will be evaluated and cannot span multiple
 -- lines.
 
--- I don't see how evaluating recursive functions such as
--- (+) a b c = ((b == 0) && (c == a)) || (c == inc (a + dec b))
--- terminates without some short-circuiting mechanism.
--- I can see two short-circuit mechanisms:
---   1. If the left argument of <= is 0, the result is 1.
---   2. If the left argument of <= is 2 or greater and the right argument
---      can be statically proven to be either 0 or 1, the result is 0.
--- I don't think these are sufficient to make the evaluation of + terminate.
-
 import Data.Char(isSpace)
 import Data.Map(Map,empty,insert,member,toList,(!))
 import qualified Data.Map
+import Data.Time(diffUTCTime,getCurrentTime)
 
 tokenize :: String -> [String]
 tokenize [] = []
@@ -82,9 +74,8 @@ parseDef tokens = parseDefName tokens
 parseExpr :: [(String,Int)] -> String -> [String] -> Either String [Token]
 parseExpr params implicit tokens = do
     (exprTokens,remainingTokens) <- parseTokens [] tokens
-    if null remainingTokens
-      then return exprTokens
-      else Left "Unmatched parenthesis"
+    if null remainingTokens then return exprTokens
+    else Left "Unmatched parenthesis"
   where
     parseTokens :: [Token] -> [String] -> Either String ([Token],[String])
     parseTokens parsedToks [] = return (reverse parsedToks,[])
@@ -114,9 +105,8 @@ resolve unresolved tokens = resolveExpr tokens
     resolveExpr :: [Token] -> Either String Expr
     resolveExpr tokens = do
         (exprList,remainingToks) <- resolveExprList ([],tokens) 1 False
-        if not (null remainingToks)
-          then Left "Resolver failure"
-          else return (head exprList)
+        if not (null remainingToks) then Left "Resolver failure"
+        else return (head exprList)
     resolveExprList :: ([Expr],[Token]) -> Int -> Bool -> Either String ([Expr],[Token])
     resolveExprList (exprStack,[]) n stopOnInfix
       | length exprStack == n = return (reverse exprStack,[])
@@ -153,28 +143,23 @@ resolve unresolved tokens = resolveExpr tokens
       | length exprStack == n = return (reverse exprStack,toks)
       | otherwise = resolveExprList (Impl:exprStack,remainingToks) n stopOnInfix
 
-eval :: Expr -> [Integer] -> Integer -> Either String Integer
+eval :: Expr -> [Either String Integer] -> Integer -> Either String Integer
 eval (Call (Left msg) args) params implicit = Left msg
 eval (Call (Right fn) args) params implicit = call 0
   where evalArg arg = eval arg params implicit
         call i = do
-          callArgs <- mapM evalArg args
-          r <- eval fn callArgs i
-          if r == 0
-            then call (i+1)
-            else return i
-eval (Arg i) params implicit = return (params !! i)
+          r <- eval fn (map evalArg args) i
+          if r == 0 then call (i+1) else return i
+eval (Arg i) params implicit = params !! i
 eval Impl params implicit = return implicit
 eval (LE lhs rhs) params implicit = do
     l <- eval lhs params implicit
-    evalLE l
+    if l == 0 then return 1
+    else if l > 1 && isLE rhs then return 0
+    else do
+        r <- eval rhs params implicit
+        return (if l <= r then 1 else 0)
   where
-    evalLE l
-      | l == 0 = return 1
-      | l > 1 && isLE rhs = return 0
-      | otherwise = do
-          r <- eval rhs params implicit
-          return (if l <= r then 1 else 0)
     isLE (LE _ _) = True
     isLE _ = False
 
@@ -208,7 +193,10 @@ repl (defs,tokens) = do
       | not (null tokens) = repl (defs,tokens++toks)
       | "=" `elem` toks = repl (defs,toks)
       | otherwise = do
-            either perror print (compileEval toks)
+            start <- getCurrentTime
+            either putStrLn print (compileEval toks)
+            done <- getCurrentTime
+            print [diffUTCTime done start]
             repl (defs,[])
     perror msg = do
         putStrLn msg
