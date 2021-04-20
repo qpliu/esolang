@@ -32,6 +32,7 @@ import Data.Char(isSpace)
 import Data.Map(Map,empty,insert,member,toList,(!))
 import qualified Data.Map
 import Data.Time(diffUTCTime,getCurrentTime)
+import System.IO(hFlush,isEOF,stdout)
 
 tokenize :: String -> [String]
 tokenize [] = []
@@ -166,8 +167,12 @@ eval (LE lhs rhs) params implicit = do
 repl :: (Map String Unresolved,[String]) -> IO ()
 repl (defs,tokens) = do
     putStr (if null tokens then "- " else "+ ")
-    line <- getLine
-    epl (tokenize line)
+    hFlush stdout
+    eof <- isEOF
+    if eof then return ()
+    else do
+        line <- getLine
+        epl (tokenize line)
   where
     epl []
       | null tokens = repl (defs,[])
@@ -181,7 +186,7 @@ repl (defs,tokens) = do
         putStrLn ":q - quit"
         repl (defs,[])
     epl [":d"] = do
-        mapM_ print (toList defs)
+        mapM_ (putStrLn . showDef) (toList defs)
         repl (defs,[])
     epl [":c"] = repl (empty,[])
     epl [":l",file] = do
@@ -213,6 +218,22 @@ repl (defs,tokens) = do
                  (\ (name,def) -> load errors (insert name def defs) [] (drop 1 lines))
                  (parseDef tokens)
       | otherwise = load errors defs (tokens ++ tokenize (head lines)) (tail lines)
+    showDef (name,Unresolved isInfix arity body) =
+        (if isInfix then "(" ++ name ++ ")" else name) ++
+        concatMap (' ':) argNames ++ " =" ++
+        stripSpaceAfterParen (concatMap showBody body)
+      where
+        argNames = take (arity+1) (filter (not . (`elem` (concatMap extractIdentifiers body))) (map (:[]) ['a'..'z'] ++ map (('a':) . show) [1..]))
+        extractIdentifiers (Identifier ident) = [ident]
+        extractIdentifiers (Grouping tokens) = concatMap extractIdentifiers tokens
+        extractIdentifiers _ = []
+        showBody (Identifier ident) = ' ':ident
+        showBody (Grouping tokens) = " (" ++ concatMap showBody tokens ++ ")"
+        showBody (Argument i) = ' ':(argNames !! i)
+        showBody Implicit = ' ':(argNames !! arity)
+        stripSpaceAfterParen "" = ""
+        stripSpaceAfterParen ('(':' ':s) = '(':stripSpaceAfterParen s
+        stripSpaceAfterParen (c:s) = c:stripSpaceAfterParen s
 
 main :: IO ()
 main = do
