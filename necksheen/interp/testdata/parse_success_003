@@ -1,0 +1,14 @@
+test {
+  test2 {
+    a = b < 0 c < 0.
+    test continue a.
+    b = 0.
+    io > c.
+  }
+  test3 {
+    io < (b < 0) c < 0.
+    test break 0.
+    io > b.
+    c = b (0 0).
+  }
+}

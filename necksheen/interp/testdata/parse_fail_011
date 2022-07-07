@@ -1,0 +1,4 @@
+==unknown variable: a
+b = a < 0.
+continue b.
+a = 0.

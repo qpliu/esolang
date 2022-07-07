@@ -1,0 +1,5 @@
+==duplicate loop identifier: loop
+loop {
+  loop {
+  }
+}
