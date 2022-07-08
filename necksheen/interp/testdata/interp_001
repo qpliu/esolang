@@ -1,0 +1,10 @@
+==left:10110
+==right:,0110
+==io:,010
+left > x.
+io < z < 0.
+break 0 0 x.
+left > y.
+right < y.
+z = 0 0 y.
+right < 0 0 y.

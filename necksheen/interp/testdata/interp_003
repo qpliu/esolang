@@ -1,0 +1,16 @@
+==left:10
+==io:,01100
+io < 0.
+loop {
+  {
+    left > a.
+    io < 0 0.
+    continue a.
+    io < z < 0.
+    loop break 0 0.
+  }
+  z = 0.
+  left < 0.
+}
+io < 0.
+break 0 0.

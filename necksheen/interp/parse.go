@@ -32,6 +32,8 @@ type Stmt struct {
 	Stmts       []*Stmt
 	Identifiers []string
 	Expr        *Expr
+
+	Declarations map[string]bool
 }
 
 type Expr struct {
@@ -57,6 +59,7 @@ func Parse(tokenizer *Tokenizer) (*Stmt, error) {
 		Type:  StmtLoop,
 		Stmts: stmts,
 	}
+	stmt.calculateDeclarations()
 	scope := map[string]bool{"0": true}
 	stmt.calculateScopes(scope)
 	prescope := map[string]bool{}
@@ -247,6 +250,22 @@ func parseLeftExpr(tokenizer *Tokenizer) (*Expr, error) {
 		Identifier: identifier,
 		Exprs:      []*Expr{expr},
 	}, nil
+}
+
+func (stmt *Stmt) calculateDeclarations() {
+	if stmt.Type != StmtLoop {
+		return
+	}
+	stmt.Declarations = map[string]bool{}
+	for _, s := range stmt.Stmts {
+		s.calculateDeclarations()
+		switch s.Type {
+		case StmtAssign:
+			stmt.Declarations[s.Identifiers[0]] = true
+		case StmtReceive:
+			stmt.Declarations[s.Identifiers[1]] = true
+		}
+	}
 }
 
 func (stmt *Stmt) calculateScopes(scopes map[string]bool) {
