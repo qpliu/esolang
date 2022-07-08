@@ -1,0 +1,17 @@
+io > if-not-head.
+if-head = 0 0 if-not-head.
+{
+  break if-not-head.
+  right < 0.
+  left > _.
+  break 0 0.
+}
+{
+  break if-head.
+  io > i.
+  left > _.
+  io < i.
+  right < 0.
+  break 0 0.
+}
+break 0 0.

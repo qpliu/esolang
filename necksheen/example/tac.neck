@@ -1,0 +1,277 @@
+== reverses the bytes of the input
+io > if-not-head.
+if-head = 0 0 if-not-head.
+{
+  break if-not-head.
+
+  == mark the start of bytes
+  right < 0 0.
+
+  {
+    left > x.
+    break x.
+  }
+
+  == start the last byte
+  left < 0 0.
+  == this assumes the number of bits in the input is a multiple of 8
+  == if not this will deadlock
+
+  == wait for the first byte to finish
+  right > _.
+  break 0 0.
+}
+
+body {
+  break if-head.
+  io > input.
+
+  == find out which bit
+  left > bit0.
+  {
+    break 0 0 bit0.
+    == next bit is bit1
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > bit1.
+  {
+    break 0 0 bit1.
+    == next bit is bit 2
+    right < 0.
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > bit2.
+  {
+    break 0 0 bit2.
+    == next bit is bit 3
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > bit3.
+  {
+    break 0 0 bit3.
+    == next bit is bit 4
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > bit4.
+  {
+    break 0 0 bit4.
+    == next bit is bit 5
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > bit5.
+  {
+    break 0 0 bit5.
+    == next bit is bit 6
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > bit6.
+  {
+    break 0 0 bit6.
+    == next bit is bit 7
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0.
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to output rest of the byte
+    right < 0.
+
+    == wait for the byte to be finished
+    right > _done.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+
+  left > _bit7.
+  {
+    == next bit is bit 0
+    right < 0 0.
+
+    == wait for start output signal
+    right > _start.
+
+    == relay start output signal to first bit
+    left < 0.
+
+    == wait for output bit signal
+    left > _output.
+
+    io < input.
+
+    == signal to start the next byte
+    left < 0.
+
+    body break 0 0.
+  }
+}
+break 0 0.

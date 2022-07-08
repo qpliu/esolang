@@ -1,0 +1,7 @@
+== unsynchronized cat, so order of the bits may be scrambled
+io > if-not-head.
+if-head = 0 0 if-not-head.
+break if-head.
+io > input.
+io < input.
+break 0 0.

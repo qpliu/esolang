@@ -1,3 +1,9 @@
+neck:
+	go build neck.go interp.go parse.go tokenize.go
+
+clean:
+	go clean
+
 test:
 	go test
 
