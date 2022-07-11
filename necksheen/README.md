@@ -1,423 +1,228 @@
 Neck Sheen
 ==========
-Neck Sheen is a programming language featuring concurrency and message
-passing.
+Neck Sheen is a programming language that features concurrency and
+message passing.
 
-A Neck Sheen program takes N bits of input, then starts N+1 threads
-running the program.  Each thread is connected to two other threads
-via bit queues, one to the left and one to the right.  All threads
-except the first thread has one bit of input, where the thread to the
-left has the previous bit and the thread to the right has the next
-bit and the first thread is left of the thread with the the first bit
-and right of the thread with the last bit.
+Neck Sheen programs can do calculations on bits by combining nand
+expressions and can fork new threads with which it can send and
+receive bits over a queue associated with the thread.
 
-The only synchronization mechanism is receiving a bit from a bit queue,
-which blocks when the queue is empty.  The bit queue must have a capacity
-of at least one bit.  If the bit queue is at capacity, sending a bit
-will block.
+Neck Sheen variables are static single-assignment.  The
+previous-variable expression, written as `variable < expression`,
+serves as the Φ function in loops.
 
-Other possible variants could have other topologies or other input and
-output models.
+Neck Sheen takes ideas from its precursor, [Neck Sheen
+(precursor)](precursor/README.md), replacing the thread topology with
+a dynamic tree.
 
 Grammar
 -------
 ```
   program = statement*
-  statement = (assignment | break | continue | loop | receive | send)
-  assignment = identifier '=' expression '.'
-  break = identifier? 'break' expression '.'
-  continue = identifier? 'continue' expression '.'
-  loop = identifier? '{' statement* '}'
-  receive = identifier '>' identifier '.'
-  send = identifier '<' expression '.'
-  expression = identifier ('<' expression)? | expression expression | '(' expression ')'
+
+  statement = assignment | break | continue | fork | loop | receive | send
+  assignment = variable '=' expression '.'
+  break = loop-identifier? 'break' expression '.'
+  continue = loop-identifier? 'continue' expression '.'
+  fork = queue '+' (queue '.' | '{' statement* '}')
+  loop = loop-identifier? '{' statement* '}'
+  receive = queue '>' variable loop-identifier? '.'
+  send = queue '<' expression ('.' | '{' statement* '}')
+
+  expression = variable | previous-variable | nand | '(' expression ')'
+  previous-variable = variable '<' expression
+  nand = expression expression
+
+  loop-identifier = identifier
+  queue = identifier
+  variable = identifier
 ```
 
-Comments begin with '==' and extend to the end of the line.
+Comments begin with `==` and extend to the end of the line.
 
-Identifiers are uninterrupted sequences of non-space characters, excluding
-'=', '.', '(', ')', '{', '}', '<', '>', and may not be 'break' or 'continue'.
+Identifiers are uninterrupted sequences of non-space characters,
+excluding `=`, `.`, `(`, `)`, `{`, `}`, `<`, `>`, and may not be
+`break` or `continue`.
 
-There are 3 identifier name spaces: loops, queues, variables.
+There are two identifier name spaces: one for loops and queues, and
+one for variables.
 
 Loop identifiers are declared with loop statements and are optionally
-referenced by break and continue statements.  Loop identifiers must not
-duplicate any enclosing loop identifiers and must not be referenced outside
-its body.
+referenced by break and continue statements.  The scope of a loop
+identifier is its body, excluding any fork statements.  The loop
+identifier must not duplicate any loop identifier or queue identifier
+that is in scope.
 
-Queue identifiers are predefined by the thread topology and input and output
-models.  New queue identifiers cannot be declared.  For the variant in this
-specification, the predefined queue identifiers are 'left', 'right', and 'io'.
+Queue identifiers are declared with fork statements and are referenced
+by fork, receive, and send statements and test expressions.  The scope
+a queue identifier starts with the declaration and ends at the end of
+the innermost enclosing loop statement, excluding the bodies of any
+nested fork statement.  Queue identifiers must not duplicate any queue
+identifier or loop identifier that is in scope.  There is one
+predefined queue, `io`, which can be used to receive input and send
+output.  The queue identifier is also the loop identifier of the
+bodies of fork statements and send statements.
 
-Variables identifiers include predefined variables and are also declared by
-assignment statements or receive statements.  Identifiers must be unique
-within its scope and may not be reassigned.  For the variant in this
-specification, there is one predefined variable, '0', which evaluates to false.
+Variable identifiers are declared with assignment, receive, or test
+statements.  The scope of the variable starts with the statement
+following the declaration and ends at the end of the innermost
+enclosing loop statement.  A variable also has a pre-scope, which
+starts with the start of the innermost enclosing loop statement and
+ends with the declaration.  Variable identifiers must not duplicate
+any variable identifier that is in scope.  There is one predefined
+variable, `0`, which evaluates to false.  Expressions may only
+reference variables that are in scope, except for previous-variable
+expressions, which may be either in the variable's scope or the
+variable's pre-scope.
 
 Statements
 ----------
 The statements of a program form an implicit unnamed loop.
 
-An assignment statement assigns the (single bit) value of the expression to
-the variable.  This declares the variable, whose scope extends to the end
-of the innermost enclosing loop.
+An assignment statement declares and assigns the (single bit) value of
+the expression to the variable.  A variable may not be reassigned.
 
-A break statement exits the named or, if unspecified, innermost enclosing,
-loop statement if the expression evaluates to true.
+A break statement exits the named or, if unspecified, the innermost
+enclosing, loop statement if the expression evaluates to true.  If the
+loop is exited, all queues declared in the loop are closed.
 
-A continue statement returns to the top of the named, or if unspecified,
-innermost enclosing, loop statement if the expression evaluates to true.
+A continue statement returns execution to the top of the named or, if
+unspecified, the innermost enclosing, loop statement if the expression
+evaluates to true.  If the loop is continued, all queues declared in
+the loop are closed.
 
-A loop statement is an optionally named list of statements that are repeatedly
-executed unless exited with a break statement.
+A fork statement declares a queue with either a loop or another queue,
+which must be in scope.  Executing a fork starts a new thread.  The
+forking thread can communicate with the new thread by receiving from
+or sending to the queue.  The new thread executes the unnamed loop and
+can communicate with the forking thread by receiving from or sending
+to the queue.  If the fork statement references another queue instead
+of specifying a loop, the other queue must be in scope and must be
+declared with a loop, and the new thread executes that loop and
+communicates with the forking thread with that other queue.  The new
+thread exits when it breaks the loop of the fork statement.  The queue
+identifier is also the loop identifier in the body of the loop.
 
-A receive statement takes a queue identifier (to the left of the '<') and
-a variable identifier (to the right of the '<') and receives and bit from the
-queue and assigns that value to the variable.  This declares the variable,
-whose scope extends to the end of its innermost enclosing loop.
+A loop statement is an optionally named list of statements.  When
+execution reaches the end of the list of statements, all queues
+declared in the loop are closed and execution resumes at the start of
+the list of statements.
 
-A send statement takes a queue identifier (to the left of the '>') and
-evaluates the expression and adds the resulting bit to the queue.
+A receive statement declares a variable, which is set to the bit
+received from the queue.  If the queue is closed for receiving, the
+named, or if unspecified, the innermost enclosing, loop statement is
+exited.
+
+A send statement evaluates the expression and sends the result to the
+queue.  If the queue is closed for sending and the loop is specified,
+the loop is executed.  The queue identifier is also the loop
+identifier in the body of the loop.
 
 Expressions
 -----------
-An expression can be an variable identifier.  The expression must be in the
-scope of the variable.  It evaluates to the value previously assigned or
-received at its declaration.
+A variable expression evaluates to the value assigned to the variable
+in its declaration.  The expression must be in the scope of the
+variable.
 
-An expression can be an identifier, followed by '<' and an initial expression.
-The expression must either be in the scope of the identifier variable, or
-in its pre-scope.  In the initial execution of the innermost loop enclosing the
-declaration of the variable, the expression evaluates to the initial
-expression (which follows the '<').  In subsequent executions of the loop,
-the expression evaluates to the value assigned by the declaration of the
-identifier in the previous execution of the loop.  The pre-scope of a variable
-include all statements in the innermost loop containing the variable's
-declaration that precede the declaration without any continue statements
-for that loop between the statement and the declaration.  Such continue
-statements are also not in the pre-scope.
+A previous-variable expression evaluates to the value last assigned to
+the variable in a previous iteration of the loop in which it is
+declared.  If executing the first iteration of the loop or if the
+variable declaration was not executed in any previous iteration, the
+previous-variable expression evaluates to its subexpression (to the
+right of the `<`).  The expression must be in either the scope or the
+pre-scope of the variable.
 
-An expression can be two expressions, which evaluates to the NAND of its
-subexpressions.  This is left-associative.
+A nand expression is two expressions, which evaluates to the nand of
+its subexpressions.  The nand operation is left-associative.
 
-Parentheses can be used to specify the associativity of the NAND expressions
-or to limit the extent of initial expressions.
+Parentheses can be used to specify the associativity of the nand
+expressions or to limit the extent of previous-variable expressions.
 
 Queues
 ------
-This is for the input and output model for the variant in this
-specification.  For the first thread, receiving from the 'io' queue yields
-false, then blocks.  For every other thread, receiving from the 'io' queue
-yields true, then one bit of the input, then blocks.  Sending to the 'io'
-queue sends the bit to the thread's output.  This specification does not
-specify how to map the outputs of the threads to a single stream of bits
-(e.g. stdout) or to dual streams of bits (e.g. stdout and stderr).
+A fork statement declares a queue that can be used to send and receive
+bits between the forking thread and the new thread.  A queue is
+initially open. The scope of the queue in the forking thread are the
+statements in the innermost enclosing loop that follow the fork
+statement.  The scope of the queue in the new thread is the body of
+the fork statement.
 
-This is for the ring (or necklace) topology of the variant in this
-specification.  The 'left' queue can be used to send and receive bits to
-and from the thread to the left and the 'right' queue can be used to send
-and receive bits to and from the thread to the right.
+All queues declared in a loop are closed when the loop iterates
+(either by a continue statement or by reaching the end of the loop) or
+when the loop exits.  A closed queue is closed for both sending and
+receiving.
+
+The predefined `io` queue is used for input and output.  The queue is
+open for receiving as long as there is pending input.  After the input
+has been completely received, the 'io' queue is closed for receiving.
+The queue is always open for sending.  The scope of the `io` queue is
+the program, excluding the bodies of any fork statements.  What
+happens when a fork statement refers to the `io` queue is undefined.
 
 Examples
 --------
 cat
 ```
-  io > if-not-head.
-  if-head = 0 0 if-not-head.
-  {
-    break if-not-head.
-    right < 0.
-    left > _.
-    break 0 0.
-  }
-  {
-    break if-head.
-    io > i.
-    left > _.
-    io < i.
-    right < 0.
-    break 0 0.
-  }
-  break 0 0.
+  io > bit.
+  io < bit.
 ```
 
-tac
+tac (reverses the bits of input)
 ```
-  == reverses the bytes of the input
-  io > if-not-head.
-  if-head = 0 0 if-not-head.
-  {
-    break if-not-head.
+  stack+{
+    == input: push: true bit, pop: false ignored
+    == output: push: ignore ignore, pop: not-empty bit-or-ignore-if-empty
+    loop {
+      stack > op. == true bit: push, false ignore: pop
+      {
+        break op.  == skip if push
+        stack > _. == discard argument
+	== pop (empty)
+        stack < 0.
+        stack < 0.
+	loop continue 0 0.
+      }
+      stack > bit.
+      stack < 0.
+      stack < 0.
+      push+stack.
+      {
+        top = new-top < bit.
+        stack > op2.
+        stack > arg.
+        push < op2.
+	push < top.
+        push > next-not-empty.
+	push > next-top.
+        stack < 0 0.
+        stack < top.
 
-    == mark the start of bytes
-    right < 0 0.
+        loop continue 0 0 (0 0 op2 (0 0 next-not-empty)).
+        == continue if not (op2 is true (push) or next-not-empty is true)
 
-    {
-      left > x.
-      break x.
+        not-arg-or-true = op2 arg.
+        == if op2 is true then (not arg) otherwise true
+
+        true-or-not-next-top = 0 0 op2 next-top.
+        == if op2 is false then (not next-top) otherwise true
+
+	new-top = not-arg-or-true true-or-not-next-top.
+        == if op2 is false, new-top = next-top, if op2 is true, new-top = arg
+      }
     }
-
-    == start the last byte
-    left < 0 0.
-    == this assumes the number of bits in the input is a multiple of 8
-    == if not this will deadlock
-
-    == wait for the first byte to finish
-    right > _.
-    break 0 0.
   }
-
-  body {
-    break if-head.
-    io > input.
-
-    == find out which bit
-    left > bit0.
-    {
-      break 0 0 bit0.
-      == next bit is bit1
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > bit1.
-    {
-      break 0 0 bit1.
-      == next bit is bit 2
-      right < 0.
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > bit2.
-    {
-      break 0 0 bit2.
-      == next bit is bit 3
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > bit3.
-    {
-      break 0 0 bit3.
-      == next bit is bit 4
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > bit4.
-    {
-      break 0 0 bit4.
-      == next bit is bit 5
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > bit5.
-    {
-      break 0 0 bit5.
-      == next bit is bit 6
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > bit6.
-    {
-      break 0 0 bit6.
-      == next bit is bit 7
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0.
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to output rest of the byte
-      right < 0.
-
-      == wait for the byte to be finished
-      right > _done.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
-
-    left > _bit7.
-    {
-      == next bit is bit 0
-      right < 0 0.
-
-      == wait for start output signal
-      right > _start.
-
-      == relay start output signal to first bit
-      left < 0.
-
-      == wait for output bit signal
-      left > _output.
-
-      io < input.
-
-      == signal to start the next byte
-      left < 0.
-
-      body break 0 0.
-    }
+  {
+    io > bit. == breaks loop when io is closed for receiving on EOF
+    stack < 0 0. == push
+    stack < bit.
+  }
+  {
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty.
+    break 0 0 not-empty.
+    stack > bit.
+    io < bit.
   }
   break 0 0.
 ```
