@@ -1,0 +1,2 @@
+==:2:6: duplicate declaration of loop also declared at :2:1
+loop{loop+{}}

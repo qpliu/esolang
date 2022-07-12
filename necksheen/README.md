@@ -119,8 +119,11 @@ exited.
 
 A send statement evaluates the expression and sends the result to the
 queue.  If the queue is closed for sending and the loop is specified,
-the loop is executed.  The queue identifier is also the loop
-identifier in the body of the loop.
+the loop is executed.  The loop is unnamed, so if a named `break` or a
+named `continue` is needed, a nested named loop should be used.  The
+loop cannot have the name of the queue when in the body of a fork
+statement that declares the queue, since the loop in the fork has that
+name.
 
 Expressions
 -----------

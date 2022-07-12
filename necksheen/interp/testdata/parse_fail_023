@@ -1,0 +1,2 @@
+==:2:1: duplicate declaration of io also declared at implicit
+io+{}

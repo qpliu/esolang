@@ -74,7 +74,7 @@ func Parse(tokenizer *Tokenizer) (*Stmt, error) {
 func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 	tok, ok := tokenizer.Token()
 	if !ok {
-		return nil, fmt.Errorf("%s: unexpected EOF", tokenizer.Loc())
+		panic("parseStmt") // parseStmt is never called with potential EOF
 	}
 	switch tok.T {
 	case "{":
@@ -83,15 +83,15 @@ func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 			Token: tok,
 		}, tokenizer)
 	case "break":
-		return parseStmtExpr(&Stmt{
+		return parseStmtOptionalExpr(&Stmt{
 			Type:  StmtBreak,
 			Token: tok,
-		}, false, tokenizer)
+		}, tokenizer)
 	case "continue":
-		return parseStmtExpr(&Stmt{
+		return parseStmtOptionalExpr(&Stmt{
 			Type:  StmtContinue,
 			Token: tok,
-		}, false, tokenizer)
+		}, tokenizer)
 	}
 	if !tok.IsIdent() {
 		return nil, fmt.Errorf("%s: unexpected token: %s", tok.Loc(), tok.T)
@@ -162,6 +162,7 @@ func parseStmtLoop(stmt *Stmt, tokenizer *Tokenizer) (*Stmt, error) {
 }
 
 func parseStmtExpr(stmt *Stmt, loopMayFollow bool, tokenizer *Tokenizer) (*Stmt, error) {
+	tokenizer.Next()
 	expr, err := parseExpr(tokenizer)
 	if err != nil {
 		return nil, err
@@ -169,7 +170,7 @@ func parseStmtExpr(stmt *Stmt, loopMayFollow bool, tokenizer *Tokenizer) (*Stmt,
 	stmt.Expr = expr
 	tok, ok := tokenizer.Token()
 	if !ok {
-		return nil, fmt.Errorf("%s: unexpected EOF", tokenizer.Loc())
+		panic("parseStmtExpr") // EOF never follows successful parseExpr
 	}
 	if tok.T == "." {
 		tokenizer.Next()
@@ -210,12 +211,14 @@ func parseStmtReceive(ident Token, tokenizer *Tokenizer) (*Stmt, error) {
 		Idents: []Token{ident, tok},
 	}
 
+	tokenizer.Next()
 	tok, ok = tokenizer.Token()
 	if !ok {
 		return nil, fmt.Errorf("%s: unexpected EOF", tokenizer.Loc())
 	}
 	if tok.IsIdent() {
 		stmt.Idents = append(stmt.Idents, tok)
+		tokenizer.Next()
 		tok, ok = tokenizer.Token()
 		if !ok {
 			return nil, fmt.Errorf("%s: unexpected EOF", tokenizer.Loc())
@@ -245,10 +248,12 @@ func parseStmtFork(ident Token, tokenizer *Tokenizer) (*Stmt, error) {
 		return nil, fmt.Errorf("%s: unexpected token: %s", tok.Loc(), tok.T)
 	}
 	idents := []Token{ident, tok}
+	tokenizer.Next()
 	tok, ok = tokenizer.Token()
 	if tok.T != "." {
 		return nil, fmt.Errorf("%s: unexpected token: %s", tok.Loc(), tok.T)
 	}
+	tokenizer.Next()
 	return &Stmt{
 		Type:   StmtFork,
 		Token:  ident,
@@ -372,7 +377,7 @@ func (stmt *Stmt) check() error {
 			panic("check:StmtAssign")
 		}
 		if tok, ok := stmt.varScope[stmt.Idents[0].T]; ok {
-			return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
+			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 		}
 	case StmtBreak:
 		if len(stmt.Stmts) != 0 || len(stmt.Idents) > 1 {
@@ -397,13 +402,13 @@ func (stmt *Stmt) check() error {
 			panic("check:StmtFork")
 		}
 		if tok, ok := stmt.loopScope[stmt.Idents[0].T]; ok {
-			return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
+			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 		}
-		if forkStmt, ok := stmt.forkScope[stmt.Idents[0].T]; ok {
-			return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, forkStmt.Token.Loc())
+		if forkStmt, ok := stmt.forkScope[stmt.Idents[0].T]; ok && forkStmt != stmt {
+			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, forkStmt.Token.Loc())
 		}
 		if tok, ok := stmt.queueScope[stmt.Idents[0].T]; ok {
-			return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
+			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 		}
 		if len(stmt.Idents) == 2 {
 			if len(stmt.Stmts) > 0 {
@@ -422,10 +427,10 @@ func (stmt *Stmt) check() error {
 		}
 		if len(stmt.Idents) > 0 {
 			if tok, ok := stmt.loopScope[stmt.Idents[0].T]; ok {
-				return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
+				return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 			}
 			if tok, ok := stmt.queueScope[stmt.Idents[0].T]; ok {
-				return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
+				return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 			}
 		}
 	case StmtReceive:
@@ -436,7 +441,7 @@ func (stmt *Stmt) check() error {
 			return fmt.Errorf("%s: unknown queue %s", stmt.Idents[0].Loc(), stmt.Idents[0].T)
 		}
 		if tok, ok := stmt.varScope[stmt.Idents[1].T]; ok {
-			return fmt.Errorf("%s: redeclaration of %s originally declared at %s", stmt.Idents[1].Loc(), stmt.Idents[1].T, tok.Loc())
+			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[1].Loc(), stmt.Idents[1].T, tok.Loc())
 		}
 		if len(stmt.Idents) > 2 {
 			if _, ok := stmt.loopScope[stmt.Idents[2].T]; !ok {
@@ -597,7 +602,7 @@ func parseExpr(tokenizer *Tokenizer) (*Expr, error) {
 func parseLeftExpr(tokenizer *Tokenizer) (*Expr, error) {
 	tok, ok := tokenizer.Token()
 	if !ok {
-		return nil, fmt.Errorf("%s: unexpected EOF", tokenizer.Loc())
+		panic("parseLeftExpr") // parseLeftExpr is never called with potential EOF
 	}
 	if tok.T == "(" {
 		tokenizer.Next()
@@ -606,7 +611,10 @@ func parseLeftExpr(tokenizer *Tokenizer) (*Expr, error) {
 			return nil, err
 		}
 		endTok, ok := tokenizer.Token()
-		if !ok || endTok.T != ")" {
+		if !ok {
+			panic("parseLeftExpr") // EOF never follows successful parseExpr
+		}
+		if endTok.T != ")" {
 			return nil, fmt.Errorf("%s: unmatched (", tok.Loc())
 		}
 		tokenizer.Next()
@@ -651,7 +659,7 @@ func (expr *Expr) check(stmt *Stmt) error {
 		}
 		if _, ok := stmt.varScope[expr.Token.T]; !ok {
 			if _, ok := stmt.prescope[expr.Token.T]; !ok {
-				return fmt.Errorf("%s: unknown variable %s", expr.Token.Loc(), stmt.Token.T)
+				return fmt.Errorf("%s: unknown variable %s", expr.Token.Loc(), expr.Token.T)
 			}
 		}
 	case ExprVar:
@@ -659,7 +667,7 @@ func (expr *Expr) check(stmt *Stmt) error {
 			panic("check.ExprPrevVar")
 		}
 		if _, ok := stmt.varScope[expr.Token.T]; !ok {
-			return fmt.Errorf("%s: unknown variable %s", expr.Token.Loc(), stmt.Token.T)
+			return fmt.Errorf("%s: unknown variable %s", expr.Token.Loc(), expr.Token.T)
 		}
 	default:
 		panic("check:expr.Type")

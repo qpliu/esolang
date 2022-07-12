@@ -1,0 +1,28 @@
+1 = 0 0.
+prev = expr < 1.
+prev2 = expr < 1 prev.
+prev3 = (expr < 1) prev.
+expr = 1 (1 0).
+{
+}
+loop {
+}
+loop {
+  io < 1.
+  io > b.
+  q+{
+    loop {
+      q < 1 {
+        q2+q.
+        q2 > c q.
+        loop continue 0 0 c.
+        loop continue.
+      }
+    }
+    continue b.
+    break.
+  }
+  q > c loop.
+  continue.
+  loop break c.
+}
