@@ -1,0 +1,19 @@
+==001,1010
+io > b.
+break b.
+q+{
+  q > a.
+  q < 0 0 a.
+  break.
+}
+loop {
+  q < b {
+    q2+q.
+    q2 < a < 0.
+    q2 > a2.
+    io < a2.
+    loop break.
+  }
+  q > a.
+  io < a.
+}

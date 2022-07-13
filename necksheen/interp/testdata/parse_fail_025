@@ -1,4 +1,4 @@
-==:4:4: invalid + queue q2 declared at :3:1
+==:4:4: unknown + queue q2
 q+{}
 q2+q.
 q3+q2.

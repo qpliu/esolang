@@ -1,0 +1,12 @@
+==001000,11
+loop {
+  {
+    loop2 {
+      io > b.
+      loop break b.
+      a = 0 0 b.
+      io < a.
+    }
+  }
+}
+break.

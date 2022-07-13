@@ -54,16 +54,14 @@ identifier must not duplicate any loop identifier or queue identifier
 that is in scope.
 
 Queue identifiers are declared with fork statements and are referenced
-by fork, receive, and send statements and test expressions.  The scope
-a queue identifier starts with the declaration and ends at the end of
-the innermost enclosing loop statement, excluding the bodies of any
-nested fork statement.  The fork-scope of the queue identifier is the
-body of the innermost enclosing loop of the fork statement.  Queue
-identifiers must not duplicate any queue identifier that is in
-fork-scope or loop identifier that is in scope.  There is one
-predefined queue, `io`, which can be used to receive input and send
-output.  The queue identifier is also the loop identifier of the
-bodies of fork statements and send statements.
+by fork, receive, and send statements.  The scope a queue identifier
+starts with the declaration and ends at the end of the innermost
+enclosing loop statement, excluding the bodies of other fork
+statements.  Queue identifiers must not duplicate any queue identifier
+that is in scope or any loop identifier that is in scope.  There is
+one predefined queue, `io`, which can be used to receive input and
+send output.  The queue identifier is also the loop identifier of the
+body of the fork statement.
 
 Variable identifiers are declared with assignment, receive, or test
 statements.  The scope of the variable starts with the statement
@@ -97,20 +95,24 @@ continued, all queues declared in the loop are closed.
 A fork statement declares a queue with either a loop or another queue.
 Executing a fork starts a new thread.  The forking thread can
 communicate with the new thread by receiving from or sending to the
-queue.  The new thread executes the unnamed loop and can communicate
-with the forking thread by receiving from or sending to the queue.  If
-the fork statement references another queue instead of specifying a
-loop, the other queue must be declared with a loop and must be
-declared in a loop that encloses the fork statement, and the new
-thread executes that loop and communicates with the forking thread
-with that other queue.  The new thread exits when it breaks the loop
-of the fork statement.  The queue identifier is also the loop
-identifier in the body of the loop.
+queue.  The new thread executes the body of the fork statement as a
+loop and can communicate with the forking thread by receiving from or
+sending to the queue.  If the fork statement references another queue
+instead of specifying a loop, the other queue must be declared with a
+loop and the other queue identifier must be in scope, and the new
+thread communicated with the forking thread with the other queue
+identifier, while the forking thread communicates with the new thread
+with the queue identifier of the fork statement.  The new thread exits
+when it breaks the loop that is the body of the fork statement, and
+the queue identifier is also the loop identifier.  The values and
+previous values of variables that are declared outside of the fork
+statement and whose scope includes the fork statement are frozen at
+the time the fork statement is executed for the forked thread.
 
-A loop statement is an optionally named list of statements.  When
-execution reaches the end of the list of statements, all queues
-declared in the loop are closed and execution resumes at the start of
-the list of statements.
+A loop statement is an optionally named list of statements that are
+executed in sequence.  When execution reaches the end of the list of
+statements, all queues declared in the loop are closed and execution
+resumes at the start of the list of statements.
 
 A receive statement declares a variable, which is set to the bit
 received from the queue.  If the queue is closed for receiving, the
@@ -123,7 +125,9 @@ the loop is executed.  The loop is unnamed, so if a named `break` or a
 named `continue` is needed, a nested named loop should be used.  The
 loop cannot have the name of the queue when in the body of a fork
 statement that declares the queue, since the loop in the fork has that
-name.
+name.  (Due to a flaw in the implementation, if an empty loop is
+specified, the implementation does not execute the (infinite) loop if
+the queue is closed for sending.)
 
 Expressions
 -----------
@@ -137,7 +141,9 @@ declared.  If executing the first iteration of the loop or if the
 variable declaration was not executed in any previous iteration, the
 previous-variable expression evaluates to its subexpression (to the
 right of the `<`).  The expression must be in either the scope or the
-pre-scope of the variable.
+pre-scope of the variable.  The predefined variable `0` has no
+previous value, so previous-variable expressions with `0` always
+evaluate to their subexpressions.
 
 A nand expression is two expressions, which evaluates to the nand of
 its subexpressions.  The nand operation is left-associative.
@@ -152,8 +158,7 @@ bits between the forking thread and the new thread.  A queue is
 initially open. The scope of the queue in the forking thread are the
 statements in the innermost enclosing loop that follow the fork
 statement.  The scope of the queue in the new thread is the body of
-the fork statement.  The fork-scope of the queue is the body of the
-innermost enclosing loop.
+the fork statement.
 
 All queues declared in a loop are closed when the loop iterates
 (either by a continue statement or by reaching the end of the loop) or
@@ -164,10 +169,9 @@ The predefined `io` queue is used for input and output.  The queue is
 open for receiving as long as there is pending input.  After the input
 has been completely received, the 'io' queue is closed for receiving.
 The queue is always open for sending.  The scope of the `io` queue is
-the program, excluding the bodies of any fork statements.  A fork
-statement cannot reference the `io` queue, since the `io` queue is not
-declared with a fork statement.  The fork-scope of the `io` queue is
-the entire program.
+the program, excluding the bodies of any fork statements.  The `io`
+queue has no fork body, and thus cannot be referenced by a fork
+statement.
 
 Examples
 --------

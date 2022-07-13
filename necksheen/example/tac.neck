@@ -1,0 +1,135 @@
+  stack+{
+    == input: push: true bit, pop: false ignored
+    == output: push: ignore ignore, pop: not-empty bit-or-ignore-if-empty
+    loop {
+      stack > op. == true bit: push, false ignore: pop
+      {
+        break op.  == skip if push
+        stack > _. == discard argument
+	== pop (empty)
+        stack < 0.
+        stack < 0.
+	loop continue.
+      }
+      stack > bit.
+      stack < 0.
+      stack < 0.
+      push+stack.
+      {
+        top = new-top < bit.
+        stack > op2.
+        stack > arg.
+        push < op2.
+	push < top.
+        push > next-not-empty.
+	push > next-top.
+        stack < 0 0.
+        stack < top.
+
+        loop continue 0 0 (0 0 op2 (0 0 next-not-empty)).
+        == continue if not (op2 is true (push) or next-not-empty is true)
+
+        not-arg-or-true = op2 arg.
+        == if op2 is true then (not arg) otherwise true
+
+        true-or-not-next-top = 0 0 op2 next-top.
+        == if op2 is false then (not next-top) otherwise true
+
+	new-top = not-arg-or-true true-or-not-next-top.
+        == if op2 is false, new-top = next-top, if op2 is true, new-top = arg
+      }
+    }
+  }
+  {
+    io > bit1. == breaks loop when io is closed for receiving on EOF
+    io > bit2. == breaks loop when io is closed for receiving on EOF
+    io > bit3. == breaks loop when io is closed for receiving on EOF
+    io > bit4. == breaks loop when io is closed for receiving on EOF
+    io > bit5. == breaks loop when io is closed for receiving on EOF
+    io > bit6. == breaks loop when io is closed for receiving on EOF
+    io > bit7. == breaks loop when io is closed for receiving on EOF
+    io > bit8. == breaks loop when io is closed for receiving on EOF
+    stack < 0 0. == push
+    stack < bit1.
+    stack > ignore1-1.
+    stack > ignore2-1.
+    stack < 0 0. == push
+    stack < bit2.
+    stack > ignore1-2.
+    stack > ignore2-2.
+    stack < 0 0. == push
+    stack < bit3.
+    stack > ignore1-3.
+    stack > ignore2-3.
+    stack < 0 0. == push
+    stack < bit4.
+    stack > ignore1-4.
+    stack > ignore2-4.
+    stack < 0 0. == push
+    stack < bit5.
+    stack > ignore1-5.
+    stack > ignore2-5.
+    stack < 0 0. == push
+    stack < bit6.
+    stack > ignore1-6.
+    stack > ignore2-6.
+    stack < 0 0. == push
+    stack < bit7.
+    stack > ignore1-7.
+    stack > ignore2-7.
+    stack < 0 0. == push
+    stack < bit8.
+    stack > ignore1-8.
+    stack > ignore2-8.
+  }
+  {
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty8.
+    break 0 0 not-empty8.
+    stack > bit8.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty7.
+    break 0 0 not-empty7.
+    stack > bit7.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty6.
+    break 0 0 not-empty6.
+    stack > bit6.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty5.
+    break 0 0 not-empty5.
+    stack > bit5.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty4.
+    break 0 0 not-empty4.
+    stack > bit4.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty3.
+    break 0 0 not-empty3.
+    stack > bit3.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty2.
+    break 0 0 not-empty2.
+    stack > bit2.
+    stack < 0. == pop
+    stack < 0. == ignored
+    stack > not-empty1.
+    break 0 0 not-empty1.
+    stack > bit1.
+    io < bit1.
+    io < bit2.
+    io < bit3.
+    io < bit4.
+    io < bit5.
+    io < bit6.
+    io < bit7.
+    io < bit8.
+  }
+  break.

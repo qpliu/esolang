@@ -37,7 +37,7 @@ type Stmt struct {
 	prescope   map[string]Token
 	loopScope  map[string]Token
 	queueScope map[string]Token
-	forkScope  map[string]*Stmt
+	ForkScope  map[string]*Stmt
 }
 
 type Expr struct {
@@ -285,7 +285,7 @@ func (stmt *Stmt) calculateVarScopes(varScope map[string]Token) {
 
 func (stmt *Stmt) calculatePrescopes(prescope map[string]Token) {
 	stmt.prescope = prescope
-	for i := len(stmt.Stmts)-1; i >= 0; i-- {
+	for i := len(stmt.Stmts) - 1; i >= 0; i-- {
 		nestedStmt := stmt.Stmts[i]
 		var ident Token
 		switch nestedStmt.Type {
@@ -330,21 +330,19 @@ func (stmt *Stmt) calculateLoopScopes(loopScope map[string]Token) {
 
 func (stmt *Stmt) calculateForkScopes(forkScope map[string]*Stmt) {
 	if len(stmt.Stmts) == 0 {
-		stmt.forkScope = forkScope
+		stmt.ForkScope = forkScope
 		return
 	}
-	newForkScope := map[string]*Stmt{}
-	for k, v := range forkScope {
-		newForkScope[k] = v
-	}
 	for _, nestedStmt := range stmt.Stmts {
-		switch nestedStmt.Type {
-		case StmtFork:
+		if nestedStmt.Type == StmtFork && len(nestedStmt.Idents) == 1 {
+			newForkScope := map[string]*Stmt{}
+			for k, v := range forkScope {
+				newForkScope[k] = v
+			}
 			newForkScope[nestedStmt.Idents[0].T] = nestedStmt
+			forkScope = newForkScope
 		}
-	}
-	for _, nestedStmt := range stmt.Stmts {
-		nestedStmt.calculateForkScopes(newForkScope)
+		nestedStmt.calculateForkScopes(forkScope)
 	}
 }
 
@@ -404,21 +402,16 @@ func (stmt *Stmt) check() error {
 		if tok, ok := stmt.loopScope[stmt.Idents[0].T]; ok {
 			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 		}
-		if forkStmt, ok := stmt.forkScope[stmt.Idents[0].T]; ok && forkStmt != stmt {
-			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, forkStmt.Token.Loc())
-		}
 		if tok, ok := stmt.queueScope[stmt.Idents[0].T]; ok {
 			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[0].Loc(), stmt.Idents[0].T, tok.Loc())
 		}
 		if len(stmt.Idents) == 2 {
 			if len(stmt.Stmts) > 0 {
 				panic("check:StmtFork")
-				
+
 			}
-			if forkStmt, ok := stmt.forkScope[stmt.Idents[1].T]; !ok {
-				return fmt.Errorf("%s: unknown queue %s", stmt.Idents[1].Loc(), stmt.Idents[1].T)
-			} else if len(forkStmt.Idents) != 1 {
-				return fmt.Errorf("%s: invalid + queue %s declared at %s", stmt.Idents[1].Loc(), stmt.Idents[1].T, forkStmt.Token.Loc())
+			if _, ok := stmt.ForkScope[stmt.Idents[1].T]; !ok {
+				return fmt.Errorf("%s: unknown + queue %s", stmt.Idents[1].Loc(), stmt.Idents[1].T)
 			}
 		}
 	case StmtLoop:

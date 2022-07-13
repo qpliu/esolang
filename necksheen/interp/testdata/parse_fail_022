@@ -1,2 +1,2 @@
-==:2:1: duplicate declaration of fork also declared at :2:8
+==:2:8: duplicate declaration of fork also declared at :2:1
 fork+{}fork+{}
