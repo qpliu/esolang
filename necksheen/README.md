@@ -167,7 +167,7 @@ receiving.
 
 The predefined `io` queue is used for input and output.  The queue is
 open for receiving as long as there is pending input.  After the input
-has been completely received, the 'io' queue is closed for receiving.
+has been completely received, the `io` queue is closed for receiving.
 The queue is always open for sending.  The scope of the `io` queue is
 the program, excluding the bodies of any fork statements.  The `io`
 queue has no fork body, and thus cannot be referenced by a fork
@@ -236,61 +236,77 @@ tac (reverses the bytes of input, partial bytes at the end are discarded)
     io > bit8. == breaks loop when io is closed for receiving on EOF
     stack < 0 0. == push
     stack < bit1.
+    stack > ignore1-1.
+    stack > ignore2-1.
     stack < 0 0. == push
     stack < bit2.
+    stack > ignore1-2.
+    stack > ignore2-2.
     stack < 0 0. == push
     stack < bit3.
+    stack > ignore1-3.
+    stack > ignore2-3.
     stack < 0 0. == push
     stack < bit4.
+    stack > ignore1-4.
+    stack > ignore2-4.
     stack < 0 0. == push
     stack < bit5.
+    stack > ignore1-5.
+    stack > ignore2-5.
     stack < 0 0. == push
     stack < bit6.
+    stack > ignore1-6.
+    stack > ignore2-6.
     stack < 0 0. == push
     stack < bit7.
+    stack > ignore1-7.
+    stack > ignore2-7.
     stack < 0 0. == push
     stack < bit8.
+    stack > ignore1-8.
+    stack > ignore2-8.
   }
   {
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty8.
+    break 0 0 not-empty8.
     stack > bit8.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty7.
+    break 0 0 not-empty7.
     stack > bit7.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty6.
+    break 0 0 not-empty6.
     stack > bit6.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty5.
+    break 0 0 not-empty5.
     stack > bit5.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty4.
+    break 0 0 not-empty4.
     stack > bit4.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty3.
+    break 0 0 not-empty3.
     stack > bit3.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty2.
+    break 0 0 not-empty2.
     stack > bit2.
     stack < 0. == pop
     stack < 0. == ignored
-    stack > not-empty.
-    break 0 0 not-empty.
+    stack > not-empty1.
+    break 0 0 not-empty1.
     stack > bit1.
     io < bit1.
     io < bit2.
