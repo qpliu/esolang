@@ -15,6 +15,10 @@ Neck Sheen takes ideas from its precursor, [Neck Sheen
 (precursor)](precursor/README.md), replacing the thread topology with
 a dynamic tree.
 
+Deadlocks are easy to create in Neck Sheen.  I believe that the only
+possible race condition is sending to a queue that may or may not be
+closed yet.
+
 Grammar
 -------
 ```
@@ -41,7 +45,7 @@ Grammar
 Comments begin with `==` and extend to the end of the line.
 
 Identifiers are uninterrupted sequences of non-space characters,
-excluding `=`, `.`, `(`, `)`, `{`, `}`, `<`, `>`, and may not be
+excluding `=`, `.`, `(`, `)`, `{`, `}`, `<`, `>`, `+`, and may not be
 `break` or `continue`.
 
 There are two identifier name spaces: one for loops and queues, and
@@ -71,26 +75,28 @@ starts with the start of the innermost enclosing loop statement and
 ends with the declaration.  Variable identifiers must not duplicate
 any variable identifier that is in scope.  There is one predefined
 variable, `0`, which evaluates to false.  Expressions may only
-reference variables that are in scope, except for previous-variable
-expressions, which may be either in the variable's scope or the
-variable's pre-scope.
+reference variables that are in scope, except for the left variable in
+previous-variable expressions, which must be either in the variable's
+scope or the variable's pre-scope.
 
 Statements
 ----------
-The statements of a program form an implicit unnamed loop.
+The statements of a program form an implicit unnamed loop.  Execution
+terminates when the loop is exited.
 
 An assignment statement declares and assigns the (single bit) value of
 the expression to the variable.  A variable may not be reassigned.
 
 A break statement exits the named or, if unspecified, the innermost
-enclosing, loop statement if the expression evaluates to true or if
-the expression is omitted.  If the loop is exited, all queues declared
-in the loop are closed.
+enclosing loop statement if the expression evaluates to true or if the
+expression is omitted.  If a loop is exited, all queues declared in
+the loop are closed.
 
 A continue statement returns execution to the top of the named or, if
-unspecified, the innermost enclosing, loop statement if the expression
+unspecified the innermost enclosing, loop statement if the expression
 evaluates to true or if the expression is omitted.  If the loop is
-continued, all queues declared in the loop are closed.
+continued, all queues declared in the loop are closed.  If a loop is
+exited, all queues declared in the loop are closed.
 
 A fork statement declares a queue with either a loop or another queue.
 Executing a fork starts a new thread.  The forking thread can
@@ -112,12 +118,16 @@ the time the fork statement is executed for the forked thread.
 A loop statement is an optionally named list of statements that are
 executed in sequence.  When execution reaches the end of the list of
 statements, all queues declared in the loop are closed and execution
-resumes at the start of the list of statements.
+resumes at the start of the list of statements.  If the loop is
+exited, either due to a `break` statement, a `receive` statement, or a
+`continue` statement for an enclosing loop, all queues declared in the
+loop are closed.
 
 A receive statement declares a variable, which is set to the bit
 received from the queue.  If the queue is closed for receiving, the
 named, or if unspecified, the innermost enclosing, loop statement is
-exited.
+exited.  If a loop is exited, all queues declared in the loop are
+closed.
 
 A send statement evaluates the expression and sends the result to the
 queue.  If the queue is closed for sending and the loop is specified,
@@ -125,9 +135,9 @@ the loop is executed.  The loop is unnamed, so if a named `break` or a
 named `continue` is needed, a nested named loop should be used.  The
 loop cannot have the name of the queue when in the body of a fork
 statement that declares the queue, since the loop in the fork has that
-name.  (Due to a flaw in the implementation, if an empty loop is
-specified, the implementation does not execute the (infinite) loop if
-the queue is closed for sending.)
+name.  (The [implementation](interp) has a design flaw where, if a
+send statement specifies an empty loop, the implementation does not
+execute the (infinite) loop if the queue is closed for sending.)
 
 Expressions
 -----------
@@ -155,7 +165,7 @@ Queues
 ------
 A fork statement declares a queue that can be used to send and receive
 bits between the forking thread and the new thread.  A queue is
-initially open. The scope of the queue in the forking thread are the
+initially open.  The scope of the queue in the forking thread are the
 statements in the innermost enclosing loop that follow the fork
 statement.  The scope of the queue in the new thread is the body of
 the fork statement.
@@ -165,13 +175,13 @@ All queues declared in a loop are closed when the loop iterates
 when the loop exits.  A closed queue is closed for both sending and
 receiving.
 
-The predefined `io` queue is used for input and output.  The queue is
-open for receiving as long as there is pending input.  After the input
-has been completely received, the `io` queue is closed for receiving.
-The queue is always open for sending.  The scope of the `io` queue is
-the program, excluding the bodies of any fork statements.  The `io`
-queue has no fork body, and thus cannot be referenced by a fork
-statement.
+The predefined `io` queue is used for input and output.  The `io`
+queue is open for receiving as long as there is pending input.  After
+the input has been completely received, the `io` queue is closed for
+receiving.  The queue is always open for sending.  The scope of the
+`io` queue is the program, excluding the bodies of any fork
+statements.  The `io` queue has no fork body, and thus cannot be
+referenced by a fork statement.
 
 Examples
 --------
@@ -318,4 +328,17 @@ tac (reverses the bytes of input, partial bytes at the end are discarded)
     io < bit8.
   }
   break.
+```
+
+race condition - outputs zero or more 0 bits, depending on a race
+```
+loop {
+  q+{
+    break.
+  }
+  q > _ {
+    loop break.
+  }
+  io < 0.
+}
 ```
