@@ -210,7 +210,9 @@ func interp(scope *loopScope) {
 			}
 			bit, open := queue.Receive()
 			if open {
-				scope.vars[stmt.Idents[1].T] = bit
+				if len(stmt.Idents) > 1 && stmt.Idents[1].T != ">" {
+					scope.vars[stmt.Idents[1].T] = bit
+				}
 				scope.stmtIndex++
 				continue
 			}

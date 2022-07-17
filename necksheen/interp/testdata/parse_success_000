@@ -16,6 +16,8 @@ loop {
         q2+q.
         q2 > c q.
         loop continue 0 0 c.
+        q2 > > loop.
+        q2 >.
         loop continue.
       }
     }

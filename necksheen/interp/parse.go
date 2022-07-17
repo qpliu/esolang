@@ -202,7 +202,15 @@ func parseStmtReceive(ident Token, tokenizer *Tokenizer) (*Stmt, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s: unexpected EOF", tokenizer.Loc())
 	}
-	if !tok.IsIdent() {
+	if tok.T == "." {
+		tokenizer.Next()
+		return &Stmt{
+			Type:   StmtReceive,
+			Token:  ident,
+			Idents: []Token{ident},
+		}, nil
+	}
+	if !tok.IsIdent() && tok.T != ">" {
 		return nil, fmt.Errorf("%s: unexpected token: %s", tok.Loc(), tok.T)
 	}
 	stmt := &Stmt{
@@ -270,7 +278,13 @@ func (stmt *Stmt) calculateVarScopes(varScope map[string]Token) {
 		case StmtAssign:
 			ident = nestedStmt.Idents[0]
 		case StmtReceive:
+			if len(nestedStmt.Idents) < 2 {
+				continue
+			}
 			ident = nestedStmt.Idents[1]
+			if ident.T == ">" {
+				continue
+			}
 		default:
 			continue
 		}
@@ -292,7 +306,15 @@ func (stmt *Stmt) calculatePrescopes(prescope map[string]Token) {
 		case StmtAssign:
 			ident = nestedStmt.Idents[0]
 		case StmtReceive:
+			if len(nestedStmt.Idents) < 2 {
+				nestedStmt.calculatePrescopes(prescope)
+				continue
+			}
 			ident = nestedStmt.Idents[1]
+			if ident.T == ">" {
+				nestedStmt.calculatePrescopes(prescope)
+				continue
+			}
 		default:
 			nestedStmt.calculatePrescopes(prescope)
 			continue
@@ -427,14 +449,16 @@ func (stmt *Stmt) check() error {
 			}
 		}
 	case StmtReceive:
-		if len(stmt.Stmts) > 0 || len(stmt.Idents) < 2 || len(stmt.Idents) > 3 || stmt.Expr != nil {
+		if len(stmt.Stmts) > 0 || len(stmt.Idents) < 1 || len(stmt.Idents) > 3 || stmt.Expr != nil {
 			panic("check:StmtReceive")
 		}
 		if _, ok := stmt.queueScope[stmt.Idents[0].T]; !ok {
 			return fmt.Errorf("%s: unknown queue %s", stmt.Idents[0].Loc(), stmt.Idents[0].T)
 		}
-		if tok, ok := stmt.varScope[stmt.Idents[1].T]; ok {
-			return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[1].Loc(), stmt.Idents[1].T, tok.Loc())
+		if len(stmt.Idents) > 1 && stmt.Idents[1].T != ">" {
+			if tok, ok := stmt.varScope[stmt.Idents[1].T]; ok {
+				return fmt.Errorf("%s: duplicate declaration of %s also declared at %s", stmt.Idents[1].Loc(), stmt.Idents[1].T, tok.Loc())
+			}
 		}
 		if len(stmt.Idents) > 2 {
 			if _, ok := stmt.loopScope[stmt.Idents[2].T]; !ok {
@@ -534,11 +558,14 @@ func (stmt *Stmt) unparse(b *strings.Builder, indent string) {
 	case StmtReceive:
 		b.WriteString(indent)
 		b.WriteString(stmt.Idents[0].T)
-		b.WriteString(" > ")
-		b.WriteString(stmt.Idents[1].T)
-		if len(stmt.Idents) > 2 {
+		b.WriteString(" >")
+		if len(stmt.Idents) > 1 {
 			b.WriteString(" ")
-			b.WriteString(stmt.Idents[2].T)
+			b.WriteString(stmt.Idents[1].T)
+			if len(stmt.Idents) > 2 {
+				b.WriteString(" ")
+				b.WriteString(stmt.Idents[2].T)
+			}
 		}
 		b.WriteString(".\n")
 	case StmtSend:

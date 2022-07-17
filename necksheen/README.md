@@ -16,8 +16,8 @@ Neck Sheen takes ideas from its precursor, [Neck Sheen
 a dynamic tree.
 
 Deadlocks are easy to create in Neck Sheen.  I believe that the only
-possible race condition is sending to a queue that may or may not be
-closed yet.
+possible race condition is sending to an empty queue that may or may
+not be closed yet.
 
 Grammar
 -------
@@ -28,10 +28,12 @@ Grammar
   assignment = variable '=' expression '.'
   break = loop-identifier? 'break' expression? '.'
   continue = loop-identifier? 'continue' expression? '.'
-  fork = queue '+' (queue '.' | '{' statement* '}')
-  loop = loop-identifier? '{' statement* '}'
-  receive = queue '>' variable loop-identifier? '.'
-  send = queue '<' expression ('.' | '{' statement* '}')
+  fork = queue '+' (queue '.' | loop-body)
+  loop = loop-identifier? loop-body
+  receive = queue '>' ((variable | '>') loop-identifier?)? '.'
+  send = queue '<' expression ('.' | loop-body)
+
+  loop-body = '{' statement* '}'
 
   expression = variable | previous-variable | nand | '(' expression ')'
   previous-variable = variable '<' expression
@@ -51,83 +53,87 @@ excluding `=`, `.`, `(`, `)`, `{`, `}`, `<`, `>`, `+`, and may not be
 There are two identifier name spaces: one for loops and queues, and
 one for variables.
 
-Loop identifiers are declared with loop statements and are optionally
-referenced by break and continue statements.  The scope of a loop
-identifier is its body, excluding any fork statements.  The loop
-identifier must not duplicate any loop identifier or queue identifier
-that is in scope.
+Loop identifiers are declared with loop statements and fork statements
+and are optionally referenced by break and continue statements.  The
+scope of a loop identifier is its body, excluding the bodies of any
+fork statements.  The loop identifier must not duplicate any loop
+identifier or queue identifier that is in scope.
 
 Queue identifiers are declared with fork statements and are referenced
 by fork, receive, and send statements.  The scope a queue identifier
 starts with the declaration and ends at the end of the innermost
-enclosing loop statement, excluding the bodies of other fork
-statements.  Queue identifiers must not duplicate any queue identifier
-that is in scope or any loop identifier that is in scope.  There is
-one predefined queue, `io`, which can be used to receive input and
-send output.  The queue identifier is also the loop identifier of the
-body of the fork statement.
+enclosing loop, excluding the bodies of other fork statements.  Queue
+identifiers must not duplicate any queue identifier that is in scope
+or any loop identifier that is in scope.  There is one predefined
+queue, `io`, which can be used to receive input and send output.  If
+the fork statement has a loop body, the queue identifier is its loop
+identifier.
 
-Variable identifiers are declared with assignment, receive, or test
+Variable identifiers are declared with assignment and receive
 statements.  The scope of the variable starts with the statement
 following the declaration and ends at the end of the innermost
-enclosing loop statement.  A variable also has a pre-scope, which
-starts with the start of the innermost enclosing loop statement and
-ends with the declaration.  Variable identifiers must not duplicate
-any variable identifier that is in scope.  There is one predefined
-variable, `0`, which evaluates to false.  Expressions may only
-reference variables that are in scope, except for the left variable in
-previous-variable expressions, which must be either in the variable's
-scope or the variable's pre-scope.
+enclosing loop.  A variable also has a pre-scope, which starts with
+the start of the innermost enclosing loop and ends with the
+declaration.  Variable identifiers must not duplicate any variable
+identifier that is in scope.  There is one predefined variable, `0`,
+which evaluates to false.  Expressions may only reference variables
+that are in scope, except for the left variable in previous-variable
+expressions, which must be either in the variable's scope or the
+variable's pre-scope.
 
 Statements
 ----------
 The statements of a program form an implicit unnamed loop.  Execution
-terminates when the loop is exited.
+of the program terminates when that loop is exited.
 
 An assignment statement declares and assigns the (single bit) value of
 the expression to the variable.  A variable may not be reassigned.
 
 A break statement exits the named or, if unspecified, the innermost
-enclosing loop statement if the expression evaluates to true or if the
-expression is omitted.  If a loop is exited, all queues declared in
-the loop are closed.
+enclosing loop if the expression evaluates to true or if the
+expression is omitted.  If a loop is exited, all enclosed loop bodies
+are exited.  If a loop is exited, all queues declared in that loop are
+closed.
 
 A continue statement returns execution to the top of the named or, if
-unspecified the innermost enclosing, loop statement if the expression
-evaluates to true or if the expression is omitted.  If the loop is
-continued, all queues declared in the loop are closed.  If a loop is
-exited, all queues declared in the loop are closed.
+unspecified, the innermost enclosing loop if the expression evaluates
+to true or if the expression is omitted.  If the loop is continued,
+all enclosed loops are exited, and all queues declared in the loop are
+closed.  If a loop is exited, all queues declared in that loop are
+closed.
 
-A fork statement declares a queue with either a loop or another queue.
-Executing a fork starts a new thread.  The forking thread can
+A fork statement declares a queue with either a loop body or another
+queue.  Executing a fork starts a new thread.  The forking thread can
 communicate with the new thread by receiving from or sending to the
-queue.  The new thread executes the body of the fork statement as a
-loop and can communicate with the forking thread by receiving from or
+queue.  The new thread executes the loop body of the fork statement
+and can communicate with the forking thread by receiving from or
 sending to the queue.  If the fork statement references another queue
-instead of specifying a loop, the other queue must be declared with a
-loop and the other queue identifier must be in scope, and the new
-thread communicated with the forking thread with the other queue
+instead of specifying a loop body, the other queue must be declared
+with a loop body and the other queue identifier must be in scope, and
+the new thread communicates with the forking thread with the other queue
 identifier, while the forking thread communicates with the new thread
 with the queue identifier of the fork statement.  The new thread exits
-when it breaks the loop that is the body of the fork statement, and
-the queue identifier is also the loop identifier.  The values and
-previous values of variables that are declared outside of the fork
-statement and whose scope includes the fork statement are frozen at
-the time the fork statement is executed for the forked thread.
+when it exits the loop body of the fork statement.  For the forked
+thread, the values and previous values of variables that are declared
+outside of the fork statement and whose scope includes the fork
+statement are frozen at the time the fork statement is executed.
 
 A loop statement is an optionally named list of statements that are
 executed in sequence.  When execution reaches the end of the list of
-statements, all queues declared in the loop are closed and execution
-resumes at the start of the list of statements.  If the loop is
-exited, either due to a `break` statement, a `receive` statement, or a
-`continue` statement for an enclosing loop, all queues declared in the
+statements or when the loop is continued with a `continue` statement,
+all queues declared in the loop are closed and execution resumes at
+the start of the list of statements.  If the loop is exited, either
+due to a `break` statement, a `receive` statement, or a `continue`
+statement for an enclosing loop, all queues declared in the
 loop are closed.
 
-A receive statement declares a variable, which is set to the bit
-received from the queue.  If the queue is closed for receiving, the
-named, or if unspecified, the innermost enclosing, loop statement is
-exited.  If a loop is exited, all queues declared in the loop are
-closed.
+A receive statement optionally declares a variable, which is set to
+the bit received from the queue.  If the queue is closed for
+receiving, the named, or, if unspecified, the innermost enclosing loop
+is exited.  If a loop is exited, all queues declared in the loop are
+closed.  If the variable is omitted, the received bit is ignored.  To
+ignore the received bit while specifying a loop, put a second `>` in the
+place of the variable.
 
 A send statement evaluates the expression and sends the result to the
 queue.  If the queue is closed for sending and the loop is specified,
@@ -175,6 +181,8 @@ All queues declared in a loop are closed when the loop iterates
 when the loop exits.  A closed queue is closed for both sending and
 receiving.
 
+A queue is also closed when its forked thread exits.
+
 The predefined `io` queue is used for input and output.  The `io`
 queue is open for receiving as long as there is pending input.  After
 the input has been completely received, the `io` queue is closed for
@@ -199,8 +207,8 @@ tac (reverses the bytes of input, partial bytes at the end are discarded)
     loop {
       stack > op. == true bit: push, false ignore: pop
       {
-        break op.  == skip if push
-        stack > _. == discard argument
+        break op. == skip if push
+        stack >.  == ignore argument
 	== pop (empty)
         stack < 0.
         stack < 0.
@@ -246,36 +254,36 @@ tac (reverses the bytes of input, partial bytes at the end are discarded)
     io > bit8. == breaks loop when io is closed for receiving on EOF
     stack < 0 0. == push
     stack < bit1.
-    stack > ignore1-1.
-    stack > ignore2-1.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit2.
-    stack > ignore1-2.
-    stack > ignore2-2.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit3.
-    stack > ignore1-3.
-    stack > ignore2-3.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit4.
-    stack > ignore1-4.
-    stack > ignore2-4.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit5.
-    stack > ignore1-5.
-    stack > ignore2-5.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit6.
-    stack > ignore1-6.
-    stack > ignore2-6.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit7.
-    stack > ignore1-7.
-    stack > ignore2-7.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit8.
-    stack > ignore1-8.
-    stack > ignore2-8.
+    stack >.
+    stack >.
   }
   {
     stack < 0. == pop
@@ -336,9 +344,24 @@ loop {
   q+{
     break.
   }
-  q > _ {
+  q < 0 {
     loop break.
   }
   io < 0.
+}
+```
+
+2-bit variable
+```
+var+{
+  == input: op input-bit0 input-bit1
+  == output: bit0 bit1
+  == if op is true set var to input-bit0 and input-bit1
+  == if op is false get var, input-bit0 and input-bit1 are ignored
+  initial-bit0 = 0. initial-bit1 = 0.
+  var>op. var>input-bit0. var>input-bit1.
+  bit0 = (op input-bit0) ((0 0 op) bit0 < initial-bit0).
+  bit1 = (op input-bit1) ((0 0 op) bit1 < initial-bit1).
+  var<bit0. var<bit1.
 }
 ```

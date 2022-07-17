@@ -4,8 +4,8 @@
     loop {
       stack > op. == true bit: push, false ignore: pop
       {
-        break op.  == skip if push
-        stack > _. == discard argument
+        break op. == skip if push
+        stack >.  == ignore argument
 	== pop (empty)
         stack < 0.
         stack < 0.
@@ -51,36 +51,36 @@
     io > bit8. == breaks loop when io is closed for receiving on EOF
     stack < 0 0. == push
     stack < bit1.
-    stack > ignore1-1.
-    stack > ignore2-1.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit2.
-    stack > ignore1-2.
-    stack > ignore2-2.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit3.
-    stack > ignore1-3.
-    stack > ignore2-3.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit4.
-    stack > ignore1-4.
-    stack > ignore2-4.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit5.
-    stack > ignore1-5.
-    stack > ignore2-5.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit6.
-    stack > ignore1-6.
-    stack > ignore2-6.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit7.
-    stack > ignore1-7.
-    stack > ignore2-7.
+    stack >.
+    stack >.
     stack < 0 0. == push
     stack < bit8.
-    stack > ignore1-8.
-    stack > ignore2-8.
+    stack >.
+    stack >.
   }
   {
     stack < 0. == pop
