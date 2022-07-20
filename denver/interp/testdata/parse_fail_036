@@ -1,0 +1,2 @@
+==:2:39: unexpected token <
+main{loop{{[self<self{inner[self<self{<}]}]}}}

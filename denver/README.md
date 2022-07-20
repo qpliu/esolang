@@ -33,7 +33,7 @@ Grammar
   spawn = '[' routine-identifier expression* ']'
 
   message-statement-arm = loop-identifier? (receive | send)
-  receive = variable-identifier variable-identifier '<' expression? body
+  receive = variable-identifier variable-identifier '<' expression* body
   send = expression '<' expression body
 
   loop-identifier = identifier
@@ -115,10 +115,11 @@ the message statement is executed again.
 A send arm sends its right argument to its left argument.
 
 A receive arm assigns the message received to the first variable on
-the left and the sender to the second variable on the left.  If the
-right argument is specified, it can only receive from the thread that
-is its right argument.  If the right argument is not specified, it can
-receive from any thread.
+the left and the sender to the second variable on the left.  The first
+variable and the second variable must not be the same variable.  The
+arguments on the right is a list of sender threads.  If the list is
+not empty, it can only receive from a thread in the list.  If the list
+is empty, it can receive from any thread.
 
 Loop identifiers
 ----------------
@@ -160,13 +161,13 @@ arguments than parameters, the remaining arguments are ignored.
 There are also some special threads.
 
 ### Main thread
-The main thread is spawned when executing starts and executes the
-`main` routine.  If it has parameters, the first parameters is set to
+The main thread is spawned when the program starts and executes the
+`main` routine.  If it has parameters, the first parameter is set to
 the system thread.  Any additional parameters are set to the `null`
 thread.
 
 ### Null thread
-Uninitialized variables evaluated to the `null` thread, which never
+Uninitialized variables are set to the `null` thread, which never
 sends messages and ignores any message it receives.
 
 ### System thread
@@ -220,33 +221,38 @@ Examples
 ### cat
 ```
 main system {
-  acquire-system [
-    system < self {
-      [
-        resp < system {
-          resp ! null acquire-system break
-          break
-        }
-      ]
-    }
-  ]
-  [ system < system { break } ]
-  [ in _ < system { break } ]
-  [ system < system { break } ]
-  [ out _ < system { break } ]
-  [ system < null { break } ]
+  [resp=null system < self { [resp < system {break}] }]
+  [system < system { break }]
+  [in _ < system { break }]
+  [system < system { break }]
+  [out _ < system { break }]
+  [system < null { break }]
 
   state < self
   == state=self: receiving, state=null: sending 0, state=in: sending 1
-  [
-    state = self state _ < in {
-      state = null break
-      state ! in state < null
+  [ state=self state _ < in {
+      state=null break
+      state!in state < null
     }
-    state ! self out < state {
+    state!self out < state {
       state < self
     }
   ]
   break
+}
+```
+### lock
+```
+lock locker {
+  [ msg sender < {
+      [ msg=self sender < locker { break } == query lock
+        msg=sender locker=null sender < sender { locker < sender break } == acquire lock
+        msg=sender locker!null sender < locker { break } == fail to acquire lock
+        msg=null locker=sender sender < null { locker < null break } == release lock
+        msg=null locker!sender sender < locker { break }
+        msg!self msg!sender msg!null sender < locker { break }
+      ]
+    }
+  ]
 }
 ```

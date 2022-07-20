@@ -1,0 +1,2 @@
+==:2:6: duplicate loop identifier main, previously at :2:1
+main{main{}}

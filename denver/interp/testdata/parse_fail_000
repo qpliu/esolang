@@ -1,0 +1,5 @@
+==:4:1: duplicate routine main, previously defined at :2:1
+main system {
+}
+main {
+}

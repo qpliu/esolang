@@ -1,0 +1,3 @@
+==:2:8: duplicate parameter a, previously at :2:6
+main a a {
+}

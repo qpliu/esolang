@@ -1,0 +1,2 @@
+==:2:42: unknown routine loop
+main{loop{{[self<self{inner[self<self{a<[loop]}]}]}}}

@@ -1,0 +1,2 @@
+==:2:9: sender assignment to a must be distinct from message assignment at :2:7
+main{[a a<
