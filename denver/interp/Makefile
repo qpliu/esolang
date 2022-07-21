@@ -1,3 +1,6 @@
+denver: denver.go interp.go parse.go system.go thread.go tokenize.go
+	go build $^
+
 clean:
 	go clean
 

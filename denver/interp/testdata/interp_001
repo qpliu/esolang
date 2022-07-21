@@ -1,0 +1,14 @@
+==
+main {
+  loop {
+    b=self loop break
+    b < self
+    main continue
+  }
+  {
+    a=self main break
+    a=system a < self
+    a!null continue
+    a < system
+  }
+}

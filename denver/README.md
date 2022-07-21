@@ -110,7 +110,10 @@ execution continues to the next statement.  If there are multiple
 active arms, execution is blocked until one or more active arms can
 succeed.  One of the arms that can succeed will succeed, and its body
 will be executed, then, unless the body exits the message statement,
-the message statement is executed again.
+the message statement is executed again.  If execution is blocked
+because every arm is attempting to send to an exited thread or the
+`null` thread, or is attempting to receiving only from exited threads
+or the `null` thread, the thread exits.
 
 A send arm sends its right argument to its left argument.
 
@@ -174,30 +177,16 @@ sends messages and ignores any message it receives.
 The system thread is passed as the first parameter to the `main`
 thread.
 
-Sending `self` to the system thread attempts to lock the system thread
-for the sender.  If another thread has the lock, the system thread
-sends the `null` thread to the sender.  If no thread has the lock or
-if the sender already has the lock, the sender gets the lock and the
-system thread resets its results list and sends the first item in its
-results list to the sender.
+The system thread has a list of threads that provide various
+services.  Sending any item in the list to the system thread causes
+the system thread to send the next item in the list to the sender.
+The first item in the list is the system thread itself.  Sending the
+last element in the list or a thread not in the list to the system
+thread causes the system thread to send the `null` thread to the
+sender.
 
-Sending `null` to the system thread releases the lock on the system
-thread if the sender has the lock.  If the sender does not have the
-lock, there is no effect.
-
-Sending the system thread to the system thread requests the next item
-in the results list.  If the sender does not have the lock, the system
-thread sends `null` to the sender.  If the sender does have the lock,
-the first item in the results list is dropped from the results list
-and the system thread sends the next item to the sender.  If the
-results list is empty, the system thread sends the `null` thread to
-the sender.
-
-Sending anything else to the system thread causes the system thread to
-send `null` to the sending thread.
-
-When reset, results list contains the system thread, the input thread,
-and the output thread.
+The list of threads contains the system thread, the input thread, and
+the output thread.
 
 ### Input thread
 When anything is sent to the input thread, if there is no more input,
@@ -206,14 +195,14 @@ bit of input is 1, the input thread sends the input thread to the
 sender, otherwise, the bit of input is 0 and the input thread sends
 the sender to the sender.
 
-There is no guaranteed order if multiple threads send to the input
+There is no guaranteed ordering if multiple threads send to the input
 thread.
 
 ### Output thread
 The output thread never sends any messages.  If it receives `null`, a
 0 bit is output.  If it receives anything else, a 1 bit is output.
 
-There is no guaranteed order if multiple threads send to the output
+There is no guaranteed ordering if multiple threads send to the output
 thread.
 
 Examples
@@ -221,17 +210,13 @@ Examples
 ### cat
 ```
 main system {
-  [resp=null system < self { [resp < system {break}] }]
-  [system < system { break }]
-  [in _ < system { break }]
-  [system < system { break }]
-  [out _ < system { break }]
-  [system < null { break }]
+  [in=null system<system {[in<system {break}]}]
+  [out=null system<in {[out<system {break}]}]
 
   state < self
   == state=self: receiving, state=null: sending 0, state=in: sending 1
   [ state=self state _ < in {
-      state=null break
+      state=null main break
       state!in state < null
     }
     state!self out < state {

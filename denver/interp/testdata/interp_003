@@ -1,0 +1,6 @@
+==
+test m n o{break}
+main{
+  a<[test self]
+  break
+}
