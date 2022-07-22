@@ -19,9 +19,8 @@ Grammar
   routine-definition = routine-identifier variable-identifier* body
   body = '{' statement* '}'
 
-  statement = assignment-statement | break-statement |
-              continue-statement | loop-statement | message-statement
-              | guard* statement
+  statement = guard* (assignment-statement | break-statement |
+                      continue-statement | loop-statement | message-statement)
   assignment-statement = variable-identifier '<' (expression | spawn)
   break-statement = loop-identifier? 'break'
   continue-statement = loop-identifier? 'continue'
@@ -32,11 +31,12 @@ Grammar
   guard = expression ('=' | '!') expression
   spawn = '[' routine-identifier expression* ']'
 
-  message-statement-arm = loop-identifier? (receive | send)
-  receive = variable-identifier variable-identifier '<' expression* body
-  send = expression '<' expression body
+  message-statement-arm = guard* (receive | send) body
+  receive = variable-identifier variable-identifier '<' expression*
+  send = expression '<' expression
 
   loop-identifier = identifier
+  routine-identifier = identifier
   thread-identifier = identifier
   variable-identifier = identifier
 ```
@@ -104,16 +104,16 @@ body.
 ### Message statement
 A message statement specifies a list of arms.  An arm may have a guard
 list, for which each item must be satisfied for the arm to be
-active.  An active arm attempts to send to a thread, receive from a
-thread, or receive from any thread.  If there are no active arms,
-execution continues to the next statement.  If there are multiple
-active arms, execution is blocked until one or more active arms can
-succeed.  One of the arms that can succeed will succeed, and its body
-will be executed, then, unless the body exits the message statement,
-the message statement is executed again.  If execution is blocked
-because every arm is attempting to send to an exited thread or the
-`null` thread, or is attempting to receiving only from exited threads
-or the `null` thread, the thread exits.
+active.  An active arm attempts to send to a thread, receive from any
+in a list of threads, or receive from any thread.  If there are no
+active arms, execution continues to the next statement.  If there are
+multiple active arms, execution is blocked until one or more active
+arms can succeed.  One of the arms that can succeed will succeed, and
+its body will be executed, then, unless the body of the successful arm
+exits the message statement, the message statement is executed again.
+If execution is blocked because every active arm is attempting to send
+to an exited thread or the `null` thread, or is attempting to receive
+only from exited threads or the `null` thread, the thread exits.
 
 A send arm sends its right argument to its left argument.
 
@@ -210,8 +210,8 @@ Examples
 ### cat
 ```
 main system {
-  [in=null system < system {[ in _ < system {break}]}]
-  [out=null system < in {[ out _ < system {break}]}]
+  [in=null  system < system {[in _ < system  {break}]}]
+  [out=null system < in     {[out _ < system {break}]}]
 
   [state=null in < self    {state < out}
    state=out  state _ < in {state=null main break}
@@ -228,10 +228,9 @@ lock locker {
   == send null to lock to release lock
   == lock always responds with lock holder or null if not held
   [ msg sender < {
-      [ msg=self sender < locker { break } == query lock
-        msg=sender locker=null sender < sender { locker < sender break } == acquire lock
-        msg=sender locker!null sender < locker { break } == fail to acquire lock
-        msg=null locker=sender sender < null { locker < null break } == release lock
+      [ msg=self   sender < locker { break } == query lock
+        msg=sender sender < sender { locker=null locker < sender break } == acquire lock
+        msg=null locker=sender sender < null   { locker < null break } == release lock
         msg=null locker!sender sender < locker { break }
         msg!self msg!sender msg!null sender < locker { break }
       ]
@@ -252,6 +251,7 @@ cons car cdr {
     }
   ]
 }
+```
 ### stack
 ```
 stack nil {
@@ -261,19 +261,18 @@ stack nil {
   list < null
   serve [
     msg sender < {
-      msg=nil list=null {[sender < nil {serve continue}]}
-      == can't avoid exiting if sender has exited, thus not for multithreaded use
-      msg=nil list!null {
-        [list < nil {
-            [car _ < list {
-                [sender < car {break}]
-                [list < list {[list _ < list {serve continue}]}]
-              }
-            ]
-	  }
-        ]
-      }
-      msg!nil {list < [cons msg list]}
+      msg=nil list=null [sender < nil {serve continue}]
+                         == can't avoid exiting if sender has exited, thus not for multithreaded use
+      msg=nil [
+        list < null {
+          [car _ < list {
+              [sender < car {break}]
+              [list < list {[list _ < list {serve continue}]}]
+            }
+          ]
+	}
+      ]
+      list < [cons msg list]
     }
   ]
 }
