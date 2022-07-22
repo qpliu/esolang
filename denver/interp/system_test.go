@@ -55,14 +55,14 @@ func (out *testOutput) WaitEOF() {
 	}
 }
 
-func (out *testOutput) Check(t *testing.T, bits ...bool) {
+func (out *testOutput) Check(t *testing.T, label string, bits ...bool) {
 	out.WaitEOF()
 	if len(bits) != len(out.bits) {
-		t.Errorf("out check %d != %d", len(bits), len(out.bits))
+		t.Errorf("%s: out check len %d != %d", label, len(bits), len(out.bits))
 	} else {
 		for i := range bits {
 			if bits[i] != out.bits[i] {
-				t.Errorf("out check[%d]", i)
+				t.Errorf("%s: out check bit[%d]", label, i)
 				break
 			}
 		}
@@ -203,5 +203,5 @@ func TestSystem(t *testing.T) {
 	testThreadSend(out, nil, a)
 
 	sys.Terminating()
-	testOut.Check(t, true, false, true, false, false, false, false, false)
+	testOut.Check(t, "output", true, false, true, false, false, false, false, false)
 }

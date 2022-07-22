@@ -1,0 +1,13 @@
+==
+die {
+  [a b < {die break}]
+}
+main {
+  a < [die]
+  b < [die]
+  c < [die]
+  msg [a < a {}
+   b < b {}
+   c < c {}
+  ]
+}

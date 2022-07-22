@@ -1,9 +1,9 @@
-==000
+==,111
 main system {
-  break == interp seems to have a deadlock bug or an infinite loop bug
-  [in=null system < system {[ in, _ < system {break}]}]
-  [out=null system < in {[ out, _ < system {break}]}]
+  [in=null system < system {[ in _ < system {break}]}]
+  [out=null system < in {[ out _ < system {break}]}]
   [ out < self {break}]
   [ out < self {break}]
   [ out < self {break}]
+  break
 }

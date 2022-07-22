@@ -210,25 +210,23 @@ Examples
 ### cat
 ```
 main system {
-  [in=null system<system {[in<system {break}]}]
-  [out=null system<in {[out<system {break}]}]
+  [in=null system < system {[ in _ < system {break}]}]
+  [out=null system < in {[ out _ < system {break}]}]
 
-  state < self
-  == state=self: receiving, state=null: sending 0, state=in: sending 1
-  [ state=self state _ < in {
-      state=null main break
-      state!in state < null
-    }
-    state!self out < state {
-      state < self
-    }
+  [state=null in < self    {state < out}
+   state=out  state _ < in {state=null main break}
+   state=in   out < in     {state < null}
+   state=self out < null   {state < null}
   ]
-  break
 }
 ```
 ### lock
 ```
 lock locker {
+  == send lock to lock to query lock
+  == send self to lock to acquire lock
+  == send null to lock to release lock
+  == lock always responds with lock holder or null if not held
   [ msg sender < {
       [ msg=self sender < locker { break } == query lock
         msg=sender locker=null sender < sender { locker < sender break } == acquire lock
@@ -237,6 +235,69 @@ lock locker {
         msg=null locker!sender sender < locker { break }
         msg!self msg!sender msg!null sender < locker { break }
       ]
+    }
+  ]
+}
+```
+### list
+```
+cons car cdr {
+  == send null to get car
+  == send anything else to get cdr
+  serve [
+    op sender < {
+      [ op=null sender < car {serve continue}
+        op!null sender < cdr {serve continue}
+      ]
+    }
+  ]
+}
+### stack
+```
+stack nil {
+  == send nil to stack to pop, empty stack returns nil
+  == send anything else to push
+  == not for multithreaded use
+  list < null
+  serve [
+    msg sender < {
+      msg=nil list=null {[sender < nil {serve continue}]}
+      == can't avoid exiting if sender has exited, thus not for multithreaded use
+      msg=nil list!null {
+        [list < nil {
+            [car _ < list {
+                [sender < car {break}]
+                [list < list {[list _ < list {serve continue}]}]
+              }
+            ]
+	  }
+        ]
+      }
+      msg!nil {list < [cons msg list]}
+    }
+  ]
+}
+```
+### tape
+```
+exited{break}
+
+tape ? + - {
+  == send ? to read
+  == send + to advance one element
+  == send - to rewind one element
+  == send anything else to write
+  == unwritten elements default to null
+  head < null
+  nil < [exited] == use exited thread as a private constant
+  fwd < [stack nil]
+  bwd < [stack nil]
+  serve [
+    msg sender < {
+      msg=? {[sender < head {serve continue}]}
+      msg=+ {[bwd < head {[fwd < nil {[head _ < fwd {head=nil head < null serve continue}]}]}]}
+      msg=- {[fwd < head {[bwd < nil {[head _ < bwd {head=nil head < null serve continue}]}]}]}
+      msg!? msg!+ msg!- {head < msg}
     }
   ]
 }

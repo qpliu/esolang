@@ -1,0 +1,5 @@
+==
+main system {
+  a!null break
+  a < self
+}

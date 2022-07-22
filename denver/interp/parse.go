@@ -31,6 +31,7 @@ type Routine struct {
 
 type Stmt struct {
 	Type StmtType
+	Loc  string
 
 	Guards []Guard
 	LoopID []Token
@@ -104,6 +105,7 @@ func parseRoutine(tokenizer *Tokenizer) (*Routine, error) {
 			break
 		}
 	}
+	rout.Stmt.Loc = tok.Loc()
 	if body, err := parseBody(tokenizer); err != nil {
 		return nil, err
 	} else {
@@ -144,22 +146,25 @@ func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 		tokenizer.Next()
 		return &Stmt{
 			Type:   StmtBreak,
+			Loc:    tok1.Loc(),
 			Guards: guards,
 		}, nil
 	case "continue":
 		tokenizer.Next()
 		return &Stmt{
 			Type:   StmtContinue,
+			Loc:    tok1.Loc(),
 			Guards: guards,
 		}, nil
 	case "[":
-		return parseMessage(tokenizer, guards, []Token{})
+		return parseMessage(tokenizer, tok1.Loc(), guards, []Token{})
 	case "{":
 		if stmts, err := parseBody(tokenizer); err != nil {
 			return nil, err
 		} else {
 			return &Stmt{
 				Type:   StmtLoop,
+				Loc:    tok1.Loc(),
 				Guards: guards,
 				Stmts:  stmts,
 			}, nil
@@ -179,6 +184,7 @@ func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 		tokenizer.Next()
 		return &Stmt{
 			Type:   StmtBreak,
+			Loc:    tok1.Loc(),
 			LoopID: []Token{tok1},
 			Guards: guards,
 		}, nil
@@ -186,17 +192,19 @@ func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 		tokenizer.Next()
 		return &Stmt{
 			Type:   StmtContinue,
+			Loc:    tok1.Loc(),
 			LoopID: []Token{tok1},
 			Guards: guards,
 		}, nil
 	case "[":
-		return parseMessage(tokenizer, guards, []Token{tok1})
+		return parseMessage(tokenizer, tok1.Loc(), guards, []Token{tok1})
 	case "{":
 		if stmts, err := parseBody(tokenizer); err != nil {
 			return nil, err
 		} else {
 			return &Stmt{
 				Type:   StmtLoop,
+				Loc:    tok1.Loc(),
 				Guards: guards,
 				LoopID: []Token{tok1},
 				Stmts:  stmts,
@@ -210,6 +218,7 @@ func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 			tokenizer.Next()
 			return &Stmt{
 				Type:   StmtAssign,
+				Loc:    tok1.Loc(),
 				Guards: guards,
 				Vars:   []Token{tok1},
 				Exprs:  []Token{tok3},
@@ -219,6 +228,7 @@ func parseStmt(tokenizer *Tokenizer) (*Stmt, error) {
 		} else {
 			stmt := &Stmt{
 				Type:   StmtSpawn,
+				Loc:    tok1.Loc(),
 				Guards: guards,
 				Vars:   []Token{tok1},
 			}
@@ -280,7 +290,7 @@ func parseGuards(tokenizer *Tokenizer) ([]Guard, error) {
 	}
 }
 
-func parseMessage(tokenizer *Tokenizer, guards []Guard, loopID []Token) (*Stmt, error) {
+func parseMessage(tokenizer *Tokenizer, loc string, guards []Guard, loopID []Token) (*Stmt, error) {
 	tokenizer.Next()
 	arms := []*Arm{}
 	for {
@@ -290,6 +300,7 @@ func parseMessage(tokenizer *Tokenizer, guards []Guard, loopID []Token) (*Stmt, 
 			tokenizer.Next()
 			return &Stmt{
 				Type:   StmtMessage,
+				Loc:    loc,
 				Guards: guards,
 				LoopID: loopID,
 				Arms:   arms,

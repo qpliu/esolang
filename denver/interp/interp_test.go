@@ -65,9 +65,9 @@ func testInterp(t *testing.T, filename string) {
 				}
 			case '1':
 				if gotEnd {
-					expectedOutput = append(expectedOutput, false)
+					expectedOutput = append(expectedOutput, true)
 				} else {
-					input = append(input, false)
+					input = append(input, true)
 				}
 			}
 		}
@@ -78,5 +78,5 @@ func testInterp(t *testing.T, filename string) {
 	Interp(prog, prog["main"], NewThread(), []*Thread{sys})
 	sys.Terminating()
 
-	out.Check(t, expectedOutput...)
+	out.Check(t, filename, expectedOutput...)
 }
