@@ -66,7 +66,9 @@ loop:
 
 		stmt := state.frame.stmts[state.frame.index]
 
-		if !state.passGuards(stmt.Guards) {
+		threadStates := map[*Thread]bool{}
+		state.collectGuardThreadStates(stmt.Guards, threadStates)
+		if !state.passGuards(stmt.Guards, threadStates) {
 			state.frame.index++
 			continue loop
 		}
@@ -125,7 +127,18 @@ loop:
 	}
 }
 
-func (state *interpState) passGuards(guards []Guard) bool {
+func (state *interpState) collectGuardThreadStates(guards []Guard, threadStates map[*Thread]bool) {
+	for _, guard := range guards {
+		if len(guard.Exprs) == 1 {
+			expr := state.vars[guard.Exprs[0].T]
+			if _, ok := threadStates[expr]; !ok {
+				threadStates[expr] = expr.Notify() != MessageResultExited
+			}
+		}
+	}
+}
+
+func (state *interpState) passGuards(guards []Guard, threadStates map[*Thread]bool) bool {
 	for _, guard := range guards {
 		if len(guard.Exprs) > 1 {
 			expr0 := state.vars[guard.Exprs[0].T]
@@ -135,7 +148,7 @@ func (state *interpState) passGuards(guards []Guard) bool {
 			}
 		} else {
 			expr := state.vars[guard.Exprs[0].T]
-			if (expr.Notify() != MessageResultExited) != guard.Equal {
+			if threadStates[expr] != guard.Equal {
 				return false
 			}
 		}
@@ -145,8 +158,12 @@ func (state *interpState) passGuards(guards []Guard) bool {
 
 func (state *interpState) message() {
 	arms := []*Arm{}
+	threadStates := map[*Thread]bool{}
 	for _, arm := range state.frame.stmt.Arms {
-		if state.passGuards(arm.Guards) {
+		state.collectGuardThreadStates(arm.Guards, threadStates)
+	}
+	for _, arm := range state.frame.stmt.Arms {
+		if state.passGuards(arm.Guards, threadStates) {
 			arms = append(arms, arm)
 		}
 	}

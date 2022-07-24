@@ -36,6 +36,7 @@ func main() {
 	} else {
 		system := SystemThread(ReaderInput(os.Stdin), WriterOutput(os.Stdout))
 		Interp(prog, routine, NewThread(), []*Thread{system})
-		system.Terminating()
+		system.SignalTerminating()
+		system.WaitTerminated()
 	}
 }

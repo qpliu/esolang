@@ -40,23 +40,7 @@ func (out *testOutput) Write(bit bool) {
 	out.bits = append(out.bits, bit)
 }
 
-func (out *testOutput) WriteEOF() {
-	out.eofCond.L.Lock()
-	defer out.eofCond.L.Unlock()
-	out.eof = true
-	out.eofCond.Broadcast()
-}
-
-func (out *testOutput) WaitEOF() {
-	out.eofCond.L.Lock()
-	defer out.eofCond.L.Unlock()
-	for !out.eof {
-		out.eofCond.Wait()
-	}
-}
-
 func (out *testOutput) Check(t *testing.T, label string, bits ...bool) {
-	out.WaitEOF()
 	if len(bits) != len(out.bits) {
 		t.Errorf("%s: out check len %d != %d", label, len(bits), len(out.bits))
 	} else {
@@ -101,8 +85,7 @@ func TestWriterOutput(t *testing.T) {
 	}
 }
 
-func TestSystem(t *testing.T) {
-	testOut := newTestOutput()
+func testSystem(t *testing.T, testOut Output) {
 	sys := SystemThread(&testInput{bits: []bool{true, false, true, false, false, false, false, false}}, testOut)
 
 	a := NewThread()
@@ -187,6 +170,16 @@ func TestSystem(t *testing.T) {
 		t.Errorf("receive 0")
 	}
 
+	if in.Send(a, a) != MessageResultSuccess {
+		t.Errorf("in.Send")
+	}
+	if in.Notify() != MessageResultExited {
+		a.Wait()
+		if in.Notify() != MessageResultExited {
+			t.Errorf("in.Notify")
+		}
+	}
+
 	testThreadSend(out, a, a)
 	testThreadSend(out, nil, a)
 	testThreadSend(out, a, a)
@@ -196,6 +189,22 @@ func TestSystem(t *testing.T) {
 	testThreadSend(out, nil, a)
 	testThreadSend(out, nil, a)
 
-	sys.Terminating()
+	sys.SignalTerminating()
+	sys.WaitTerminated()
+}
+
+func TestSystem(t *testing.T) {
+	testOut := newTestOutput()
+	testSystem(t, testOut)
 	testOut.Check(t, "output", true, false, true, false, false, false, false, false)
+
+	buf := bytes.Buffer{}
+	writerOut := WriterOutput(&buf)
+	testSystem(t, writerOut)
+	data := buf.Bytes()
+	if len(data) != 1 {
+		t.Errorf("out len %d != 1", len(data))
+	} else if data[0] != 5 {
+		t.Errorf("out %d != 5", data[0])
+	}
 }

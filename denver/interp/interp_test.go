@@ -76,7 +76,8 @@ func testInterp(t *testing.T, filename string) {
 	out := newTestOutput()
 	sys := SystemThread(&testInput{bits: input}, out)
 	Interp(prog, prog["main"], NewThread(), []*Thread{sys})
-	sys.Terminating()
+	sys.SignalTerminating()
+	sys.WaitTerminated()
 
 	out.Check(t, filename, expectedOutput...)
 }

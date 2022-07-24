@@ -12,7 +12,6 @@ type Input interface {
 
 type Output interface {
 	Write(bool)
-	WriteEOF()
 }
 
 func SystemThread(r Input, w Output) *Thread {
@@ -55,8 +54,11 @@ func SystemThread(r Input, w Output) *Thread {
 				continue
 			case MessageResultBlocked:
 				if self.IsTerminating() {
-					in.Terminating()
-					out.Terminating()
+					in.SignalTerminating()
+					out.SignalTerminating()
+					out.WaitTerminated()
+					self.Terminated()
+					return
 				}
 				self.Wait()
 			case MessageResultExited:
@@ -83,6 +85,7 @@ func InputThread(r Input) *Thread {
 				if !ok {
 					self.Exit()
 					queue[i][1].Notify()
+					self.Terminated()
 					return
 				}
 				msg := self
@@ -116,6 +119,10 @@ func InputThread(r Input) *Thread {
 			case MessageResultSuccess:
 				continue
 			case MessageResultBlocked:
+				if self.IsTerminating() {
+					self.Terminated()
+					return
+				}
 				self.Wait()
 			case MessageResultExited:
 				panic("MessageResultExited")
@@ -138,7 +145,7 @@ func OutputThread(w Output) *Thread {
 				w.Write(msg[0] != nil)
 			case MessageResultBlocked:
 				if self.IsTerminating() {
-					w.WriteEOF()
+					self.Terminated()
 					return
 				}
 				self.Wait()
@@ -160,17 +167,14 @@ type readerInput struct {
 }
 
 func (r *readerInput) Bit() (bool, bool) {
-	if r.eof {
-		return false, false
-	}
 	if r.bitIndex&255 == 0 {
 		_, err := r.r.Read(r.buf[:])
 		if err != nil {
-			r.eof = true
+			return false, false
 		}
 		r.bitIndex = 1
 	}
-	return int(r.buf[0])&r.bitIndex != 0, !r.eof
+	return int(r.buf[0])&r.bitIndex != 0, true
 }
 
 func (r *readerInput) Next() {
@@ -199,21 +203,6 @@ func (w *writerOutput) Write(bit bool) {
 		w.w.Write(w.buf[:])
 		w.buf[0] = 0
 		w.bitIndex = 1
-	}
-}
-
-func (w *writerOutput) WriteEOF() {
-	w.eofCond.L.Lock()
-	defer w.eofCond.L.Unlock()
-	w.eof = true
-	w.eofCond.Broadcast()
-}
-
-func (w *writerOutput) WaitEOF() {
-	w.eofCond.L.Lock()
-	defer w.eofCond.L.Unlock()
-	for !w.eof {
-		w.eofCond.Wait()
 	}
 }
 

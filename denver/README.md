@@ -5,11 +5,11 @@ language.
 
 Execution of a Denver-Augusta-Harrisburg program starts with the main
 thread and the system thread.  The main thread executes the `main`
-routine and can spawn more threads.  A thread can send messages to and
-receive messages from other threads, including itself.  A message
-consists of a thread.  When receiving a message, the sender thread is
-also received.  Execution of the program ends when the main thread
-exits.
+routine with the system thread as its first argument and can spawn
+more threads.  A thread can send messages to and receive messages from
+other threads, including itself.  A message consists of a thread.
+When receiving a message, the sender thread is also received.
+Execution of the program ends when the main thread exits.
 
 Grammar
 -------
@@ -37,7 +37,6 @@ Grammar
 
   loop-identifier = identifier
   routine-identifier = identifier
-  thread-identifier = identifier
   variable-identifier = identifier
 ```
 
@@ -77,12 +76,12 @@ threads.
 
 If a guard is `= expression`, then the rest of the statement is only
 executed if the expression evaluates to a thread that has not exited.
-It is not guaranteed that that thread has not executed when the rest
-of the statement executes.  The `null` thread is always considered to
+It is not guaranteed that that thread has not exited when the rest of
+the statement executes.  The `null` thread is always considered to
 have exited.
 
 If a guard is `! expression`, then the rest of the statement is only
-executed if the expression evaluates to tha thread that has exited.
+executed if the expression evaluates to a thread that has exited.
 
 ### Assignment statement
 An assignment statement sets the variable to the value of the
@@ -109,9 +108,9 @@ message statement or routine body.
 
 ### Loop statement
 A loop statement specifies a list of statements that are executed in a
-loop until exited.  A loop can be exited by exit statement or by a
-continuing an enclosing loop statement, message statement or routine
-body.
+loop until exited.  A loop can be exited by a break statement for the
+loop or by a break or continue statement for an enclosing loop
+statement, message statement or routine body.
 
 ### Message statement
 A message statement specifies a list of arms.  An arm may have a guard
@@ -136,6 +135,14 @@ variable and the second variable must not be the same variable.  The
 arguments on the right is a list of sender threads.  If the list is
 not empty, it can only receive from a thread in the list.  If the list
 is empty, it can receive from any thread.
+
+If an arm has an `= expression` guard and another arm has a `!
+expression` guard, and the expressions evaluate to the same thread,
+at most one of the two arms will be active, depending on other
+guards.  If there are no other guards, exactly one of the two arms
+will be active.  If the arm with the `= expression` guard executes, it
+is not guaranteed that the thread has not exited since the guard was
+passed.
 
 Loop identifiers
 ----------------
@@ -188,7 +195,7 @@ sends messages and ignores any message it receives.
 
 ### System thread
 The system thread is passed as the first parameter to the `main`
-thread.
+routine in the main thread.
 
 The system thread has a list of threads that provide various
 services.  Sending any item in the list to the system thread causes
@@ -222,12 +229,12 @@ Examples
 ### cat
 ```
 main system {
-  [in=null  system < system {[in _ < system  {break}]}]
+  [in=null  system < system {[in  _ < system {break}]}]
   [out=null system < in     {[out _ < system {break}]}]
 
-  [state=null =in in < self {state < in}
-   state=in   =in b _ < in  {state < out}
-   state=out      out < b   {state < null}
+  [state=null in < self {state < in}
+   state=in   b _ < in  {state < out}
+   state=out  out < b   {state < null}
   ]
   break
 }
@@ -235,18 +242,24 @@ main system {
 ### lock
 ```
 lock locker {
-  == send lock to lock to query lock
   == send self to lock to acquire lock
   == send null to lock to release lock
+  == send anything else to lock to query lock
   == lock always responds with lock holder or null if not held
-  [ msg sender < {
-      [ msg=self   sender < locker { break } == query lock
-        msg=sender sender < sender { locker=null locker < sender break } == acquire lock
-        msg=null locker=sender sender < null   { locker < null break } == release lock
-        msg=null locker!sender sender < locker { break }
-        msg!self msg!sender msg!null sender < locker { break }
-      ]
-    }
+  [msg sender < {
+    [
+     == acquire
+     msg=sender locker=null sender < sender {locker < sender break}
+     msg=sender locker!null sender < locker {break}
+
+     == release
+     msg=null locker=sender sender < null   {locker < null break}
+     msg=null locker!sender sender < locker {break}
+
+     == query
+     msg!sender msg!null sender < locker {break}
+    ]
+   }
   ]
 }
 ```
@@ -255,13 +268,11 @@ lock locker {
 cons car cdr {
   == send null to get car
   == send anything else to get cdr
-  serve [
-    op sender < {
-      [op=null sender < car {serve continue}
-       op!null sender < cdr {serve continue}
-      ]
-    }
+  [sender=null op sender < {}
+   sender!null op=null sender < car {break}
+   sender!null op!null sender < cdr {break}
   ]
+  sender < null
 }
 ```
 ### stack
@@ -269,21 +280,23 @@ cons car cdr {
 stack nil {
   == send nil to stack to pop, empty stack returns nil
   == send anything else to push
-  == not for multithreaded use
-  list < null
   serve [
     msg sender < {
-      msg=nil list=null [sender < nil {serve continue}]
       msg=nil [
-        list < null {
+        list=null sender < nil {serve continue}
+        list!null list < nil {
           [car _ < list {
-              [sender < car {break}]
-              [list < list {[list _ < list {serve continue}]}]
+              sent-car < null
+              got-cdr < null
+              [sent-car=null sender < car  {sent-car < self}
+               got-cdr=null  list _ < list {got-cdr < self}
+              ]
+              serve continue
             }
           ]
-	}
+        }
       ]
-      list < [cons msg list]
+      msg!nil list < [cons msg list]
     }
   ]
 }

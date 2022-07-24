@@ -18,6 +18,7 @@ type Thread struct {
 	exited      bool
 	recvQueue   map[*Thread]*Thread
 	terminating bool
+	terminated  bool
 }
 
 func NewThread() *Thread {
@@ -132,7 +133,7 @@ func (t *Thread) Dequeue(senders []*Thread) ([2]*Thread, MessageResult) {
 	return item, result
 }
 
-func (t *Thread) Terminating() {
+func (t *Thread) SignalTerminating() {
 	t.lock.L.Lock()
 	defer t.lock.L.Unlock()
 	t.terminating = true
@@ -143,6 +144,21 @@ func (t *Thread) IsTerminating() bool {
 	t.lock.L.Lock()
 	defer t.lock.L.Unlock()
 	return t.terminating
+}
+
+func (t *Thread) Terminated() {
+	t.lock.L.Lock()
+	defer t.lock.L.Unlock()
+	t.terminated = true
+	t.lock.Signal()
+}
+
+func (t *Thread) WaitTerminated() {
+	t.lock.L.Lock()
+	defer t.lock.L.Unlock()
+	for !t.terminated {
+		t.lock.Wait()
+	}
 }
 
 func (t *Thread) Wait() {
