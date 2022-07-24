@@ -2,9 +2,9 @@
 main system {
   [in=null system < system {[ in _ < system {break}]}]
   [out=null system < in {[ out _ < system {break}]}]
-  [state=null in < self    {state < out}
-   state=out  state _ < in {state=null main break}
-   state=in   out < in     {state < null}
-   state=self out < null   {state < null}
+  [state=null =in in < self {state < in}
+   state=in   =in b _ < in  {state < out}
+   state=out      out < b   {state < null}
   ]
+  break
 }

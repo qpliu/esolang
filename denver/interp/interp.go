@@ -54,9 +54,7 @@ loop:
 				continue loop
 			case StmtMessage:
 				state.frame.index = 0
-				if state.message() == MessageResultExited {
-					return
-				}
+				state.message()
 			default:
 				panic("stmt.Type")
 			}
@@ -129,16 +127,23 @@ loop:
 
 func (state *interpState) passGuards(guards []Guard) bool {
 	for _, guard := range guards {
-		expr0 := state.vars[guard.Exprs[0].T]
-		expr1 := state.vars[guard.Exprs[1].T]
-		if (expr0 == expr1) != guard.Equal {
-			return false
+		if len(guard.Exprs) > 1 {
+			expr0 := state.vars[guard.Exprs[0].T]
+			expr1 := state.vars[guard.Exprs[1].T]
+			if (expr0 == expr1) != guard.Equal {
+				return false
+			}
+		} else {
+			expr := state.vars[guard.Exprs[0].T]
+			if (expr.Notify() != MessageResultExited) != guard.Equal {
+				return false
+			}
 		}
 	}
 	return true
 }
 
-func (state *interpState) message() MessageResult {
+func (state *interpState) message() {
 	arms := []*Arm{}
 	for _, arm := range state.frame.stmt.Arms {
 		if state.passGuards(arm.Guards) {
@@ -148,7 +153,7 @@ func (state *interpState) message() MessageResult {
 	if len(arms) == 0 {
 		state.frame = state.frame.parent
 		state.frame.index++
-		return MessageResultSuccess
+		return
 	}
 	rand.Shuffle(len(arms), func(i, j int) {
 		arms[i], arms[j] = arms[j], arms[i]
@@ -173,7 +178,7 @@ func (state *interpState) message() MessageResult {
 					state.vars[arm.Vars[1].T] = msg[1]
 					state.frame.stmts = arm.Stmts
 					state.frame.index = 0
-					return MessageResultSuccess
+					return
 				}
 			case ArmSend:
 				rcpt := state.vars[arm.Exprs[0].T]
@@ -185,14 +190,16 @@ func (state *interpState) message() MessageResult {
 				case MessageResultSuccess:
 					state.frame.stmts = arm.Stmts
 					state.frame.index = 0
-					return MessageResultSuccess
+					return
 				}
 			default:
 				panic("arm.Type")
 			}
 		}
 		if result == MessageResultExited {
-			return MessageResultExited
+			state.frame = state.frame.parent
+			state.frame.index++
+			return
 		}
 		state.self.Wait()
 	}

@@ -147,7 +147,7 @@ func TestSystem(t *testing.T) {
 
 	testThreadSend(in, a, a)
 	r = testThreadReceive(a)
-	if r[0] != a || r[1] != in {
+	if r[0] != nil || r[1] != in {
 		t.Errorf("receive 0")
 	}
 
@@ -159,38 +159,32 @@ func TestSystem(t *testing.T) {
 
 	testThreadSend(in, a, a)
 	r = testThreadReceive(a)
-	if r[0] != a || r[1] != in {
-		t.Errorf("receive 0")
-	}
-
-	testThreadSend(in, a, a)
-	r = testThreadReceive(a)
-	if r[0] != a || r[1] != in {
-		t.Errorf("receive 0")
-	}
-
-	testThreadSend(in, a, a)
-	r = testThreadReceive(a)
-	if r[0] != a || r[1] != in {
-		t.Errorf("receive 0")
-	}
-
-	testThreadSend(in, a, a)
-	r = testThreadReceive(a)
-	if r[0] != a || r[1] != in {
-		t.Errorf("receive 0")
-	}
-
-	testThreadSend(in, a, a)
-	r = testThreadReceive(a)
-	if r[0] != a || r[1] != in {
+	if r[0] != nil || r[1] != in {
 		t.Errorf("receive 0")
 	}
 
 	testThreadSend(in, a, a)
 	r = testThreadReceive(a)
 	if r[0] != nil || r[1] != in {
-		t.Errorf("receive eof")
+		t.Errorf("receive 0")
+	}
+
+	testThreadSend(in, a, a)
+	r = testThreadReceive(a)
+	if r[0] != nil || r[1] != in {
+		t.Errorf("receive 0")
+	}
+
+	testThreadSend(in, a, a)
+	r = testThreadReceive(a)
+	if r[0] != nil || r[1] != in {
+		t.Errorf("receive 0")
+	}
+
+	testThreadSend(in, a, a)
+	r = testThreadReceive(a)
+	if r[0] != nil || r[1] != in {
+		t.Errorf("receive 0")
 	}
 
 	testThreadSend(out, a, a)

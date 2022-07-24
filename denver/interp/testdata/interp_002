@@ -1,7 +1,10 @@
 ==,111
 main system {
-  [in=null system < system {[ in _ < system {break}]}]
-  [out=null system < in {[ out _ < system {break}]}]
+  [in=null out=null system < system {}
+   in!null out=null system < in {}
+   in=null out=null in _ < system {}
+   in!null out=null out _ < system {}
+  ]
   [ out < self {break}]
   [ out < self {break}]
   [ out < self {break}]

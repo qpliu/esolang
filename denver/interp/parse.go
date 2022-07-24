@@ -42,7 +42,7 @@ type Stmt struct {
 }
 
 type Guard struct {
-	Exprs [2]Token
+	Exprs []Token
 	Equal bool
 }
 
@@ -258,24 +258,36 @@ func parseGuards(tokenizer *Tokenizer) ([]Guard, error) {
 	result := []Guard{}
 	for {
 		left, ok := tokenizer.Token()
-		if !ok || !left.IsExpr() {
-			return result, nil
-		}
-		tokenizer.Next()
-		equal := true
-		op, ok := tokenizer.Token()
 		if !ok {
-			tokenizer.Push(left)
 			return result, nil
 		}
-		switch op.T {
+		equal := true
+		exprs := []Token{}
+		switch left.T {
 		case "=":
 			equal = true
 		case "!":
 			equal = false
 		default:
-			tokenizer.Push(left)
-			return result, nil
+			if !left.IsExpr() {
+				return result, nil
+			}
+			exprs = append(exprs, left)
+			tokenizer.Next()
+			op, ok := tokenizer.Token()
+			if !ok {
+				tokenizer.Push(left)
+				return result, nil
+			}
+			switch op.T {
+			case "=":
+				equal = true
+			case "!":
+				equal = false
+			default:
+				tokenizer.Push(left)
+				return result, nil
+			}
 		}
 		tokenizer.Next()
 		right, ok := tokenizer.Token()
@@ -286,7 +298,7 @@ func parseGuards(tokenizer *Tokenizer) ([]Guard, error) {
 			return nil, fmt.Errorf("%s: unexpected token %s", right.Loc(), right.T)
 		}
 		tokenizer.Next()
-		result = append(result, Guard{Exprs: [2]Token{left, right}, Equal: equal})
+		result = append(result, Guard{Exprs: append(exprs, right), Equal: equal})
 	}
 }
 
@@ -396,6 +408,11 @@ func (rout *Routine) check(prog map[string]*Routine) error {
 }
 
 func (stmt *Stmt) check(prog map[string]*Routine, loopIDs map[string]Token) error {
+	for _, guard := range stmt.Guards {
+		if len(guard.Exprs) < 1 || len(guard.Exprs) > 2 {
+			panic("check.stmt.Guards")
+		}
+	}
 	for _, loopID := range stmt.LoopID {
 		if !loopID.IsIdent() {
 			panic("check:stmt.LoopID " + loopID.T)
@@ -480,6 +497,11 @@ func (stmt *Stmt) check(prog map[string]*Routine, loopIDs map[string]Token) erro
 }
 
 func (arm *Arm) check(prog map[string]*Routine, loopIDs map[string]Token) error {
+	for _, guard := range arm.Guards {
+		if len(guard.Exprs) < 1 || len(guard.Exprs) > 2 {
+			panic("check.arm.Guards")
+		}
+	}
 	switch len(arm.Vars) {
 	case 0: // send
 		if len(arm.Exprs) != 2 {
@@ -567,13 +589,19 @@ func (stmt *Stmt) unparse(b *strings.Builder, indent string) {
 }
 
 func (guard Guard) unparse(b *strings.Builder) {
-	b.WriteString(guard.Exprs[0].T)
+	if len(guard.Exprs) > 1 {
+		b.WriteString(guard.Exprs[0].T)
+	}
 	if guard.Equal {
 		b.WriteString("=")
 	} else {
 		b.WriteString("!")
 	}
-	b.WriteString(guard.Exprs[1].T)
+	if len(guard.Exprs) == 1 {
+		b.WriteString(guard.Exprs[0].T)
+	} else {
+		b.WriteString(guard.Exprs[1].T)
+	}
 	b.WriteString(" ")
 }
 

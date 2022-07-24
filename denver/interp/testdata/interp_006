@@ -10,4 +10,5 @@ main {
    b < b {}
    c < c {}
   ]
+  break
 }

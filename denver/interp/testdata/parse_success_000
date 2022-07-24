@@ -16,10 +16,10 @@ main system {
       }
     ]
     [
-      d e < system a b c self {
+      =system d e < system a b c self {
         break
       }
-      self < self {
+      !null self < self {
         {
           label [
           ]

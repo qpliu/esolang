@@ -28,7 +28,7 @@ Grammar
   message-statement = '[' message-statement-arm* ']'
 
   expression = variable-identifier | 'null' | 'self'
-  guard = expression ('=' | '!') expression
+  guard = expression? ('=' | '!') expression
   spawn = '[' routine-identifier expression* ']'
 
   message-statement-arm = guard* (receive | send) body
@@ -45,7 +45,8 @@ Comments begin with `==` and extend to the end of the line.
 
 Identifiers are uninterrupted sequences of non-space characters,
 excluding `=`, `!`, `[`, `]`, `{`, `}`, `<`, and may not be
-`break`, `continue`, `null`, or `self`.
+`break`, `continue`, `null`, or `self`.  Space characters serve to
+separate tokens and are otherwise ignored.
 
 Routines
 --------
@@ -66,11 +67,22 @@ Every statement may have a guard list, where the statement is executed
 only if each item in the guard list is satisfied.  A guard list may be
 empty.
 
-If a guard is `=`, then the rest of the statement is only executed if
-the two expressions evaluate to the same thread.
+If a guard is `expression = expression`, then the rest of the
+statement is only executed if the two expressions evaluate to the same
+thread.
 
-If a guard is `!`, then the rest of the statement is only executed if
-the two expression evaluate to different threads.
+If a guard is `expression ! expression`, then the rest of the
+statement is only executed if the two expression evaluate to different
+threads.
+
+If a guard is `= expression`, then the rest of the statement is only
+executed if the expression evaluates to a thread that has not exited.
+It is not guaranteed that that thread has not executed when the rest
+of the statement executes.  The `null` thread is always considered to
+have exited.
+
+If a guard is `! expression`, then the rest of the statement is only
+executed if the expression evaluates to tha thread that has exited.
 
 ### Assignment statement
 An assignment statement sets the variable to the value of the
@@ -113,7 +125,8 @@ its body will be executed, then, unless the body of the successful arm
 exits the message statement, the message statement is executed again.
 If execution is blocked because every active arm is attempting to send
 to an exited thread or the `null` thread, or is attempting to receive
-only from exited threads or the `null` thread, the thread exits.
+only from exited threads or the `null` thread, execution continues to
+the next statement.
 
 A send arm sends its right argument to its left argument.
 
@@ -189,11 +202,10 @@ The list of threads contains the system thread, the input thread, and
 the output thread.
 
 ### Input thread
-When anything is sent to the input thread, if there is no more input,
-the input thread sends `null` to the sender, otherwise, if the next
-bit of input is 1, the input thread sends the input thread to the
-sender, otherwise, the bit of input is 0 and the input thread sends
-the sender to the sender.
+When anything is sent to the input thread, if the next bit of input is
+1, the input thread sends the input thread to the sender.  If the next
+bit of input is 0, the input thread sends `null` to the sender.  If
+there is no more input, the input thread exits.
 
 There is no guaranteed ordering if multiple threads send to the input
 thread.
@@ -213,11 +225,11 @@ main system {
   [in=null  system < system {[in _ < system  {break}]}]
   [out=null system < in     {[out _ < system {break}]}]
 
-  [state=null in < self    {state < out}
-   state=out  state _ < in {state=null main break}
-   state=in   out < in     {state < null}
-   state=self out < null   {state < null}
+  [state=null =in in < self {state < in}
+   state=in   =in b _ < in  {state < out}
+   state=out      out < b   {state < null}
   ]
+  break
 }
 ```
 ### lock
@@ -245,8 +257,8 @@ cons car cdr {
   == send anything else to get cdr
   serve [
     op sender < {
-      [ op=null sender < car {serve continue}
-        op!null sender < cdr {serve continue}
+      [op=null sender < car {serve continue}
+       op!null sender < cdr {serve continue}
       ]
     }
   ]
@@ -262,7 +274,6 @@ stack nil {
   serve [
     msg sender < {
       msg=nil list=null [sender < nil {serve continue}]
-                         == can't avoid exiting if sender has exited, thus not for multithreaded use
       msg=nil [
         list < null {
           [car _ < list {

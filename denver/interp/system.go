@@ -80,11 +80,13 @@ func InputThread(r Input) *Thread {
 					continue
 				}
 				bit, ok := r.Bit()
+				if !ok {
+					self.Exit()
+					queue[i][1].Notify()
+					return
+				}
 				msg := self
 				if !bit {
-					msg = queue[i][1]
-				}
-				if !ok {
 					msg = nil
 				}
 				switch queue[i][1].Send(msg, self) {

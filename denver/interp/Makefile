@@ -5,6 +5,7 @@ clean:
 	go clean
 
 test:
+	go fmt
 	go test
 
 cover:
